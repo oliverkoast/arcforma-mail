@@ -9,7 +9,7 @@ import { getSetting } from "./settings.js";
 import { CAN_UNSUBSCRIBE, UNSUBSCRIBE_STATE } from "./unsubscribe.js";
 import type { ApplyHistoryResult, GmailThreadInput, HistoryChange, ListThreadsOptions, ListThreadsResult, ModifyLabelsPayload, ThreadListRow, ThreadRow } from "../types.js";
 
-const BUILTIN_TYPES = new Set(["newsletters", "calendar", "notifications", "receipts"]);
+const BUILTIN_TYPES = new Set(["newsletters", "promotions", "jobs", "calendar", "notifications", "receipts"]);
 
 /**
  * Re-applies unacknowledged local label changes on top of what Gmail just

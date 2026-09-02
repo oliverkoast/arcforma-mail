@@ -11,11 +11,14 @@ const searches: SavedSearchInfo[] = [{ id: 3, name: "Northwind", query: "northwi
 const rows = rowDescriptors(categories, searches);
 const ids = (layout: SidebarLayout, group: "queues" | "inbox" | "folders") => layout.groups.find((g) => g.id === group)!.rows.map((r) => r.id);
 
-test("descriptors: builtins, the four types, custom categories, and saved searches, each with a view and a count", () => {
+test("descriptors: builtins, the six types, custom categories, and saved searches, each with a view and a count", () => {
   const byId = new Map(rows.map((r) => [r.id, r]));
   assert.equal(byId.get("category:clients")?.kind, "category");
   assert.equal(byId.get("category:clients")?.ref, "clients");
-  assert.equal(byId.get("category:newsletters")?.kind, "builtin", "the four builtin types cannot be renamed or removed");
+  assert.equal(byId.get("category:newsletters")?.kind, "builtin", "the six builtin types cannot be renamed or removed");
+  for (const id of ["newsletters", "promotions", "jobs", "calendar", "notifications", "receipts"]) assert.ok(byId.has(`category:${id}`), `${id} is a row`);
+  assert.equal(byId.get("category:promotions")?.count({ ...EMPTY_SIDEBAR_COUNTS, categories: { promotions: 4 } }), 4);
+  assert.equal(byId.get("category:jobs")?.count({ ...EMPTY_SIDEBAR_COUNTS, categories: { jobs: 9 } }), 9);
   assert.equal(byId.get("search:3")?.kind, "search");
   assert.deepEqual(byId.get("search:3")?.view, { view: "search:3" });
   assert.equal(byId.get("search:3")?.count({ ...EMPTY_SIDEBAR_COUNTS, searches: { "3": 7 } }), 7);
@@ -29,7 +32,7 @@ test("descriptors: builtins, the four types, custom categories, and saved search
 test("the default layout puts every row in its group; Spam and Trash start hidden", () => {
   const layout = defaultLayout(rows);
   assert.deepEqual(ids(layout, "queues"), ["daily", "weekly", "later"]);
-  assert.deepEqual(ids(layout, "inbox"), ["inbox", "important", "other", "unread", "attachments", "category:newsletters", "category:calendar", "category:notifications", "category:receipts", "category:clients"]);
+  assert.deepEqual(ids(layout, "inbox"), ["inbox", "important", "other", "unread", "attachments", "category:newsletters", "category:promotions", "category:jobs", "category:calendar", "category:notifications", "category:receipts", "category:clients"]);
   assert.deepEqual(ids(layout, "folders"), ["snoozed", "starred", "sent", "drafts", "scheduled", "archive", "spam", "trash", "search:3"]);
   assert.deepEqual(hiddenRows(layout, rows).map((r) => r.id), ["spam", "trash"]);
   assert.deepEqual(visibleRows(layout, "folders", rows).map((r) => r.id), ["snoozed", "starred", "sent", "drafts", "scheduled", "archive", "search:3"]);
@@ -55,6 +58,45 @@ test("reconcile: saved order and hidden flags survive, unknown rows drop, new ro
   assert.ok(ids(layout, "folders").includes("search:3"), "the new saved search appends to Folders");
   const appended = layout.groups[2]!.rows.find((r) => r.id === "spam");
   assert.equal(appended?.hidden, true, "a row appended for the first time takes its default visibility");
+});
+
+test("reconcile: Promotions and Jobs reach a layout saved before they existed, without disturbing it", () => {
+  // A layout written when the sidebar had four types: Newsletters hidden, Receipts pulled to the
+  // top of the group, Calendar moved out to Folders, and one custom category in the middle.
+  const saved = {
+    version: 1,
+    groups: [
+      { id: "queues", rows: [{ id: "daily", hidden: false }, { id: "weekly", hidden: false }, { id: "later", hidden: false }] },
+      {
+        id: "inbox",
+        rows: [
+          { id: "category:receipts", hidden: false },
+          { id: "inbox", hidden: false },
+          { id: "important", hidden: false },
+          { id: "other", hidden: true },
+          { id: "unread", hidden: false },
+          { id: "attachments", hidden: false },
+          { id: "category:newsletters", hidden: true },
+          { id: "category:clients", hidden: false },
+          { id: "category:notifications", hidden: false },
+        ],
+      },
+      { id: "folders", rows: [{ id: "category:calendar", hidden: false }, { id: "snoozed", hidden: false }, { id: "starred", hidden: false }, { id: "sent", hidden: false }, { id: "drafts", hidden: false }, { id: "scheduled", hidden: false }, { id: "archive", hidden: false }] },
+    ],
+  };
+  const layout = reconcileLayout(saved, rows);
+  const inbox = ids(layout, "inbox");
+  assert.ok(inbox.includes("category:promotions"), "Promotions appears rather than being dropped");
+  assert.ok(inbox.includes("category:jobs"), "Jobs appears rather than being dropped");
+  // They land behind Newsletters, in their own order, not at the end under the custom category.
+  assert.deepEqual(inbox.slice(inbox.indexOf("category:newsletters"), inbox.indexOf("category:newsletters") + 3), ["category:newsletters", "category:promotions", "category:jobs"]);
+  // Everything the user arranged is untouched.
+  assert.equal(inbox[0], "category:receipts", "the row pulled to the top stays there");
+  assert.deepEqual(inbox.slice(1, 6), ["inbox", "important", "other", "unread"].concat(["attachments"]));
+  assert.equal(groupOf(layout, "category:calendar"), "folders", "a type moved to another group stays there");
+  assert.deepEqual(hiddenRows(layout, rows).map((r) => r.id), ["other", "category:newsletters", "spam", "trash"], "hidden rows stay hidden, and the new rows arrive visible");
+  assert.equal(inbox.at(-1), "category:notifications", "the custom category keeps its place ahead of the row that followed it");
+  assert.ok(inbox.indexOf("category:clients") < inbox.indexOf("category:notifications"));
 });
 
 test("reconcile: garbage, an old shape, and null all give the default layout", () => {

@@ -362,7 +362,7 @@ export interface ListThreadsOptions {
   accountIds?: string[];
   view?: InboxView;
   split?: "important" | "other" | null;
-  /** A builtin type (newsletters, calendar, notifications, receipts) or a custom category id. */
+  /** A builtin type (newsletters, promotions, jobs, calendar, notifications, receipts) or a custom category id. */
   category?: string | null;
   cursor?: string | null;
   limit?: number;

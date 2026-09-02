@@ -37,23 +37,37 @@ export function recentThreads(db: Db, days: number, limit = 2000): ThreadRow[] {
   return db.prepare("SELECT * FROM threads WHERE last_message_at >= ? ORDER BY sort_at DESC LIMIT ?").all(Date.now() - days * DAY, limit) as unknown as ThreadRow[];
 }
 
-/** Lowercased domains of every recipient Oliver sent to in the window. */
-export function repliedDomains(db: Db, days = 90): Set<string> {
+/** Every address and domain Oliver sent to in the window, lowercased. One scan, because both are read together. */
+export function repliedTo(db: Db, days = 90): { addresses: Set<string>; domains: Set<string> } {
   const rows = db.prepare("SELECT to_json, cc_json FROM messages WHERE direction = 'out' AND internal_date >= ?").all(Date.now() - days * DAY) as Array<{ to_json: string; cc_json: string }>;
-  const out = new Set<string>();
+  const addresses = new Set<string>();
+  const domains = new Set<string>();
   for (const r of rows) {
     for (const list of [r.to_json, r.cc_json]) {
       try {
         for (const a of JSON.parse(list) as Array<{ email: string }>) {
-          const d = a.email.toLowerCase().split("@")[1];
-          if (d) out.add(d);
+          const email = a.email.toLowerCase();
+          if (!email) continue;
+          addresses.add(email);
+          const d = email.split("@")[1];
+          if (d) domains.add(d);
         }
       } catch {
         // A malformed row cannot make a domain important.
       }
     }
   }
-  return out;
+  return { addresses, domains };
+}
+
+/** Lowercased domains of every recipient Oliver sent to in the window. */
+export function repliedDomains(db: Db, days = 90): Set<string> {
+  return repliedTo(db, days).domains;
+}
+
+/** Lowercased addresses Oliver sent to in the window. Writing to an address is the strongest sign it belongs to a person. */
+export function repliedAddresses(db: Db, days = 90): Set<string> {
+  return repliedTo(db, days).addresses;
 }
 
 export function listCorrections(db: Db, limit = 500): CorrectionRow[] {

@@ -125,10 +125,12 @@ CREATE TABLE IF NOT EXISTS categories (
   created_at    INTEGER NOT NULL
 );
 INSERT OR IGNORE INTO categories (id, name, kind, prompt, gmail_label, position, created_at) VALUES
-  ('newsletters',   'Newsletters',   'builtin', 'Mailing lists and newsletters.',            'Arcforma/Newsletters',   1, 0),
-  ('calendar',      'Calendar',      'builtin', 'Invitations and calendar updates.',         'Arcforma/Calendar',      2, 0),
-  ('notifications', 'Notifications', 'builtin', 'Automated notifications from services.',    'Arcforma/Notifications', 3, 0),
-  ('receipts',      'Receipts',      'builtin', 'Receipts, invoices, and order confirmations.', 'Arcforma/Receipts',   4, 0);
+  ('newsletters',   'Newsletters',   'builtin', 'Editorial or recurring publication content you subscribed to.', 'Arcforma/Newsletters',   1, 0),
+  ('promotions',    'Promotions',    'builtin', 'Marketing, offers, product upsell, events, and sales.',         'Arcforma/Promotions',    2, 0),
+  ('jobs',          'Jobs',          'builtin', 'Applicants, applications, candidate alerts, and recruiter mail.', 'Arcforma/Jobs',        3, 0),
+  ('calendar',      'Calendar',      'builtin', 'Invitations and calendar updates.',                            'Arcforma/Calendar',      4, 0),
+  ('notifications', 'Notifications', 'builtin', 'Transactional or platform alerts reporting something that happened.', 'Arcforma/Notifications', 5, 0),
+  ('receipts',      'Receipts',      'builtin', 'Receipts, invoices, and order confirmations.',                 'Arcforma/Receipts',      6, 0);
 
 CREATE TABLE IF NOT EXISTS classifications (
   account_id      TEXT NOT NULL,

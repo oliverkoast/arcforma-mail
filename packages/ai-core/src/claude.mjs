@@ -65,6 +65,7 @@ export class ClaudeRunner {
     this.children = new Map(); // requestId -> child
     this.authOkUntil = 0;
     this.authCache = null;
+    this.retryPreferredAt = 0;
   }
 
   get model() { return this.modelChain[this.modelIndex]; }
@@ -137,15 +138,24 @@ export class ClaudeRunner {
 
   async _run(req) {
     const started = Date.now();
+    // A model the CLI cannot run, or one whose plan allowance is spent, both mean "ask the next
+    // model in the chain" rather than "fail". A spent allowance is temporary, so the chain resets
+    // after a cooling period and the preferred model gets tried again.
+    if (this.modelIndex > 0 && this.retryPreferredAt && Date.now() > this.retryPreferredAt) {
+      this.modelIndex = 0;
+      this.retryPreferredAt = 0;
+    }
     let model = req.model ?? this.model;
     for (;;) {
       const r = await this._once(req, model);
-      if (!r.ok && /does not support this model/i.test(r.error ?? "") && !req.model && this.modelIndex < this.modelChain.length - 1) {
+      const stepDown = !req.model && this.modelIndex < this.modelChain.length - 1 && (isUnsupported(r.error) || isOutOfAllowance(r.error));
+      if (!r.ok && stepDown) {
+        if (isOutOfAllowance(r.error)) this.retryPreferredAt = Date.now() + 30 * 60_000;
         this.modelIndex++;
         model = this.model;
         continue;
       }
-      return { ...r, model, latencyMs: Date.now() - started };
+      return { ...r, model, latencyMs: Date.now() - started, code: r.ok ? undefined : outOfAllowanceCode(r) };
     }
   }
 
@@ -189,6 +199,19 @@ export class ClaudeRunner {
       child.on("error", (e) => { clearTimeout(timer); resolve({ out: "", err: String(e), code: -1 }); });
     });
   }
+}
+
+export function isUnsupported(error) {
+  return /does not support this model/i.test(String(error ?? ""));
+}
+
+/** The plan's allowance for that model is spent. Temporary, and another model may still answer. */
+export function isOutOfAllowance(error) {
+  return /(reached|exceeded) your .{0,30}limit|usage limit|out of (credits|usage)|rate.?limit/i.test(String(error ?? ""));
+}
+
+function outOfAllowanceCode(r) {
+  return isOutOfAllowance(r.error) ? "out_of_allowance" : r.code;
 }
 
 /** Kill the child and everything it spawned. Children run detached so they own a process group. */

@@ -39,7 +39,7 @@ test("examplesText numbers the corrections and names the chosen category", () =>
 test("classifySchema constrains type and category to known values", () => {
   const s = classifySchema(["Clients", "Hiring"]) as { properties: { category: { enum: string[] }; type: { enum: string[] } }; required: string[] };
   assert.deepEqual(s.properties.category.enum, ["none", "Clients", "Hiring"]);
-  assert.deepEqual(s.properties.type.enum, ["newsletter", "calendar", "notification", "receipt", "none"]);
+  assert.deepEqual(s.properties.type.enum, ["newsletter", "promotion", "job", "calendar", "notification", "receipt", "none"], "the model may name any of the six types, or none");
   assert.deepEqual(s.required, ["split", "type", "category", "confidence"]);
 });
 
@@ -47,6 +47,9 @@ test("interpretLocal applies the 0.55 floor and maps names to ids", () => {
   assert.deepEqual(interpretLocal({ split: "important", type: "none", category: "Clients", confidence: 0.9 }, categories), { split: "important", type: null, categoryId: "clients", confidence: 0.9 });
   assert.deepEqual(interpretLocal({ split: "important", type: "none", category: "Clients", confidence: 0.5 }, categories), { split: "other", type: null, categoryId: null, confidence: 0.5 }, "low confidence stays Other with no category");
   assert.deepEqual(interpretLocal({ split: "other", type: "newsletter", category: "none", confidence: 0.8 }, categories), { split: "other", type: "newsletters", categoryId: null, confidence: 0.8 });
+  assert.deepEqual(interpretLocal({ split: "other", type: "promotion", category: "none", confidence: 0.8 }, categories), { split: "other", type: "promotions", categoryId: null, confidence: 0.8 });
+  assert.deepEqual(interpretLocal({ split: "other", type: "job", category: "none", confidence: 0.8 }, categories), { split: "other", type: "jobs", categoryId: null, confidence: 0.8 });
+  assert.deepEqual(interpretLocal({ split: "other", type: "notification", category: "none", confidence: 0.8 }, categories), { split: "other", type: "notifications", categoryId: null, confidence: 0.8 });
   assert.deepEqual(interpretLocal({ split: "important", type: "receipt", category: "Unknown", confidence: 2 }, categories), { split: "important", type: "receipts", categoryId: null, confidence: 1 }, "unknown category names are dropped, confidence is clamped");
   assert.equal(interpretLocal({ split: "important", type: "none", category: "none", confidence: Number.NaN }, categories).split, "other");
 });

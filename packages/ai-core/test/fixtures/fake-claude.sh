@@ -25,6 +25,9 @@ case "${FAKE_CLAUDE_MODE:-ok}" in
   unsupported)
     if [ "$model" = "claude-fable-5-1" ]; then printf '{"type":"result","is_error":true,"result":"API Error: 400 model does not support this model"}\n';
     else printf '{"type":"result","is_error":false,"result":"ok-from-%s<<ARCFORMA_END>>","modelUsage":{"%s":{}}}\n' "$model" "$model"; fi;;
+  limited)
+    if [ "$model" = "claude-fable-5-1" ]; then printf '{"type":"result","is_error":true,"result":"You'"'"'ve reached your Fable limit. Switch to another model, or manage usage credits at claude.ai/settings/usage to continue."}\n';
+    else printf '{"type":"result","is_error":false,"result":"answered-by-%s<<ARCFORMA_END>>","modelUsage":{"%s":{}}}\n' "$model" "$model"; fi;;
   truncated) printf '{"type":"result","is_error":false,"result":"half a sen"}\n';;
   slow) sleep 5; printf '{"type":"result","result":"late"}\n';;
   warn) echo "Warning: something on stdout"; printf '{"type":"result","is_error":false,"result":"after warning<<ARCFORMA_END>>"}\n';;

@@ -98,3 +98,18 @@ test("a configured long-lived token wins", async () => {
   assert.equal((await c.authStatus()).loggedIn, true);
   assert.equal(c.authSource, "config_token");
 });
+
+test("a spent model allowance falls back down the chain and retries the preferred model later", async () => {
+  const { isOutOfAllowance } = await import("../src/claude.mjs");
+  assert.equal(isOutOfAllowance("You've reached your Fable limit. Switch to another model"), true);
+  assert.equal(isOutOfAllowance("exceeded your usage limit for today"), true);
+  assert.equal(isOutOfAllowance("something else entirely"), false);
+  const c = runner("limited");
+  const r = await c.complete({ system: "s", user: "u" });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(r.model, "opus");
+  assert.ok(c.retryPreferredAt > Date.now(), "the preferred model is tried again after a cooling period");
+  c.retryPreferredAt = Date.now() - 1;
+  await c.complete({ system: "s", user: "u" });
+  assert.equal(c.modelIndex, 1, "it steps down again while the allowance is still spent");
+});

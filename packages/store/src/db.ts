@@ -8,7 +8,7 @@ import { reindexAllMessages } from "./queries/messages.js";
 
 export type Db = DatabaseSync;
 
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 11;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
@@ -140,6 +140,20 @@ CREATE TABLE IF NOT EXISTS thread_unsubscribes (
 );
 `;
 
+// Version 11: mailbox sorting gained Promotions and Jobs. The seed in schema.sql
+// only runs for a new store, so an existing one gets the two rows here, and the
+// builtin positions are restated so the sidebar lists them in the same order
+// everywhere: Newsletters, Promotions, Jobs, Calendar, Notifications, Receipts.
+const MIGRATION_11 = `
+INSERT OR IGNORE INTO categories (id, name, kind, prompt, gmail_label, position, created_at) VALUES
+  ('promotions', 'Promotions', 'builtin', 'Marketing, offers, product upsell, events, and sales.', 'Arcforma/Promotions', 2, 0),
+  ('jobs',       'Jobs',       'builtin', 'Applicants, applications, candidate alerts, and recruiter mail.', 'Arcforma/Jobs', 3, 0);
+UPDATE categories SET position = 1, prompt = 'Editorial or recurring publication content you subscribed to.' WHERE id = 'newsletters';
+UPDATE categories SET position = 4 WHERE id = 'calendar';
+UPDATE categories SET position = 5, prompt = 'Transactional or platform alerts reporting something that happened.' WHERE id = 'notifications';
+UPDATE categories SET position = 6 WHERE id = 'receipts';
+`;
+
 /** Opens (or creates) the store, applies pragmas, and migrates to the current schema. */
 export function openStore(file: string): Db {
   if (file !== ":memory:") fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -180,6 +194,7 @@ export function migrate(db: Db): void {
     { version: 9, sql: () => "SELECT 1", after: (d) => recomputeThreadsWithDrafts(d) },
     // A thread holding nothing but a draft used to survive as a phantom row (listed under All Mail, opened empty). Recompute removes it.
     { version: 10, sql: () => "SELECT 1", after: (d) => recomputeThreadsWithDrafts(d) },
+    { version: 11, sql: () => MIGRATION_11 },
   ];
   for (const step of steps) {
     if (step.version <= current) continue;

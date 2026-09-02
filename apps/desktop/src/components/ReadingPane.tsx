@@ -13,6 +13,8 @@ const NO_PRIORS: string[] = [];
 
 const BUILTIN: Array<{ id: string; label: string }> = [
   { id: "newsletters", label: "Newsletters" },
+  { id: "promotions", label: "Promotions" },
+  { id: "jobs", label: "Jobs" },
   { id: "calendar", label: "Calendar" },
   { id: "notifications", label: "Notifications" },
   { id: "receipts", label: "Receipts" },

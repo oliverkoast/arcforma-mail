@@ -322,6 +322,9 @@ const SMOKE_STEPS: Array<{ name: string; script: string | null; main?: (ctx: Smo
   { name: "tooltip-mark-done", script: null, hover: ".reading-actions .icon-btn[data-glyph='done']", waitMs: 900 },
   // Daily 0 in the sidebar: the row answers what it contains.
   { name: "tooltip-daily", script: null, hover: ".nav-row[data-row-id='daily'] .nav-item", waitMs: 900 },
+  // The Inbox group with all six types: Newsletters, Promotions, and Jobs above the older three,
+  // each with its count, and the Jobs row saying what it holds.
+  { name: "sidebar-types", script: null, hover: ".nav-row[data-row-id='category:jobs'] .nav-item", waitMs: 900 },
   { name: "snooze", script: "window.__arcmail.setPopover('snooze');", hover: ".list-head", waitMs: 600 },
   // C over an inline reply parks the reply as a draft and opens the floating panel.
   { name: "compose", script: "window.__arcmail.setPopover(null); window.__arcmail.openCompose('new');", waitMs: 1200 },

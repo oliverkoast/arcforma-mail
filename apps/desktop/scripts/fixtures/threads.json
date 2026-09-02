@@ -592,6 +592,58 @@
           "html": "<p>Received, thanks. Finance will pay it this week.</p>"
         }
       ]
+    },
+    {
+      "accountId": "arcforma",
+      "id": "t-promo",
+      "classification": {
+        "split": "other",
+        "type": "promotions",
+        "source": "rule",
+        "confidence": 1
+      },
+      "messages": [
+        {
+          "id": "m-p1",
+          "from": "Nordic Outfitters <shop@nordic-outfitters.example>",
+          "to": "you@example.com",
+          "subject": "New arrivals are here, 20% off select styles",
+          "hoursAgo": 11,
+          "labels": [
+            "INBOX"
+          ],
+          "headers": {
+            "List-Unsubscribe": "<mailto:unsub@nordic-outfitters.example>"
+          },
+          "html": "<p>The autumn range has landed.</p>"
+        }
+      ]
+    },
+    {
+      "accountId": "formai",
+      "id": "t-jobs",
+      "classification": {
+        "split": "other",
+        "type": "jobs",
+        "source": "rule",
+        "confidence": 1
+      },
+      "messages": [
+        {
+          "id": "m-j1",
+          "from": "Wellfound <talent@wellfound.com>",
+          "to": "you@example.net",
+          "subject": "Avery Nolan is interested in AI Engineer at Arcforma",
+          "hoursAgo": 13,
+          "labels": [
+            "INBOX"
+          ],
+          "headers": {
+            "List-Unsubscribe": "<mailto:unsub@wellfound.com>"
+          },
+          "html": "<p>Four years of TypeScript and Postgres. Open the profile to reply.</p>"
+        }
+      ]
     }
   ],
   "calendar": [

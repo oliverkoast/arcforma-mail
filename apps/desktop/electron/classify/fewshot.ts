@@ -61,7 +61,7 @@ export function classifySchema(categoryNames: string[]): unknown {
     type: "object",
     properties: {
       split: { type: "string", enum: ["important", "other"] },
-      type: { type: "string", enum: ["newsletter", "calendar", "notification", "receipt", "none"] },
+      type: { type: "string", enum: ["newsletter", "promotion", "job", "calendar", "notification", "receipt", "none"] },
       category: { type: "string", enum: ["none", ...categoryNames] },
       confidence: { type: "number" },
     },

@@ -18,7 +18,7 @@ import { buildExcerpt } from "./fewshot.js";
 import { pickDecidingMessage } from "./rules.js";
 import type { RefileTarget } from "../../shared/types.js";
 
-const BUILTIN_TYPES = new Set(["newsletters", "calendar", "notifications", "receipts"]);
+const BUILTIN_TYPES = new Set(["newsletters", "promotions", "jobs", "calendar", "notifications", "receipts"]);
 
 export function labelForCategory(categories: CategoryRow[], id: string | null): string | null {
   if (!id) return null;

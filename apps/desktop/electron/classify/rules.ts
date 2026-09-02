@@ -1,6 +1,6 @@
 // Deterministic layer of the classifier. Runs on every thread before the local
 // model sees anything; the model only gets the residue. Uses ruleType() from
-// the gmail package for the four builtin types and adds the Important rule:
+// the gmail package for the six builtin types and adds the Important rule:
 // any sender domain Oliver replied to in the last 90 days is Important.
 
 import { ruleType, type GmailMessage, type RuleType } from "@arcforma/gmail";
@@ -17,11 +17,15 @@ export interface RuleInput {
   hasCalendarPart: boolean;
   direction: "in" | "out";
   isAuto: boolean;
+  /** True when the thread already carries a message Oliver sent, which makes the sender a person. */
+  threadHasOutbound: boolean;
 }
 
 export interface RuleContext {
   /** Lowercased domains Oliver sent to in the window. */
   repliedDomains: Set<string>;
+  /** Lowercased addresses Oliver sent to in the window. An address he has written to belongs to a person. */
+  repliedAddresses?: ReadonlySet<string>;
   /** Lowercased addresses the accounts send from; mail from them is never Important by itself. */
   ownerAddresses?: Set<string>;
 }
@@ -62,7 +66,7 @@ function toGmailMessage(input: RuleInput): GmailMessage {
  */
 export function classifyByRules(input: RuleInput, ctx: RuleContext): RuleVerdict {
   const m = toGmailMessage(input);
-  const type = ruleType(m);
+  const type = ruleType(m, { knownAddresses: ctx.repliedAddresses, threadHasOutbound: input.threadHasOutbound });
   if (type) return { split: "other", type, reason: `rule:${type}` };
   const from = input.fromEmail.toLowerCase();
   const domain = domainOf(from);
@@ -78,7 +82,7 @@ export function pickDecidingMessage<T extends { direction: "in" | "out" }>(messa
   return messages[messages.length - 1] ?? null;
 }
 
-export function ruleInputFromRow(m: MessageRow, attachmentsJson?: string | null): RuleInput {
+export function ruleInputFromRow(m: MessageRow, attachmentsJson?: string | null, threadHasOutbound = false): RuleInput {
   let headers: Record<string, string> = {};
   try {
     headers = JSON.parse(m.headers_json) as Record<string, string>;
@@ -93,5 +97,5 @@ export function ruleInputFromRow(m: MessageRow, attachmentsJson?: string | null)
       hasCalendar = false;
     }
   }
-  return { fromEmail: m.from_email, subject: m.subject, headers, hasCalendarPart: hasCalendar, direction: m.direction, isAuto: m.is_auto === 1 };
+  return { fromEmail: m.from_email, subject: m.subject, headers, hasCalendarPart: hasCalendar, direction: m.direction, isAuto: m.is_auto === 1, threadHasOutbound };
 }

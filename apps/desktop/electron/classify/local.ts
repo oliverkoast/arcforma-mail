@@ -25,7 +25,7 @@ export interface LocalVerdict {
   confidence: number;
 }
 
-const TYPE_IDS: Record<string, string> = { newsletter: "newsletters", calendar: "calendar", notification: "notifications", receipt: "receipts" };
+const TYPE_IDS: Record<string, string> = { newsletter: "newsletters", promotion: "promotions", job: "jobs", calendar: "calendar", notification: "notifications", receipt: "receipts" };
 
 /** Applies the confidence floor and maps the prompt's names onto store ids. Pure, so it is tested without a model. */
 export function interpretLocal(raw: LocalRaw, categories: CategoryRow[]): LocalVerdict {

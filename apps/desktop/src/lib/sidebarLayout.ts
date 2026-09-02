@@ -25,6 +25,8 @@ export interface SidebarRowDescriptor {
   view: ViewSpec;
   count: (c: SidebarCounts) => number;
   hiddenByDefault?: boolean;
+  /** Where a row the stored layout never saw wants to land: right after this row id, when that row is in the same group. */
+  after?: string;
   /** The category id or saved search id behind a category or search row, for rename and remove. */
   ref?: string;
 }
@@ -35,8 +37,11 @@ export const SIDEBAR_GROUPS: ReadonlyArray<{ id: SidebarGroupId; label: string }
   { id: "folders", label: "Folders" },
 ];
 
+/** The builtin type rows, in the order the Inbox group lists them. */
 const BUILTIN_TYPES: ReadonlyArray<{ id: string; label: string }> = [
   { id: "newsletters", label: "Newsletters" },
+  { id: "promotions", label: "Promotions" },
+  { id: "jobs", label: "Jobs" },
   { id: "calendar", label: "Calendar" },
   { id: "notifications", label: "Notifications" },
   { id: "receipts", label: "Receipts" },
@@ -70,13 +75,16 @@ export function rowDescriptors(categories: CategoryInfo[], searches: SavedSearch
     const i = rows.findIndex((r) => r.id === afterId);
     return [...rows.slice(0, i + 1), ...extra, ...rows.slice(i + 1)];
   };
-  const types: SidebarRowDescriptor[] = BUILTIN_TYPES.map((t) => ({
+  const types: SidebarRowDescriptor[] = BUILTIN_TYPES.map((t, i) => ({
     id: `category:${t.id}`,
     kind: "builtin",
     label: t.label,
     group: "inbox",
     view: { view: "inbox", category: t.id },
     count: (c) => c.categories[t.id] ?? 0,
+    // A type row added after a layout was saved slots in behind the type before it rather than
+    // landing under the custom categories at the end of the group.
+    after: i === 0 ? "attachments" : `category:${BUILTIN_TYPES[i - 1]!.id}`,
   }));
   const customRows: SidebarRowDescriptor[] = custom.map((c) => ({
     id: `category:${c.id}`,
@@ -112,9 +120,10 @@ function isGroupId(v: unknown): v is SidebarGroupId {
 
 /**
  * Brings a stored layout in step with the rows that exist now. Known rows keep
- * their saved group, order, and hidden flag. Rows the layout never saw append
- * to their default group. Ids the app no longer knows are dropped. Anything
- * unreadable falls back to the default layout.
+ * their saved group, order, and hidden flag. Rows the layout never saw land in
+ * their default group, behind the row they name in `after` when that row is
+ * there and at the end otherwise. Ids the app no longer knows are dropped.
+ * Anything unreadable falls back to the default layout.
  */
 export function reconcileLayout(saved: unknown, rows: SidebarRowDescriptor[]): SidebarLayout {
   const known = new Map(rows.map((r) => [r.id, r]));
@@ -132,10 +141,16 @@ export function reconcileLayout(saved: unknown, rows: SidebarRowDescriptor[]): S
     }
     return { id: g.id, rows: out };
   });
+  // Passes over the unplaced rows in descriptor order, so a run of new rows keeps its own order
+  // while each one lands behind the anchor it names.
   for (const r of rows) {
     if (placed.has(r.id)) continue;
+    placed.add(r.id);
     const group = groups.find((g) => g.id === r.group)!;
-    group.rows.push({ id: r.id, hidden: r.hiddenByDefault === true });
+    const row = { id: r.id, hidden: r.hiddenByDefault === true };
+    const at = r.after ? group.rows.findIndex((x) => x.id === r.after) : -1;
+    if (at < 0) group.rows.push(row);
+    else group.rows.splice(at + 1, 0, row);
   }
   return { version: 1, groups };
 }
