@@ -3,6 +3,8 @@ import { AvailabilityPicker } from "./AvailabilityPicker";
 import { invoke, on } from "../bridge";
 import { useApp } from "../state/store";
 import { dayStarts } from "../../shared/availability";
+import { calendarEventTip } from "../lib/tooltip";
+import { keyLabel } from "../keys/keyLabel";
 import type { CalendarEventView } from "../../shared/types";
 
 const DAYS = 7;
@@ -98,7 +100,7 @@ export function CalendarPanel() {
     <>
       <div className="rail-head">
         <span className="af-mono">Calendar</span>
-        <button className="rail-link" onClick={() => setAvailability((v) => !v)}>
+        <button className="rail-link" data-tip={availability ? "Back to the next seven days of events." : "Pick free half hours across every account and paste them into a message."} onClick={() => setAvailability((v) => !v)}>
           {availability ? "Show events" : "Share free times"}
         </button>
       </div>
@@ -129,14 +131,14 @@ export function CalendarPanel() {
                 </div>
                 {list.length === 0 ? <p className="rail-muted">Free.</p> : null}
                 {list.map((ev) => (
-                  <div className={`cal-event${ev.responseStatus === "declined" ? " cal-event-declined" : ""}`} key={`${ev.accountId}:${ev.id}`}>
+                  <div className={`cal-event${ev.responseStatus === "declined" ? " cal-event-declined" : ""}`} key={`${ev.accountId}:${ev.id}`} data-tip={`${calendarEventTip(ev)}${ev.responseStatus === "declined" ? "\nDeclined." : ""}\n${emailOf.get(ev.accountId) ?? ev.accountId}`}>
                     <div className="cal-event-main">
                       <span className="cal-event-time">{timeRange(ev)}</span>
                       <span className="cal-event-title">{ev.summary}</span>
                       <span className="af-mono cal-event-account">{emailOf.get(ev.accountId) ?? ev.accountId}</span>
                     </div>
                     {ev.joinUrl ? (
-                      <a className="btn btn-nav btn-compact cal-join" href={ev.joinUrl} target="_blank" rel="noreferrer">
+                      <a className="btn btn-nav btn-compact cal-join" href={ev.joinUrl} target="_blank" rel="noreferrer" data-tip="Opens the meeting link in your browser.">
                         Join
                       </a>
                     ) : null}
@@ -145,7 +147,7 @@ export function CalendarPanel() {
               </section>
             );
           })}
-          <p className="rail-hint af-mono">Cmd+Shift+C closes this panel</p>
+          <p className="rail-hint af-mono" data-tip="The calendar rail. The same key opens and closes it." data-key={keyLabel("toggleCalendar") ?? undefined}>Cmd+Shift+C closes this panel</p>
         </>
       )}
     </>

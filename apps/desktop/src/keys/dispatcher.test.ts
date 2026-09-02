@@ -55,6 +55,20 @@ test("D and W drive the queues in the list and the thread, with labels in the ke
   assert.equal(weekly?.label, "Add to or remove from Weekly 0");
 });
 
+test("U unsubscribes in the list and the thread only: never while typing, never in a popover", () => {
+  for (const scope of ["list", "thread"] as const) {
+    const b = resolveBinding(scope, key("u"), false);
+    assert.equal(b?.action, "unsubscribe", scope);
+    assert.equal(b?.label, "Unsubscribe and archive");
+  }
+  assert.equal(resolveBinding("list", key("u"), true), null, "a u typed into a field is text");
+  assert.equal(resolveBinding("compose", key("u"), true), null);
+  assert.equal(resolveBinding("popover", key("u"), false), null);
+  assert.equal(resolveBinding("search", key("u"), true), null);
+  assert.equal(resolveBinding("list", key("U", { shiftKey: true }), false), null, "Shift+U is not U");
+  assert.deepEqual(KEYMAP.filter((b) => b.action === "unsubscribe").map((b) => b.scope).sort(), ["list", "thread"]);
+});
+
 test("inside the snooze popover W keeps its next-week meaning and D picks a date: the popover scope wins", () => {
   assert.equal(resolveBinding("popover", key("w"), false)?.action, "snoozeNextWeek");
   assert.equal(resolveBinding("popover", key("d"), false)?.action, "snoozePick");

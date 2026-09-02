@@ -214,7 +214,7 @@ async function boot(): Promise<void> {
   }
 
   registerAccountIpc(accounts, sync, db);
-  registerThreadIpc(db, accounts, sync);
+  registerThreadIpc(db, accounts, sync, scheduler);
   registerSearchIpc(db);
   registerSidebarIpc(db);
   registerSchedulerIpc(db, scheduler, sync);
@@ -281,9 +281,15 @@ function fakeBackfill(ctx: SmokeContext, done: number, total: number): void {
   emit("sync:progress", { accountId: "arcforma", state: "backfill", done, total, finished: false });
 }
 
-const SMOKE_STEPS: Array<{ name: string; script: string | null; main?: (ctx: SmokeContext) => void; waitMs: number }> = [
+const SMOKE_STEPS: Array<{ name: string; script: string | null; main?: (ctx: SmokeContext) => void; hover?: string; waitMs: number }> = [
   { name: "inbox", script: null, waitMs: 2500 },
-  { name: "thread", script: "window.__arcmail.select(0); await window.__arcmail.openSelected();", waitMs: 4000 },
+  // Cmd+K with "sno" typed: the snooze commands rank first, their keys in mono on the right.
+  { name: "palette", script: "window.__arcmail.openPalette(); await new Promise((r) => setTimeout(r, 300)); window.__arcmail.setPaletteQuery('sno');", waitMs: 900 },
+  // An empty focused search field shows the operator hint under it. The smoke window has no OS focus, so focus events never fire; the scope is set the way onFocus would.
+  { name: "search-hint", script: "window.__arcmail.closePalette(); document.getElementById('search-input').focus(); window.__arcmail.setScope('search'); await new Promise((r) => setTimeout(r, 400));", waitMs: 600 },
+  // Operators in the query: the hits show the matched field as an eyebrow with the hit term marked.
+  { name: "search-ops", script: "window.__arcmail.setSearchQuery('from:dana has:attachment'); await window.__arcmail.runSearch();", waitMs: 1200 },
+  { name: "thread", script: "window.__arcmail.leaveSearch(); await new Promise((r) => setTimeout(r, 800)); window.__arcmail.select(0); await window.__arcmail.openSelected();", waitMs: 4000 },
   // The bottom of the "Kickoff next week" thread: the reply row under the last message, no draft anywhere.
   { name: "thread-reply-row", script: "document.querySelector('.messages').scrollTop = 1e6;", waitMs: 600 },
   // The last message carries a gateway banner and quotes Priya's mail under a Gmail attribution: the banner is gone and the history sits behind Show quoted text.
@@ -296,7 +302,11 @@ const SMOKE_STEPS: Array<{ name: string; script: string | null; main?: (ctx: Smo
   { name: "inline-strip", script: "await window.__arcmail.dismissCompose();", waitMs: 800 },
   // Reply from a message in the middle of the thread: the box moves under it, recipients come from that message, the typed text comes along.
   { name: "inline-reply-mid", script: "window.__arcmail.openCompose('reply', { messageId: 'm-k6' }); await new Promise((r) => setTimeout(r, 400)); document.querySelector('.inline-reply').scrollIntoView({ block: 'center' });", waitMs: 1200 },
-  { name: "snooze", script: "window.__arcmail.setPopover('snooze');", waitMs: 600 },
+  // The pointer rests on the Mark done icon for longer than the tooltip delay: the card sits under it with the E hint.
+  { name: "tooltip-mark-done", script: null, hover: ".reading-actions .icon-btn[data-glyph='done']", waitMs: 900 },
+  // Daily 0 in the sidebar: the row answers what it contains.
+  { name: "tooltip-daily", script: null, hover: ".nav-row[data-row-id='daily'] .nav-item", waitMs: 900 },
+  { name: "snooze", script: "window.__arcmail.setPopover('snooze');", hover: ".list-head", waitMs: 600 },
   // C over an inline reply parks the reply as a draft and opens the floating panel.
   { name: "compose", script: "window.__arcmail.setPopover(null); window.__arcmail.openCompose('new');", waitMs: 1200 },
   { name: "ask", script: "window.__arcmail.closeCompose(false); window.__arcmail.openAsk(); await window.__arcmail.runAsk('kickoff invoice');", waitMs: 3500 },
@@ -343,6 +353,11 @@ function runSmoke(win: BrowserWindow, dir: string, ctx: SmokeContext): void {
       for (const step of SMOKE_STEPS) {
         try {
           if (step.script) await win.webContents.executeJavaScript(`(async () => { ${step.script} })()`, true);
+          if (step.hover) {
+            // Move the real pointer onto the element, the way a hand would, so the tooltip layer's timer starts.
+            const at = (await win.webContents.executeJavaScript(`(() => { const r = document.querySelector(${JSON.stringify(step.hover)}).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`, true)) as { x: number; y: number };
+            win.webContents.sendInputEvent({ type: "mouseMove", x: Math.round(at.x), y: Math.round(at.y) });
+          }
           if (step.main) {
             await sleep(300);
             step.main(ctx);

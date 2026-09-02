@@ -62,7 +62,7 @@ const previewBridge: RawBridge = {
       case "app:info":
         return { version: "preview", platform: "browser", smoke: false, userArt: [] };
       case "settings:get":
-        return { undoWindowSec: 10, autoDraft: false, remoteImages: "always" };
+        return { undoWindowSec: 10, autoDraft: false, remoteImages: "always", remindClientsAfterDays: 3, remindScope: ["Clients"] };
       case "snippets:list":
       case "drafts:list":
         return [];

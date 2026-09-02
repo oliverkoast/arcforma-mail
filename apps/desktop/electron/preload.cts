@@ -22,6 +22,7 @@ const INVOKE_CHANNELS = new Set([
   "threads:trash",
   "threads:snooze",
   "threads:remind",
+  "threads:unsubscribe",
   "threads:counts",
   "sidebar:counts",
   "sidebar:getLayout",

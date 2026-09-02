@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { invoke, on } from "../bridge";
 import { useApp } from "../state/store";
 import { listDate } from "../lib/format";
+import { keyLabel } from "../keys/keyLabel";
 import type { AiErrorCode, ContactCard, ContactEventRef } from "../../shared/types";
 
 function initials(name: string, email: string): string {
@@ -106,7 +107,7 @@ export function ContactPanel() {
         </div>
         <div className="af-h3">No thread open</div>
         <p className="rail-muted">Open a thread and this panel shows its sender: mail history, meetings, and a web summary for people you actually write with.</p>
-        <p className="rail-hint af-mono">Cmd+Shift+I closes this panel</p>
+        <p className="rail-hint af-mono" data-tip="The contact rail. The same key opens and closes it." data-key={keyLabel("toggleContact") ?? undefined}>Cmd+Shift+I closes this panel</p>
       </>
     );
   }
@@ -119,7 +120,7 @@ export function ContactPanel() {
       <div className="rail-head">
         <span className="af-mono">Contact</span>
       </div>
-      <div className="contact-id">
+      <div className="contact-id" data-tip={`${name}\n${email}\nThe sender of the open thread.`}>
         {photo ? <img className="contact-photo" src={photo} alt="" width={56} height={56} /> : <div className="contact-initials" aria-hidden="true">{initials(name, email)}</div>}
         <div className="contact-who">
           <div className="af-h3 contact-name">{name}</div>
@@ -131,13 +132,13 @@ export function ContactPanel() {
       {card ? (
         <>
           <dl className="contact-facts">
-            <dt>Threads</dt>
+            <dt data-tip="Threads where you both wrote, in the local store.">Threads</dt>
             <dd>
               {card.recentThreads.length === 0 ? "None yet" : `${card.twoWayThreads} two-way`}
             </dd>
-            <dt>Last from them</dt>
+            <dt data-tip="The last mail they sent you.">Last from them</dt>
             <dd>{when(card.lastFromAt)}</dd>
-            <dt>Last to them</dt>
+            <dt data-tip="The last mail you sent them.">Last to them</dt>
             <dd>{when(card.lastToAt)}</dd>
           </dl>
 
@@ -146,20 +147,20 @@ export function ContactPanel() {
             {card.nextEvent || card.lastEvent ? (
               <>
                 {card.nextEvent ? (
-                  <div className="contact-event">
+                  <div className="contact-event" data-tip={`${card.nextEvent.summary}\nNext meeting with this address: ${eventLine(card.nextEvent)}`}>
                     <div className="contact-event-main">
                       <span className="contact-event-when">Next: {eventLine(card.nextEvent)}</span>
                       <span className="contact-event-title">{card.nextEvent.summary}</span>
                     </div>
                     {card.nextEvent.joinUrl ? (
-                      <a className="btn btn-nav btn-compact cal-join" href={card.nextEvent.joinUrl} target="_blank" rel="noreferrer">
+                      <a className="btn btn-nav btn-compact cal-join" href={card.nextEvent.joinUrl} target="_blank" rel="noreferrer" data-tip="Opens the meeting link in your browser.">
                         Join
                       </a>
                     ) : null}
                   </div>
                 ) : null}
                 {card.lastEvent ? (
-                  <div className="contact-event">
+                  <div className="contact-event" data-tip={`${card.lastEvent.summary}\nLast meeting with this address: ${eventLine(card.lastEvent)}`}>
                     <div className="contact-event-main">
                       <span className="contact-event-when">Last: {eventLine(card.lastEvent)}</span>
                       <span className="contact-event-title">{card.lastEvent.summary}</span>
@@ -179,6 +180,7 @@ export function ContactPanel() {
               <button
                 className={`contact-thread${open?.thread.id === t.threadId && open.thread.accountId === t.accountId ? " is-open" : ""}`}
                 key={`${t.accountId}:${t.threadId}`}
+                data-tip={`${t.subject || "(no subject)"}\nOpen this thread in the reading pane.`}
                 onClick={() => void openThreadById(t.accountId, t.threadId)}
               >
                 <span className="contact-thread-subject">{t.subject}</span>
@@ -205,7 +207,7 @@ export function ContactPanel() {
               </div>
             ) : null}
             {card.webEligible ? (
-              <button className="btn btn-nav btn-compact" disabled={lookup.state === "running"} onClick={() => void runLookup()}>
+              <button className="btn btn-nav btn-compact" disabled={lookup.state === "running"} data-tip="Asks Claude for a short public summary of this person from the web. Their mail is not sent." onClick={() => void runLookup()}>
                 {lookup.state === "running" ? "Looking up" : card.web ? "Look up again" : "Look up on the web"}
               </button>
             ) : (
@@ -221,7 +223,7 @@ export function ContactPanel() {
       ) : (
         <p className="rail-muted">Reading the local store.</p>
       )}
-      <p className="rail-hint af-mono">Cmd+Shift+I closes this panel</p>
+      <p className="rail-hint af-mono" data-tip="The contact rail. The same key opens and closes it." data-key={keyLabel("toggleContact") ?? undefined}>Cmd+Shift+I closes this panel</p>
     </>
   );
 }

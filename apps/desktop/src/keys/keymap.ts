@@ -1,8 +1,8 @@
 // One table drives every shortcut. Scope decides where a key applies; the
 // dispatcher adds "global" to whatever scope is active. Inside "compose",
-// "ask", and "settings" plain letters never reach list actions.
+// "ask", "settings", and the command palette plain letters never reach list actions.
 
-export type Scope = "global" | "list" | "thread" | "compose" | "sendLater" | "popover" | "sidebar" | "search" | "ask" | "settings" | "snippets";
+export type Scope = "global" | "list" | "thread" | "compose" | "sendLater" | "popover" | "sidebar" | "search" | "ask" | "settings" | "snippets" | "palette";
 
 export interface Binding {
   key: string;
@@ -15,7 +15,7 @@ export interface Binding {
 }
 
 /** Scopes where the user is typing: only Cmd chords, Escape, Tab, and Enter bindings apply. */
-export const TYPING_SCOPES: ReadonlySet<Scope> = new Set<Scope>(["compose", "ask", "settings", "search", "snippets"]);
+export const TYPING_SCOPES: ReadonlySet<Scope> = new Set<Scope>(["compose", "ask", "settings", "search", "snippets", "palette"]);
 
 export const KEYMAP: Binding[] = [
   { key: "j", scope: "list", action: "next", label: "Next thread" },
@@ -42,6 +42,8 @@ export const KEYMAP: Binding[] = [
   { key: "a", scope: "thread", action: "replyAll", label: "Reply all" },
   { key: "f", scope: "list", action: "forward", label: "Forward" },
   { key: "f", scope: "thread", action: "forward", label: "Forward" },
+  { key: "u", scope: "list", action: "unsubscribe", label: "Unsubscribe and archive" },
+  { key: "u", scope: "thread", action: "unsubscribe", label: "Unsubscribe and archive" },
   { key: "z", scope: "list", action: "undo", label: "Undo" },
   { key: "z", scope: "thread", action: "undo", label: "Undo" },
   { key: "z", scope: "popover", action: "undo", label: "Undo" },
@@ -73,6 +75,9 @@ export const KEYMAP: Binding[] = [
   { key: "Escape", scope: "ask", action: "closeAsk", label: "Close Ask" },
   { key: "Enter", scope: "ask", action: "runAsk", label: "Ask" },
   { key: ",", meta: true, scope: "global", action: "settings", label: "Settings" },
+  // The command palette: Cmd+K opens it from the list, the thread, and the compose editor; the same chord or Escape closes it.
+  { key: "k", meta: true, scope: "global", action: "palette", label: "Command palette" },
+  { key: "Escape", scope: "palette", action: "closePalette", label: "Close the palette" },
   { key: "Escape", scope: "settings", action: "closeSettings", label: "Close settings" },
   { key: "t", scope: "popover", action: "snoozeTomorrow", label: "Tomorrow" },
   { key: "w", scope: "popover", action: "snoozeNextWeek", label: "Next week" },

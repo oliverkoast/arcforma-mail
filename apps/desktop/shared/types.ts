@@ -49,8 +49,24 @@ export interface ThreadSummary {
   noReplyBy: number | null;
   /** Daily 0, Weekly 0, Later, or none. */
   queue: QueueName | null;
+  /** True when an inbound message carries a List-Unsubscribe header, so U has something to run. */
+  canUnsubscribe: boolean;
+  /** What U did to this thread, or null when it never ran. */
+  unsubscribeState: UnsubscribeState | null;
   /** Set on the pseudo-threads the Scheduled view lists: a send_queue row waiting for its send-later time. */
   scheduled?: ScheduledInfo | null;
+}
+
+export type UnsubscribeState = "none" | "sent" | "opened" | "failed";
+
+/** What U did: the method that ran and the sentence the toast shows. */
+export interface UnsubscribeResult {
+  method: "one-click" | "mailto" | "open" | "none";
+  ok: boolean;
+  /** True when the thread left the inbox with the unsubscribe. */
+  archived: boolean;
+  state: UnsubscribeState;
+  text: string;
 }
 
 export interface ScheduledInfo {
@@ -110,10 +126,25 @@ export interface ListResponse {
   nextCursor: string | null;
 }
 
+/** Wraps each matched term in a search highlight. The store's searchQuery.ts carries the same pair. */
+export const HIGHLIGHT_START = "\uE000";
+export const HIGHLIGHT_END = "\uE001";
+
+export type HighlightField = "subject" | "from" | "to" | "body";
+
+export interface SearchHighlight {
+  /** Which field the marked text comes from; null when the query had no words to mark. */
+  field: HighlightField | null;
+  /** The field's text with HIGHLIGHT_START and HIGHLIGHT_END around each hit. */
+  text: string;
+}
+
 export interface SearchHitView {
   thread: ThreadSummary;
   messageId: string;
+  /** Plain words around the match, unmarked. */
   excerpt: string;
+  highlight: SearchHighlight;
 }
 
 export interface Counts {
@@ -200,6 +231,10 @@ export interface SettingsInfo {
   undoWindowSec: number;
   autoDraft: boolean;
   remoteImages: "always" | "known" | "never";
+  /** Days after a message to a client goes out before a remind-if-no-reply fires on its thread. 0 turns the rule off. */
+  remindClientsAfterDays: number;
+  /** Category ids or names whose threads and correspondents count as clients for that rule. */
+  remindScope: string[];
 }
 
 export type ComposeMode = "new" | "reply" | "replyAll" | "forward";
@@ -406,6 +441,8 @@ export interface ArcmailInvoke {
   "threads:trash": (accountId: string, threadId: string) => void;
   "threads:snooze": (accountId: string, threadId: string, wakeAt: number) => void;
   "threads:remind": (accountId: string, threadId: string, dueAt: number) => void;
+  /** U: runs the best List-Unsubscribe method on the thread and archives it when the request went out. */
+  "threads:unsubscribe": (accountId: string, threadId: string) => UnsubscribeResult;
   "threads:counts": (accountIds?: string[]) => Counts;
   "sidebar:counts": (accountIds?: string[]) => SidebarCounts;
   "sidebar:getLayout": () => SidebarLayout | null;

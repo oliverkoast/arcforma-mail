@@ -54,12 +54,13 @@ export function cancelSnooze(db: Db, id: number): SnoozeRow | null {
 
 // ---- remind if no reply -----------------------------------------------------
 
-export function createReminder(db: Db, input: { accountId: string; threadId: string; lastMessageId: string; dueAt: number }): ReminderRow {
+export function createReminder(db: Db, input: { accountId: string; threadId: string; lastMessageId: string; dueAt: number; now?: number }): ReminderRow {
+  const now = input.now ?? Date.now();
   return transaction(db, () => {
-    db.prepare("UPDATE reminders SET status = 'cancelled', resolved_at = ? WHERE account_id = ? AND thread_id = ? AND status = 'pending'").run(Date.now(), input.accountId, input.threadId);
+    db.prepare("UPDATE reminders SET status = 'cancelled', resolved_at = ? WHERE account_id = ? AND thread_id = ? AND status = 'pending'").run(now, input.accountId, input.threadId);
     const res = db
       .prepare("INSERT INTO reminders (account_id, thread_id, last_message_id, due_at, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)")
-      .run(input.accountId, input.threadId, input.lastMessageId, input.dueAt, Date.now());
+      .run(input.accountId, input.threadId, input.lastMessageId, input.dueAt, now);
     return db.prepare("SELECT * FROM reminders WHERE id = ?").get(Number(res.lastInsertRowid)) as unknown as ReminderRow;
   });
 }
@@ -68,10 +69,15 @@ export function dueReminders(db: Db, now = Date.now()): ReminderRow[] {
   return db.prepare("SELECT * FROM reminders WHERE status = 'pending' AND due_at <= ? ORDER BY due_at, id").all(now) as unknown as ReminderRow[];
 }
 
-/** True when an inbound message newer than the one the reminder was set on has arrived. */
-export function hasNewerInbound(db: Db, accountId: string, threadId: string, lastMessageId: string): boolean {
+/**
+ * True when an inbound message newer than the one the reminder was set on has
+ * arrived. When that message is not in the store (a sent message the sync has
+ * not landed yet), `fallbackSince` stands in for its time; the scheduler
+ * passes the reminder's creation time so older mail can never count as the reply.
+ */
+export function hasNewerInbound(db: Db, accountId: string, threadId: string, lastMessageId: string, fallbackSince = 0): boolean {
   const anchor = db.prepare("SELECT internal_date FROM messages WHERE account_id = ? AND id = ?").get(accountId, lastMessageId) as { internal_date: number } | undefined;
-  const since = anchor?.internal_date ?? 0;
+  const since = anchor?.internal_date ?? fallbackSince;
   const row = db
     .prepare("SELECT 1 FROM messages WHERE account_id = ? AND thread_id = ? AND direction = 'in' AND internal_date > ? AND id != ? LIMIT 1")
     .get(accountId, threadId, since, lastMessageId);
@@ -80,6 +86,10 @@ export function hasNewerInbound(db: Db, accountId: string, threadId: string, las
 
 export function resolveReminder(db: Db, id: number, status: "fired" | "replied" | "cancelled", now = Date.now()): void {
   db.prepare("UPDATE reminders SET status = ?, resolved_at = ? WHERE id = ?").run(status, now, id);
+}
+
+export function getReminder(db: Db, id: number): ReminderRow | null {
+  return (db.prepare("SELECT * FROM reminders WHERE id = ?").get(id) as unknown as ReminderRow | undefined) ?? null;
 }
 
 export function pendingReminder(db: Db, accountId: string, threadId: string): ReminderRow | null {

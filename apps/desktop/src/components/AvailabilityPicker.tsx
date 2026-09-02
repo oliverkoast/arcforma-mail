@@ -219,7 +219,9 @@ export function AvailabilityPicker({ days }: { days: number[] }) {
               const picked = selected.has(key(day, row));
               const dragging = inDrag(day, row) && state === "free";
               const cls = ["avail-cell", `is-${state}`, picked && !(dragging && drag?.clearing) ? "is-picked" : "", dragging && !drag?.clearing ? "is-picked" : "", row % 2 === 1 ? "is-half" : ""].filter(Boolean).join(" ");
-              return <div className={cls} key={`${d}:${row}`} data-day={day} data-row={row} role="gridcell" aria-selected={picked} aria-label={`${new Date(slotAt(day, row).start).toLocaleString()} ${state}`} />;
+              const at = new Date(slotAt(day, row).start);
+              const tip = `${at.toLocaleDateString(undefined, { weekday: "short" })} ${at.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}: ${state === "free" ? (picked ? "picked. Click to clear." : "free. Click or drag to pick.") : state === "busy" ? "busy in one of your calendars." : "already passed."}`;
+              return <div className={cls} key={`${d}:${row}`} data-day={day} data-row={row} role="gridcell" aria-selected={picked} aria-label={`${at.toLocaleString()} ${state}`} data-tip={tip} />;
             })}
           </div>
         ))}
@@ -231,7 +233,7 @@ export function AvailabilityPicker({ days }: { days: number[] }) {
           lines.map((l, i) => (
             <div className="avail-pick" key={l}>
               <span>{l}</span>
-              <button className="rail-link" onClick={() => removeLine(i)}>
+              <button className="rail-link" data-tip="Drops this range from the picks." onClick={() => removeLine(i)}>
                 Remove
               </button>
             </div>
@@ -239,11 +241,11 @@ export function AvailabilityPicker({ days }: { days: number[] }) {
         )}
       </div>
       <div className="avail-actions">
-        <button className="btn btn-sweep btn-compact" disabled={!canInsert} onClick={insert}>
+        <button className="btn btn-sweep btn-compact" disabled={!canInsert} data-tip={compose ? "Writes one line per range into the open message at the cursor." : "Opens a new message with one line per range."} onClick={insert}>
           {compose ? "Insert times" : "Insert times in a new message"}
         </button>
         {lines.length > 0 ? (
-          <button className="btn btn-ghost btn-compact" onClick={() => setSelected(new Set())}>
+          <button className="btn btn-ghost btn-compact" data-tip="Clears every pick. The calendar itself does not change." onClick={() => setSelected(new Set())}>
             Clear
           </button>
         ) : null}

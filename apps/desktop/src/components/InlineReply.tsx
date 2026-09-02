@@ -4,7 +4,7 @@ import { draftPreview, hasBody } from "../lib/compose";
 import { ComposeEditor, MODE_LABEL } from "./ComposeEditor";
 import { ComposeFooter } from "./ComposeFooter";
 import { RecipientLine } from "./RecipientLine";
-import { ReplyIcons } from "./IconButton";
+import { ReplyIcons, hint } from "./IconButton";
 import type { ComposeDraft, DraftInfo, ThreadView } from "../../shared/types";
 
 /** The newest local draft docked under this thread, for the strip when the reply was parked and the thread reopened. */
@@ -14,7 +14,7 @@ export function savedDraftFor(open: ThreadView, drafts: DraftInfo[]): DraftInfo 
 
 function DraftStrip({ text, onOpen }: { text: string; onOpen: () => void }) {
   return (
-    <button type="button" className="draft-strip" onClick={onOpen} title="Open the draft (R)">
+    <button type="button" className="draft-strip" data-tip="A draft parked under this message. Open it to keep writing." data-key={hint("reply")} onClick={onOpen}>
       <span className="af-mono">Draft</span>
       <span className="draft-strip-text">{text}</span>
       <span className="af-mono">Open (R)</span>
@@ -40,7 +40,7 @@ function InlineBox({ compose }: { compose: ComposeDraft }) {
         <span className="af-mono">
           {MODE_LABEL[compose.mode]} · From {account?.email ?? compose.accountId}
         </span>
-        <button className="compose-close" onClick={() => void dismissCompose()}>
+        <button className="compose-close" data-tip={withBody ? "Collapse the reply to a one-line strip. The draft is kept here and in Gmail." : "Close the empty reply. Nothing is saved."} data-key={hint("closeCompose")} onClick={() => void dismissCompose()}>
           {withBody ? "Keep draft and collapse (Esc)" : "Close (Esc)"}
         </button>
       </div>

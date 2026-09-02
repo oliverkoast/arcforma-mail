@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { useApp } from "../state/store";
 import { aiEyebrow, aiHint } from "./AiCards";
+import { keyLabel } from "../keys/keyLabel";
 import type { AskSource } from "../../shared/types";
 
 /** Turns [3] citations into buttons that open the cited thread. */
@@ -17,7 +18,7 @@ function Answer({ text, sources, onOpen }: { text: string; sources: AskSource[];
             {nums.map((n) => {
               const src = sources.find((s) => s.n === n);
               return src ? (
-                <button key={n} className="cite" onClick={() => onOpen(src)} title={src.subject}>
+                <button key={n} className="cite" data-tip={`Source ${n}: ${src.subject || "(no subject)"}. Click to open the thread.`} onClick={() => onOpen(src)}>
                   {n}
                 </button>
               ) : (
@@ -48,9 +49,9 @@ export function AskPanel() {
       <section className="panel ask" role="dialog" aria-label="Ask AI" onClick={(e) => e.stopPropagation()}>
         <div className="panel-head">
           <span className="af-mono">Ask AI · Cmd+Shift+A</span>
-          <button onClick={closeAsk}>Close (Esc)</button>
+          <button data-tip="Closes Ask. The question and answer are not kept." data-key={keyLabel("closeAsk") ?? undefined} onClick={closeAsk}>Close (Esc)</button>
         </div>
-        <input id="ask-input" className="ask-input" autoFocus placeholder="Ask about your mail. Enter runs it." value={ask.question} onChange={(e) => setAskQuestion(e.target.value)} spellCheck={false} />
+        <input id="ask-input" className="ask-input" autoFocus placeholder="Ask about your mail. Enter runs it." data-tip="Ask in plain words. The app searches your mail locally, then Claude answers from the hits with numbered sources." data-key={keyLabel("runAsk") ?? undefined} value={ask.question} onChange={(e) => setAskQuestion(e.target.value)} spellCheck={false} />
         {ask.running ? <span className="af-mono">Searching, then asking Claude</span> : null}
         {r && r.ok === true ? <Answer text={r.answer} sources={r.sources} onOpen={open} /> : null}
         {r && r.ok === false ? (
@@ -63,7 +64,7 @@ export function AskPanel() {
           <div className="ask-sources">
             <span className="af-mono">{r.ok === true ? "Sources" : "Search hits, unanswered"}</span>
             {r.sources.slice(0, 12).map((s) => (
-              <button key={`${s.accountId}:${s.threadId}`} className="ask-source" onClick={() => open(s)}>
+              <button key={`${s.accountId}:${s.threadId}`} className="ask-source" data-tip={`${s.subject || "(no subject)"}\nOpen this thread in the reading pane.`} onClick={() => open(s)}>
                 <span className="af-mono">{s.n}</span>
                 <span className="ask-source-subject">{s.subject || "(no subject)"}</span>
                 <span className="ask-source-excerpt">{s.excerpt}</span>

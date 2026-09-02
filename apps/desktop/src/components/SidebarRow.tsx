@@ -6,6 +6,8 @@ export interface SidebarRowProps {
   row: SidebarRowDescriptor;
   active: boolean;
   count: number;
+  /** What the row contains, shown on hover. */
+  tip: string;
   disabled: boolean;
   dragging: boolean;
   menuOpen: boolean;
@@ -21,7 +23,7 @@ export function anchorOf(el: Element): Anchor {
 }
 
 /** One draggable sidebar row: the view button, its count, and the hover "..." that opens the row menu. */
-export function SidebarRow({ row, active, count, disabled, dragging, menuOpen, onOpen, onMenu, onDragStart, onDragEnd }: SidebarRowProps) {
+export function SidebarRow({ row, active, count, tip, disabled, dragging, menuOpen, onOpen, onMenu, onDragStart, onDragEnd }: SidebarRowProps) {
   const start = (e: React.DragEvent<HTMLDivElement>) => {
     e.dataTransfer.setData("text/plain", row.id);
     e.dataTransfer.effectAllowed = "move";
@@ -29,11 +31,11 @@ export function SidebarRow({ row, active, count, disabled, dragging, menuOpen, o
   };
   return (
     <div className={`nav-row${dragging ? " dragging" : ""}`} data-row-id={row.id} draggable={!disabled} onDragStart={start} onDragEnd={onDragEnd}>
-      <button className="nav-item" aria-current={active ? "true" : undefined} onClick={onOpen} disabled={disabled}>
+      <button className="nav-item" aria-current={active ? "true" : undefined} data-tip={`${row.label}: ${tip}`} onClick={onOpen} disabled={disabled}>
         <span className="nav-label">{row.label}</span>
         {count ? <span className="nav-count">{count}</span> : null}
       </button>
-      <button className="nav-more" aria-label={`Options for ${row.label}`} aria-expanded={menuOpen} title="Rename, hide, or remove" disabled={disabled} onClick={(e) => onMenu(anchorOf(e.currentTarget))}>
+      <button className="nav-more" aria-label={`Options for ${row.label}`} aria-expanded={menuOpen} data-tip={row.kind === "builtin" ? "Hide this row. Show it again from the group's + menu." : "Rename, hide, or remove this row."} disabled={disabled} onClick={(e) => onMenu(anchorOf(e.currentTarget))}>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
           <circle cx="2.5" cy="7" r="1.3" />
           <circle cx="7" cy="7" r="1.3" />

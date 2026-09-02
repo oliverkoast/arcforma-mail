@@ -3,6 +3,8 @@ import DOMPurify from "dompurify";
 import { invoke } from "../bridge";
 import { useApp } from "../state/store";
 import type { AccountInfo, LoginItemInfo, SnippetInfo } from "../../shared/types";
+import { keyLabel } from "../keys/keyLabel";
+import { SNIPPET_VARIABLES } from "../lib/snippets";
 
 function accountEyebrow(a: AccountInfo): string {
   if (a.authState === "ok") return "Signed in";
@@ -72,13 +74,14 @@ function AccountsSection() {
           </div>
           <div className="settings-item-actions settings-account-actions">
             {a.authState === "ok" ? (
-              <button className="btn btn-ghost btn-compact" disabled={busy === a.id} onClick={() => void signOut(a.id)}>
+              <button className="btn btn-ghost btn-compact" disabled={busy === a.id} data-tip="Removes this account's token from the Keychain. Local mail stays until the next sign-in." onClick={() => void signOut(a.id)}>
                 Sign out
               </button>
             ) : (
               <button
                 className="btn btn-sweep btn-compact"
                 disabled={!a.configured || busy === a.id}
+                data-tip={!a.configured ? "This account has no OAuth client in oauth-clients.json yet. See docs/google-cloud-setup.md." : "Opens Google in your browser to authorize this account. The refresh token is kept in your Keychain."}
                 onClick={() => {
                   setBusy(a.id);
                   void signIn(a.id).finally(() => setBusy(null));
@@ -118,7 +121,7 @@ function StartupSection() {
           Open at login
           <span className="settings-help">{info?.supported === false ? "Applies to the packed app. Dev and smoke runs leave Login Items alone." : "Arcforma Mail starts with your Mac so mail and reminders keep arriving."}</span>
         </span>
-        <input type="checkbox" checked={info?.openAtLogin ?? true} disabled={info === null} onChange={(e) => void toggle(e.target.checked)} />
+        <input type="checkbox" checked={info?.openAtLogin ?? true} disabled={info === null} data-tip="Starts Arcforma Mail when you log in to your Mac, so mail and reminders keep arriving." onChange={(e) => void toggle(e.target.checked)} />
       </label>
     </section>
   );
@@ -150,8 +153,8 @@ function SendingSection() {
       <label className="settings-row">
         <span>Undo window, seconds</span>
         <span className="settings-row-control">
-          <input type="number" min={0} max={60} value={undoSec} onChange={(e) => setUndoSec(e.target.value)} />
-          <button className="btn btn-nav btn-compact" onClick={() => void saveSettings({ undoWindowSec: Number(undoSec) })}>
+          <input type="number" min={0} max={60} value={undoSec} data-tip="How many seconds after Send you can press Z to pull the message back. 0 sends at once." onChange={(e) => setUndoSec(e.target.value)} />
+          <button className="btn btn-nav btn-compact" data-tip="Saves the undo window." onClick={() => void saveSettings({ undoWindowSec: Number(undoSec) })}>
             Save
           </button>
         </span>
@@ -161,7 +164,7 @@ function SendingSection() {
           Remote images
           <span className="settings-help">Pictures hosted on the sender's servers. Loading them can tell a sender you opened the mail. "Block images" on a message overrides this for that sender.</span>
         </span>
-        <select value={settings.remoteImages} onChange={(e) => void saveSettings({ remoteImages: e.target.value as "always" | "known" | "never" })}>
+        <select value={settings.remoteImages} data-tip="When pictures hosted on a sender's servers load. Loading one can tell the sender you opened the mail." onChange={(e) => void saveSettings({ remoteImages: e.target.value as "always" | "known" | "never" })}>
           <option value="always">Load from everyone</option>
           <option value="known">Load from people I have written to</option>
           <option value="never">Never load</option>
@@ -172,7 +175,52 @@ function SendingSection() {
           Auto-draft replies
           <span className="settings-help">R prefills a reply in your voice. Tab accepts it.{aiStatus && !aiStatus.loggedIn ? " Needs a Claude Code sign-in first." : ""}</span>
         </span>
-        <input type="checkbox" checked={settings.autoDraft} onChange={(e) => void saveSettings({ autoDraft: e.target.checked })} />
+        <input type="checkbox" checked={settings.autoDraft} data-tip="When on, R asks Claude to prefill a reply in your voice. Tab accepts it; typing ignores it." onChange={(e) => void saveSettings({ autoDraft: e.target.checked })} />
+      </label>
+    </section>
+  );
+}
+
+/** Reminders for mail to clients that went unanswered: how long to wait, and which categories count as clients. */
+function FollowUpsSection() {
+  const settings = useApp((s) => s.settings);
+  const saveSettings = useApp((s) => s.saveSettings);
+  const [days, setDays] = useState(String(settings.remindClientsAfterDays));
+  const [scope, setScope] = useState(settings.remindScope.join(", "));
+  useEffect(() => {
+    setDays(String(settings.remindClientsAfterDays));
+    setScope(settings.remindScope.join(", "));
+  }, [settings.remindClientsAfterDays, settings.remindScope]);
+  const parsedScope = scope
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+  return (
+    <section className="settings-section">
+      <span className="af-mono">Follow-ups</span>
+      <label className="settings-row">
+        <span>
+          Remind me if a client has not replied after N days
+          <span className="settings-help">When a message you sent to a client gets no answer, the thread comes back with a NO REPLY BY eyebrow. 0 turns it off.</span>
+        </span>
+        <span className="settings-row-control">
+          <input type="number" min={0} max={60} value={days} data-tip="Days to wait for a client's reply before the thread comes back. 0 turns the rule off." onChange={(e) => setDays(e.target.value)} />
+          <button className="btn btn-nav btn-compact" data-tip="Saves the wait. Reminders already set keep their date." onClick={() => void saveSettings({ remindClientsAfterDays: Math.max(0, Number(days) || 0) })}>
+            Save
+          </button>
+        </span>
+      </label>
+      <label className="settings-row">
+        <span>
+          Categories that count as clients
+          <span className="settings-help">Comma-separated category names or ids. Mail to anyone in a thread filed there counts as client mail.</span>
+        </span>
+        <span className="settings-row-control">
+          <input value={scope} placeholder="Clients" spellCheck={false} data-tip="Comma-separated. A thread filed under any of these categories, and anyone in it, counts as a client." onChange={(e) => setScope(e.target.value)} />
+          <button className="btn btn-nav btn-compact" data-tip="Saves the list. New sends are checked against it from now on." onClick={() => void saveSettings({ remindScope: parsedScope })}>
+            Save
+          </button>
+        </span>
       </label>
     </section>
   );
@@ -197,21 +245,24 @@ function SnippetForm({ initial, onDone }: { initial: SnippetInfo | null; onDone:
     <div className="settings-form">
       <label className="compose-field">
         <span className="af-mono">Trigger</span>
-        <input value={trigger} onChange={(e) => setTrigger(e.target.value)} placeholder="thanks" spellCheck={false} />
+        <input value={trigger} onChange={(e) => setTrigger(e.target.value)} placeholder="thanks" spellCheck={false} data-tip="The word after ; that expands this snippet: ;thanks then Space." />
       </label>
       <label className="compose-field">
         <span className="af-mono">Name</span>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Thanks and next step" />
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Thanks and next step" data-tip="How the snippet is listed in the picker." />
       </label>
       <label className="compose-field compose-field-tall">
         <span className="af-mono">Text</span>
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4} placeholder="Blank lines make paragraphs." />
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4} placeholder="Blank lines make paragraphs." data-tip="The text that is inserted. Blank lines make paragraphs." />
       </label>
+      <span className="settings-help" data-tip="Variables fill from the first To recipient and the sending account when the snippet expands. {cursor} is where the caret lands.">
+        Variables: {SNIPPET_VARIABLES.map((v) => `{${v}}`).join(" ")}
+      </span>
       <div className="settings-actions">
-        <button className="btn btn-sweep btn-compact" disabled={!trigger.trim() || !text.trim()} onClick={() => void submit()}>
+        <button className="btn btn-sweep btn-compact" disabled={!trigger.trim() || !text.trim()} data-tip={initial ? "Saves the snippet. Messages already written keep their text." : "Saves the snippet. It works in every message from now on."} onClick={() => void submit()}>
           {initial ? "Save changes" : "Add snippet"}
         </button>
-        <button className="btn btn-ghost btn-compact" onClick={onDone}>
+        <button className="btn btn-ghost btn-compact" data-tip="Closes the form without saving." onClick={onDone}>
           Cancel
         </button>
       </div>
@@ -239,8 +290,8 @@ function SnippetsSection() {
                 <span className="settings-item-text">{s.bodyText}</span>
               </div>
               <div className="settings-item-actions">
-                <button onClick={() => setEditing(s)}>Edit</button>
-                <button onClick={() => void deleteSnippet(s.id)}>Delete</button>
+                <button data-tip="Change the trigger, name, or text." onClick={() => setEditing(s)}>Edit</button>
+                <button data-tip="Deletes the snippet. Its trigger stops expanding." onClick={() => void deleteSnippet(s.id)}>Delete</button>
               </div>
             </>
           )}
@@ -249,7 +300,7 @@ function SnippetsSection() {
       {editing === "new" ? (
         <SnippetForm initial={null} onDone={() => setEditing(null)} />
       ) : (
-        <button className="btn btn-nav btn-compact" onClick={() => setEditing("new")}>
+        <button className="btn btn-nav btn-compact" data-tip="Opens a form for a new snippet: trigger, name, text." onClick={() => setEditing("new")}>
           Add snippet
         </button>
       )}
@@ -277,9 +328,10 @@ function CategoriesSection() {
             <span className="settings-item-name">{c.name}</span>
             {editingId === c.id ? (
               <span className="settings-row-control">
-                <input value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)} />
+                <input value={editPrompt} data-tip="One sentence on what belongs here. The local model files mail by it." onChange={(e) => setEditPrompt(e.target.value)} />
                 <button
                   className="btn btn-nav btn-compact"
+                  data-tip="Saves the description. New mail is filed by it from now on."
                   onClick={() => {
                     void updateCategory(c.id, { prompt: editPrompt });
                     setEditingId(null);
@@ -294,6 +346,7 @@ function CategoriesSection() {
           </div>
           <div className="settings-item-actions">
             <button
+              data-tip="Change what belongs in this category."
               onClick={() => {
                 setEditingId(c.id);
                 setEditPrompt(c.prompt);
@@ -301,23 +354,24 @@ function CategoriesSection() {
             >
               Edit
             </button>
-            <button onClick={() => void deleteCategory(c.id)}>Delete</button>
+            <button data-tip="Deletes the category. Threads keep their mail; the Gmail label stays." onClick={() => void deleteCategory(c.id)}>Delete</button>
           </div>
         </div>
       ))}
       <div className="settings-form">
         <label className="compose-field">
           <span className="af-mono">Name</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Clients" />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Clients" data-tip="The category's name, as it reads in the sidebar and as a Gmail label." />
         </label>
         <label className="compose-field">
           <span className="af-mono">What belongs</span>
-          <input value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Mail from paying clients about their engagement." />
+          <input value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Mail from paying clients about their engagement." data-tip="One sentence on what belongs here. The local model files mail by it." />
         </label>
         <div className="settings-actions">
           <button
             className="btn btn-sweep btn-compact"
             disabled={!name.trim() || !prompt.trim()}
+            data-tip="Creates the category and its sidebar row, then re-sorts the last 30 days of mail into it."
             onClick={() => {
               void createCategory(name, prompt);
               setName("");
@@ -343,14 +397,15 @@ export function Settings() {
       <section className="panel settings" role="dialog" aria-label="Settings" onClick={(e) => e.stopPropagation()}>
         <div className="panel-head">
           <span className="af-mono">Settings · Cmd+,</span>
-          <button onClick={closeSettings}>Close (Esc)</button>
+          <button data-tip="Closes Settings. Every change here is already saved." data-key={keyLabel("closeSettings") ?? undefined} onClick={closeSettings}>Close (Esc)</button>
         </div>
-        <div className="ai-line">
+        <div className="ai-line" data-tip="The AI daemon runs on this Mac: a local model sorts mail in the background, and Claude through the Claude Code login handles summaries, replies, and Ask.">
           <span className="af-mono">{aiStatus ? (aiStatus.ok ? (aiStatus.loggedIn ? "Claude signed in" : "Sign in to Claude Code") : "AI daemon off") : "AI status unknown"}</span>
           <span className="settings-help">{aiStatus?.ok ? `Local model ${aiStatus.local}; Claude ${aiStatus.claude}${aiStatus.cliVersion ? ` (${aiStatus.cliVersion})` : ""}.` : "Background sorting and Claude features wait until the daemon runs."}</span>
         </div>
         <AccountsSection />
         <SendingSection />
+        <FollowUpsSection />
         <StartupSection />
         <SnippetsSection />
         <CategoriesSection />

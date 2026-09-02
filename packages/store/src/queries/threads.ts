@@ -6,6 +6,7 @@ import { enqueueOutbox } from "./outbox.js";
 import { HAS_LABEL, NOT_JUNK, PENDING_SNOOZE } from "./fragments.js";
 import { QUEUE_JOIN, clearQueue, effectiveQueueSql, isQueue, queueCounts, clearedCounts } from "./queues.js";
 import { getSetting } from "./settings.js";
+import { CAN_UNSUBSCRIBE, UNSUBSCRIBE_STATE } from "./unsubscribe.js";
 import type { ApplyHistoryResult, GmailThreadInput, HistoryChange, ListThreadsOptions, ListThreadsResult, ModifyLabelsPayload, ThreadListRow, ThreadRow } from "../types.js";
 
 const BUILTIN_TYPES = new Set(["newsletters", "calendar", "notifications", "receipts"]);
@@ -145,7 +146,9 @@ export function listThreads(db: Db, opts: ListThreadsOptions = {}): ListThreadsR
   const sql = `SELECT t.*, c.split, c.type, c.category_id,
       (SELECT s.wake_at FROM snoozes s WHERE s.account_id = t.account_id AND s.thread_id = t.id AND s.status = 'pending' ORDER BY s.id DESC LIMIT 1) AS wake_at,
       ${NO_REPLY_BY} AS no_reply_by,
-      ${queueSql} AS queue
+      ${queueSql} AS queue,
+      ${UNSUBSCRIBE_STATE} AS unsubscribe_state,
+      ${CAN_UNSUBSCRIBE} AS can_unsubscribe
     FROM threads t
     LEFT JOIN classifications c ON c.account_id = t.account_id AND c.thread_id = t.id
     ${QUEUE_JOIN}

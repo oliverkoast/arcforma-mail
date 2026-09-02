@@ -105,11 +105,11 @@ function seed(db: ReturnType<typeof openStore>) {
 
 test("migrate is idempotent and records the schema version", () => {
   const { db } = tempDb();
-  assert.equal(schemaVersion(db), 7);
+  assert.equal(schemaVersion(db), 9);
   migrate(db);
-  assert.equal(schemaVersion(db), 7);
+  assert.equal(schemaVersion(db), 9);
   const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table') ORDER BY name").all() as Array<{ name: string }>).map((r) => r.name);
-  for (const t of ["accounts", "threads", "messages", "message_bodies", "labels", "thread_labels", "thread_labels_pending", "categories", "classifications", "corrections", "snoozes", "reminders", "send_queue", "snippets", "summaries", "outbox", "contacts", "calendar_events", "messages_fts", "drafts", "settings", "reply_options", "saved_searches"]) {
+  for (const t of ["accounts", "threads", "messages", "message_bodies", "labels", "thread_labels", "thread_labels_pending", "categories", "classifications", "corrections", "snoozes", "reminders", "send_queue", "snippets", "summaries", "outbox", "contacts", "calendar_events", "messages_fts", "drafts", "settings", "reply_options", "saved_searches", "thread_unsubscribes"]) {
     assert.ok(tables.includes(t), `missing table ${t}`);
   }
   const cols = (db.prepare("PRAGMA table_info(send_queue)").all() as Array<{ name: string }>).map((c) => c.name);
@@ -310,7 +310,7 @@ test("a schema 2 store gains fts_id and a rebuilt index on the way to schema 3",
   db.exec("DELETE FROM schema_version WHERE version >= 3");
   assert.equal(schemaVersion(db), 2);
   migrate(db);
-  assert.equal(schemaVersion(db), 7);
+  assert.equal(schemaVersion(db), 9);
   const rows = db.prepare("SELECT id, rowid, fts_id FROM messages").all() as Array<{ id: string; rowid: number; fts_id: number }>;
   assert.ok(rows.length > 0);
   for (const r of rows) assert.equal(r.fts_id, r.rowid, "existing rows keep the rowid the index already used");
@@ -456,7 +456,7 @@ test("a schema 6 drafts table gains the Gmail mirror columns on the way to schem
     DELETE FROM schema_version WHERE version >= 7;`);
   assert.equal(schemaVersion(db), 6);
   migrate(db);
-  assert.equal(schemaVersion(db), 7);
+  assert.equal(schemaVersion(db), 9);
   const cols = (db.prepare("PRAGMA table_info(drafts)").all() as Array<{ name: string }>).map((c) => c.name);
   for (const c of ["gmail_draft_id", "gmail_message_id", "mirror_state", "mirror_error", "mirrored_at", "origin", "local_edited_at"]) assert.ok(cols.includes(c), `missing ${c}`);
   const row = listDrafts(db)[0]!;
@@ -466,7 +466,7 @@ test("a schema 6 drafts table gains the Gmail mirror columns on the way to schem
   assert.equal(row.gmail_draft_id, null);
   assert.equal(row.local_edited_at, 200, "its last save counts as its last local edit");
   migrate(db);
-  assert.equal(schemaVersion(db), 7, "idempotent");
+  assert.equal(schemaVersion(db), 9, "idempotent");
 });
 
 test("draft rows carry their mirror state: a save marks pending, an import from Gmail is synced, ids are found both ways", () => {
@@ -513,4 +513,26 @@ test("draft rows carry their mirror state: a save marks pending, an import from 
   assert.equal(hasOpenDraftUpsert(db, id), false);
   enqueueSend(db, { accountId: "arcforma", rawMime: "RAW", sendAt: 1, undoUntil: 1, meta: { gmailDraftId: "dQ" } });
   assert.deepEqual([...queuedGmailDraftIds(db, "arcforma")], ["dQ"]);
+});
+
+test("a DRAFT-labelled message never renders as mail or drives the thread summary", async () => {
+  const { listThreadMessages, isDraftMessage, recomputeThread } = await import("./queries/messages.js");
+  const db = openStore(":memory:");
+  upsertAccount(db, { id: "a", email: "me@x.com", consent: "internal" });
+  db.prepare(`INSERT INTO threads (account_id, id, subject, snippet, participants_json, first_message_at, last_message_at, sort_at, message_count, unread, starred, in_inbox, has_attachments, last_inbound_at, last_outbound_at, history_id, updated_at)
+    VALUES ('a', 't-d', 'Hello', '', '[]', 1000, 1000, 1000, 0, 0, 0, 1, 0, NULL, NULL, NULL, 1)`).run();
+  const base = { account_id: "a", thread_id: "t-d", from_email: "them@x.com", from_name: "Them", to_json: "[]", cc_json: "[]", bcc_json: "[]", subject: "Hello", snippet: "", message_id_header: null, in_reply_to: null, references_header: null, headers_json: "{}", has_attachments: 0, size_estimate: null, is_auto: 0, sender_type: "person", history_id: null };
+  const ins = db.prepare(`INSERT INTO messages (account_id, id, thread_id, internal_date, fts_id, from_email, from_name, to_json, cc_json, bcc_json, subject, snippet, message_id_header, in_reply_to, references_header, label_ids_json, headers_json, has_attachments, size_estimate, is_auto, sender_type, direction, history_id, updated_at)
+    VALUES (@account_id, @id, @thread_id, @internal_date, @fts_id, @from_email, @from_name, @to_json, @cc_json, @bcc_json, @subject, @snippet, @message_id_header, @in_reply_to, @references_header, @label_ids_json, @headers_json, @has_attachments, @size_estimate, @is_auto, @sender_type, @direction, @history_id, @updated_at)`);
+  ins.run({ ...base, id: "m1", internal_date: 1000, fts_id: 9001, snippet: "the real mail", label_ids_json: JSON.stringify(["INBOX"]), direction: "in", updated_at: 1 });
+  ins.run({ ...base, id: "m2", internal_date: 2000, fts_id: 9002, from_email: "me@x.com", from_name: "Me", snippet: "Hi George, thank you", label_ids_json: JSON.stringify(["DRAFT"]), direction: "out", updated_at: 1 });
+  assert.equal(isDraftMessage({ label_ids_json: JSON.stringify(["DRAFT"]) }), true);
+  assert.deepEqual(listThreadMessages(db, "a", "t-d").map((m) => m.id), ["m1"]);
+  assert.deepEqual(listThreadMessages(db, "a", "t-d", { includeDrafts: true }).map((m) => m.id), ["m1", "m2"]);
+  recomputeThread(db, "a", "t-d");
+  const t = db.prepare("SELECT snippet, message_count, participants_json, last_message_at FROM threads WHERE id = 't-d'").get() as { snippet: string; message_count: number; participants_json: string; last_message_at: number };
+  assert.equal(t.snippet, "the real mail");
+  assert.equal(t.message_count, 1);
+  assert.equal(t.last_message_at, 1000);
+  assert.ok(!t.participants_json.includes("me@x.com"));
 });

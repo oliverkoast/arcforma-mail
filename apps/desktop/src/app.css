@@ -1577,3 +1577,153 @@ body.is-resizing { cursor: col-resize; user-select: none; }
   border-left: 2px solid var(--af-rule);
   color: var(--af-text-soft);
 }
+
+/* ---- hover tooltips: one fixed card, placed by Tooltip.tsx. No shadow (F-MAIL-03: the brand declares no shadow token). ---- */
+.tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  max-width: 280px;
+  padding: 8px 10px;
+  background: var(--af-bg);
+  color: var(--af-text);
+  border: 1px solid var(--af-rule);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .12s ease;
+}
+.tip.is-placed {
+  opacity: 1;
+}
+.tip-text {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.tip-key {
+  font: 11px/1.4 var(--af-mono);
+  color: var(--af-text-soft);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tip {
+    transition: none;
+  }
+}
+
+/* ---- command palette: Cmd+K, one card at the top centre. No shadow (F-MAIL-03: the brand declares no shadow token); the 1 px rule edge separates it. ---- */
+.palette-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+.palette {
+  position: absolute;
+  left: 50%;
+  top: 64px;
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 48px));
+  background: var(--af-white);
+  border: 1px solid var(--af-rule);
+  border-radius: var(--af-radius-card);
+  padding: 12px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.palette-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+}
+.palette-input {
+  font-size: 14px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--af-bg-alt);
+}
+.palette-input::placeholder {
+  color: var(--af-text-soft);
+}
+.palette-rows {
+  display: flex;
+  flex-direction: column;
+}
+.palette-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--af-text);
+}
+.palette-row.is-selected {
+  background: var(--af-bg-alt);
+}
+.palette-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.palette-key {
+  font: 11px/1.4 var(--af-mono);
+  color: var(--af-text-soft);
+  white-space: nowrap;
+}
+.palette-empty {
+  padding: 8px 10px;
+  color: var(--af-text-soft);
+}
+
+/* ---- search: the matched field under a hit, the operator hint under an empty focused field ---- */
+.search-excerpt {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-excerpt mark {
+  background: transparent;
+  color: var(--af-cobalt);
+  font-weight: 600;
+}
+.search-excerpt-field {
+  font: 10px/1.4 var(--af-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--af-text-soft);
+  margin-right: 4px;
+}
+.search-ops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 0 12px;
+  font: 11px/1.4 var(--af-mono);
+  color: var(--af-text-soft);
+}
+.search-ops span {
+  cursor: default;
+}
+
+/* ---- the U hint on a row that carries an unsubscribe link, shown while the pointer is on the row ---- */
+.row-unsub {
+  display: none;
+  font: 10px/1.4 var(--af-mono);
+  color: var(--af-text-soft);
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--af-bg);
+}
+.row:hover .row-unsub {
+  display: inline-block;
+}

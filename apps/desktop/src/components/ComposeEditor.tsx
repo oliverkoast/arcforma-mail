@@ -3,8 +3,10 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
-import { Snippets } from "../editor/snippets";
+import { Snippets, insertExpanded } from "../editor/snippets";
+import { missingVariablesText } from "../lib/snippets";
 import { useApp } from "../state/store";
+import { keyLabel } from "../keys/keyLabel";
 import type { ComposeDraft, ComposeMode } from "../../shared/types";
 
 export const MODE_LABEL: Record<ComposeMode, string> = { new: "New message", reply: "Reply", replyAll: "Reply all", forward: "Forward" };
@@ -40,7 +42,14 @@ export function ComposeEditor({ compose, autofocus }: { compose: ComposeDraft; a
         StarterKit.configure({ link: false, heading: false, codeBlock: false, code: false, horizontalRule: false }),
         Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true, defaultProtocol: "https" }),
         Placeholder.configure({ placeholder: "Write your message. ;trigger then Space expands a snippet." }),
-        Snippets.configure({ getSnippets: () => snippetsRef.current }),
+        Snippets.configure({
+          getSnippets: () => snippetsRef.current,
+          getContext: () => useApp.getState().snippetContext(),
+          onExpand: (r) => {
+            const t = missingVariablesText(r.missing);
+            if (t) useApp.getState().showToast({ eyebrow: "SNIPPET", text: t });
+          },
+        }),
       ],
       content: compose.bodyHtml,
       autofocus: autofocus ? "end" : false,
@@ -56,6 +65,7 @@ export function ComposeEditor({ compose, autofocus }: { compose: ComposeDraft; a
       insertHtml: (html) => editor.chain().focus().insertContent(html).run(),
       setHtml: (html) => editor.chain().focus().setContent(html, { emitUpdate: true }).run(),
       focus: () => editor.commands.focus(),
+      insertExpanded: (r) => insertExpanded(editor, r),
     });
     insertTextHook = (text) => {
       const escape = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -84,7 +94,7 @@ export function ComposeEditor({ compose, autofocus }: { compose: ComposeDraft; a
               <>
                 <span className="af-mono">Auto-draft · Tab accepts</span>
                 <div className="ghost-text">{ghost.text}</div>
-                <button className="ghost-accept" onClick={acceptGhost}>
+                <button className="ghost-accept" data-tip="Puts the auto-draft in the editor as your reply, ready to edit or send." data-key={keyLabel("acceptDraft") ?? undefined} onClick={acceptGhost}>
                   Use this draft (Tab)
                 </button>
               </>
@@ -99,7 +109,7 @@ export function ComposeEditor({ compose, autofocus }: { compose: ComposeDraft; a
       </div>
       {compose.quotedHtml ? (
         <details className="compose-quote">
-          <summary className="af-mono">Quoted history</summary>
+          <summary className="af-mono" data-tip="The earlier messages this reply quotes. They are sent with it. Open to read or trim them.">Quoted history</summary>
           <div className="compose-quote-body" dangerouslySetInnerHTML={{ __html: compose.quotedHtml }} />
         </details>
       ) : null}

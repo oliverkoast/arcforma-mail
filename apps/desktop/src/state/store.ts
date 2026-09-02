@@ -28,11 +28,12 @@ import {
   type ThreadView,
   type ToastEvent,
 } from "../../shared/types";
-import type { Scope } from "../keys/keymap";
+import { TYPING_SCOPES, type Scope } from "../keys/keymap";
 import { scopeFor } from "../keys/scope";
 import { installActivityTracker } from "../lib/activity";
 import { buildDraft, hasBody, isPending, mergePending, sentMessage, textToHtml } from "../lib/compose";
 import { nextMondayAt, tomorrowAt } from "../lib/format";
+import { expandSnippet, missingVariablesText, stripCursorToken, type ExpandedSnippet, type SnippetContext } from "../lib/snippets";
 
 export type Rail = "none" | "calendar" | "contact";
 /** Where the open compose lives: docked under a message in the reading pane, or the floating panel. */
@@ -72,6 +73,8 @@ export interface EditorApi {
   insertHtml: (html: string) => void;
   setHtml: (html: string) => void;
   focus: () => void;
+  /** Inserts an expanded snippet and lands the caret on its {cursor}. Optional: without it the caret token is stripped and the html inserted plain. */
+  insertExpanded?: (expanded: ExpandedSnippet) => void;
 }
 
 export type Loading<T> = T | { ok: "loading" } | null;
@@ -137,6 +140,11 @@ export interface AppState {
 
   ask: { open: boolean; question: string; running: boolean; result: AskResult | null };
 
+  /** The command palette (Cmd+K): open, what is typed, and the scope it opened from, which decides the command set. */
+  paletteOpen: boolean;
+  paletteQuery: string;
+  paletteScope: Scope;
+
   init: () => Promise<void>;
   refreshStatus: () => Promise<void>;
   loadThreads: (reset?: boolean) => Promise<void>;
@@ -156,6 +164,8 @@ export interface AppState {
   toggleQueue: (queue: "daily" | "weekly") => Promise<void>;
   snoozeSelected: (wakeAt: number) => Promise<void>;
   remindSelected: (dueAt: number) => Promise<void>;
+  /** U: runs the best unsubscribe method on the cursor row and archives it when the request went out. */
+  unsubscribeSelected: () => Promise<void>;
   setLoadImages: (email: string, load: boolean) => Promise<void>;
   refreshCounts: () => Promise<void>;
   setPopover: (p: Popover) => void;
@@ -199,6 +209,8 @@ export interface AppState {
   setSendLater: (open: boolean, pick?: boolean) => void;
   setSnippetPicker: (open: boolean) => void;
   insertSnippet: (s: SnippetInfo) => void;
+  /** The recipients and account the snippet variables read from: the first To of the open compose and its account. */
+  snippetContext: () => SnippetContext;
   acceptGhost: () => void;
   setEditorApi: (api: EditorApi | null) => void;
 
@@ -209,6 +221,12 @@ export interface AppState {
 
   openSettings: () => void;
   closeSettings: () => void;
+
+  /** Cmd+K. Opens from every non-typing scope and from the compose editor; a no-op while Settings, Ask, the search field, or the snippet picker has the keys. */
+  openPalette: () => void;
+  closePalette: () => void;
+  togglePalette: () => void;
+  setPaletteQuery: (q: string) => void;
   saveSettings: (patch: Partial<SettingsInfo>) => Promise<void>;
   saveSnippet: (s: { id?: number | null; trigger: string; name: string; bodyHtml: string; bodyText: string }) => Promise<void>;
   deleteSnippet: (id: number) => Promise<void>;
@@ -228,7 +246,7 @@ function writeStoredBool(key: string, value: boolean): void {
 }
 
 const EMPTY_STATUS: AccountsStatus = { accounts: [], configPath: "", configError: null };
-const DEFAULT_SETTINGS: SettingsInfo = { undoWindowSec: 10, autoDraft: false, remoteImages: "always" };
+const DEFAULT_SETTINGS: SettingsInfo = { undoWindowSec: 10, autoDraft: false, remoteImages: "always", remindClientsAfterDays: 3, remindScope: ["Clients"] };
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 /** Autosave runs this long after the last keystroke; the main process mirrors to Gmail on the same cadence. */
 export const AUTOSAVE_MS = 2000;
@@ -332,6 +350,10 @@ export const useApp = create<AppState>((set, get) => ({
   replies: null,
 
   ask: { open: false, question: "", running: false, result: null },
+
+  paletteOpen: false,
+  paletteQuery: "",
+  paletteScope: "list",
 
   async init() {
     await get().refreshStatus();
@@ -561,6 +583,33 @@ export const useApp = create<AppState>((set, get) => ({
     }
   },
 
+  async unsubscribeSelected() {
+    const s = get();
+    const row = s.rows[s.selected];
+    if (!row || scheduledOnly(row, s.showToast)) return;
+    if (!row.canUnsubscribe) {
+      get().showToast({ eyebrow: "NO UNSUBSCRIBE LINK", text: "This sender did not include one." });
+      return;
+    }
+    try {
+      const r = await invoke("threads:unsubscribe", row.accountId, row.id);
+      if (r.archived) {
+        const wasOpen = get().open?.thread.id === row.id && get().open?.thread.accountId === row.accountId;
+        set((cur) => {
+          const rows = cur.rows.filter((x) => !(x.id === row.id && x.accountId === row.accountId));
+          return { rows, selected: Math.min(cur.selected, Math.max(0, rows.length - 1)), open: wasOpen ? null : cur.open };
+        });
+        get().syncScope();
+        void get().refreshCounts();
+      } else {
+        set((cur) => ({ rows: cur.rows.map((x) => (x.id === row.id && x.accountId === row.accountId ? { ...x, unsubscribeState: r.state } : x)) }));
+      }
+      get().showToast({ eyebrow: r.ok ? (r.state === "opened" ? "UNSUBSCRIBE PAGE" : "UNSUBSCRIBED") : "NOT UNSUBSCRIBED", text: r.text });
+    } catch (err) {
+      get().showToast({ eyebrow: "NOT UNSUBSCRIBED", text: (err as Error).message });
+    }
+  },
+
   async setLoadImages(email, load) {
     await invoke("contacts:setLoadImages", email, load);
     set((cur) => (cur.open ? { open: { ...cur.open, messages: cur.open.messages.map((m) => (m.from.email === email ? { ...m, loadImages: load } : m)) } } : {}));
@@ -779,10 +828,12 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   async refile(to) {
-    const view = get().open;
-    if (!view) return;
+    // The open thread, or from the palette with nothing open, the cursor row.
+    const s = get();
+    const thread = s.open?.thread ?? s.rows[s.selected] ?? null;
+    if (!thread) return;
     try {
-      await invoke("classify:refile", view.thread.accountId, view.thread.id, to);
+      await invoke("classify:refile", thread.accountId, thread.id, to);
       const label = to.category ? get().categories.find((c) => c.id === to.category)?.name ?? to.category : to.split === "important" ? "Important" : "Other";
       get().showToast({ eyebrow: "FILED", text: `${label}. The classifier learns from this.` });
     } catch (err) {
@@ -1061,8 +1112,20 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   insertSnippet(s) {
-    get().editorApi?.insertHtml(s.bodyHtml || textToHtml(s.bodyText));
+    const expanded = expandSnippet({ bodyHtml: s.bodyHtml || textToHtml(s.bodyText), bodyText: s.bodyText }, get().snippetContext());
+    const api = get().editorApi;
+    if (api?.insertExpanded) api.insertExpanded(expanded);
+    else api?.insertHtml(stripCursorToken(expanded.html));
     get().setSnippetPicker(false);
+    const missing = missingVariablesText(expanded.missing);
+    if (missing) get().showToast({ eyebrow: "SNIPPET", text: missing });
+  },
+
+  snippetContext() {
+    const s = get();
+    const d = s.compose;
+    const account = d ? s.status.accounts.find((a) => a.id === d.accountId) ?? null : null;
+    return { recipient: d?.to[0] ?? null, account: account ? { email: account.email, displayName: account.displayName } : null };
   },
 
   acceptGhost() {
@@ -1115,6 +1178,35 @@ export const useApp = create<AppState>((set, get) => ({
   closeSettings() {
     set({ settingsOpen: false });
     get().syncScope();
+  },
+
+  // ---- command palette --------------------------------------------------------------
+
+  openPalette() {
+    const s = get();
+    if (s.paletteOpen) return;
+    if (TYPING_SCOPES.has(s.scope) && s.scope !== "compose") return;
+    set({ paletteOpen: true, paletteQuery: "", paletteScope: s.scope, popover: null, sidebarMenu: null });
+    get().syncScope();
+  },
+
+  closePalette() {
+    if (!get().paletteOpen) return;
+    set({ paletteOpen: false, paletteQuery: "" });
+    get().syncScope();
+    // The keys go back to where they came from: the editor when a compose is open, otherwise the list or thread.
+    const s = get();
+    if (s.compose && !s.inlineCollapsed) s.editorApi?.focus();
+    else if (typeof document !== "undefined") (document.activeElement as HTMLElement | null)?.blur();
+  },
+
+  togglePalette() {
+    if (get().paletteOpen) get().closePalette();
+    else get().openPalette();
+  },
+
+  setPaletteQuery(q) {
+    set({ paletteQuery: q });
   },
 
   async saveSettings(patch) {

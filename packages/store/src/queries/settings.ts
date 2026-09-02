@@ -16,9 +16,23 @@ export interface Settings {
   lastActiveAt: number;
   /** Monday 4:00 local of the current week for Weekly 0. 0 until the app has seen a week. */
   weekStartAt: number;
+  /** Days after a message to a client goes out before a remind-if-no-reply fires on its thread. 0 turns the rule off. */
+  remindClientsAfterDays: number;
+  /** Category ids or names whose threads and correspondents count as clients for that rule. */
+  remindScope: string[];
 }
 
-export const DEFAULT_SETTINGS: Settings = { undoWindowSec: 10, autoDraft: false, remoteImages: "always", rulesVersion: 0, dayStartAt: 0, lastActiveAt: 0, weekStartAt: 0 };
+export const DEFAULT_SETTINGS: Settings = {
+  undoWindowSec: 10,
+  autoDraft: false,
+  remoteImages: "always",
+  rulesVersion: 0,
+  dayStartAt: 0,
+  lastActiveAt: 0,
+  weekStartAt: 0,
+  remindClientsAfterDays: 3,
+  remindScope: ["Clients"],
+};
 
 export function getSetting<K extends keyof Settings>(db: Db, key: K): Settings[K] {
   const row = db.prepare("SELECT value_json FROM settings WHERE key = ?").get(key) as { value_json: string } | undefined;
@@ -47,6 +61,8 @@ export function getSettings(db: Db): Settings {
     dayStartAt: getSetting(db, "dayStartAt"),
     lastActiveAt: getSetting(db, "lastActiveAt"),
     weekStartAt: getSetting(db, "weekStartAt"),
+    remindClientsAfterDays: getSetting(db, "remindClientsAfterDays"),
+    remindScope: getSetting(db, "remindScope"),
   };
 }
 

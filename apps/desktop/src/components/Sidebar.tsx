@@ -4,6 +4,8 @@ import { accountEyebrow } from "../../shared/accountState";
 import { SidebarGroup } from "./SidebarGroup";
 import { useSidebarLayout } from "./useSidebarLayout";
 import { SIDEBAR_GROUPS, isActiveView, type SidebarRowDescriptor } from "../lib/sidebarLayout";
+import { accountTip, sidebarRowTip } from "../lib/tips";
+import { keyLabel } from "../keys/keyLabel";
 
 /**
  * The left bar. Accounts and Settings are fixed; everything between is driven
@@ -18,6 +20,8 @@ export function Sidebar() {
   const category = useApp((s) => s.category);
   const filter = useApp((s) => s.accountFilter);
   const drafts = useApp((s) => s.drafts);
+  const categories = useApp((s) => s.categories);
+  const savedSearches = useApp((s) => s.savedSearches);
   const menu = useApp((s) => s.sidebarMenu);
   const setView = useApp((s) => s.setView);
   const setAccountFilter = useApp((s) => s.setAccountFilter);
@@ -39,7 +43,7 @@ export function Sidebar() {
 
       <div className="nav-group">
         <div className="af-mono nav-eyebrow">Accounts</div>
-        <button className="nav-item" aria-current={filter === null ? "true" : undefined} onClick={() => setAccountFilter(null)} disabled={!signedIn}>
+        <button className="nav-item" aria-current={filter === null ? "true" : undefined} data-tip="Every account in one list. The count is unread mail across all of them." onClick={() => setAccountFilter(null)} disabled={!signedIn}>
           <span className="nav-label">All inboxes</span>
           {counts.unread ? <span className="nav-count">{counts.unread}</span> : null}
         </button>
@@ -50,7 +54,7 @@ export function Sidebar() {
               key={a.id}
               className="nav-item"
               aria-current={filter === a.id ? "true" : undefined}
-              title="Click to filter. Double-click to open this inbox."
+              data-tip={accountTip(a)}
               onClick={() => setAccountFilter(a.id)}
               onDoubleClick={() => openAccountInbox(a.id)}
               disabled={!signedIn}
@@ -73,6 +77,7 @@ export function Sidebar() {
           disabled={!signedIn}
           isActive={isActive}
           countOf={countOf}
+          tipOf={(row) => sidebarRowTip(row, categories, savedSearches)}
           menuRowId={menu?.kind === "row" ? menu.rowId : null}
           addOpen={menu?.kind === "add" && menu.group === g.id}
           onOpen={open}
@@ -85,7 +90,7 @@ export function Sidebar() {
       ))}
 
       <div className="nav-group nav-bottom">
-        <button className="nav-item" onClick={openSettings}>
+        <button className="nav-item" data-tip="Accounts, sending, startup, snippets, and categories." data-key={keyLabel("settings") ?? undefined} onClick={openSettings}>
           <span className="nav-label">Settings</span>
           <span className="nav-count af-mono">Cmd+,</span>
         </button>

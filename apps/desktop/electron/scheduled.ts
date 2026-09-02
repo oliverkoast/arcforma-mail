@@ -59,6 +59,8 @@ export function scheduledSummary(row: SendQueueRow, sender: Address): ThreadSumm
     wakeAt: null,
     noReplyBy: null,
     queue: null,
+    canUnsubscribe: false,
+    unsubscribeState: null,
     scheduled: { sendId: row.id, sendAt: row.send_at },
   };
 }

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
+import { keyLabel } from "../keys/keyLabel";
 
-export type Glyph = "reply" | "replyAll" | "forward" | "done" | "snooze" | "star" | "daily" | "weekly" | "trash";
+export type Glyph = "reply" | "replyAll" | "forward" | "done" | "snooze" | "star" | "daily" | "weekly" | "trash" | "unsubscribe";
 
 const STROKE = { fill: "none", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round", strokeLinejoin: "round" } as const;
 
@@ -69,6 +70,14 @@ function Icon({ glyph }: { glyph: Glyph }): ReactNode {
           <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4M6.5 6.5v5M9.5 6.5v5" />
         </svg>
       );
+    case "unsubscribe":
+      // An envelope with a slash through it.
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" {...STROKE} aria-hidden="true">
+          <rect x="1.5" y="3.5" width="13" height="9.5" rx="1.5" />
+          <path d="M1.5 4.5L8 9l6.5-4.5M2.5 14L13.5 2" />
+        </svg>
+      );
   }
 }
 
@@ -78,6 +87,8 @@ export interface IconButtonProps {
   label: string;
   /** The key that does the same thing, shown in the tooltip: "E", "Cmd+Shift+D". */
   keyHint?: string;
+  /** The tooltip in sentence form, answering what happens: "Mark done. The thread leaves the inbox and stays in All Mail." Falls back to the label. */
+  tip?: string;
   /** A toggle that is currently on (starred, in a queue) reads in cobalt. */
   active?: boolean;
   onClick: () => void;
@@ -88,22 +99,27 @@ export interface IconButtonProps {
  * A 32 px square icon button: no fill, ink-soft glyph, ink on hover, cobalt
  * when active. Every thread action in the reading pane is one of these.
  */
-export function IconButton({ glyph, label, keyHint, active, onClick, className }: IconButtonProps) {
-  const title = keyHint ? `${label} (${keyHint})` : label;
+export function IconButton({ glyph, label, keyHint, tip, active, onClick, className }: IconButtonProps) {
+  const name = keyHint ? `${label} (${keyHint})` : label;
   return (
-    <button type="button" className={`icon-btn${active ? " is-active" : ""}${className ? ` ${className}` : ""}`} title={title} aria-label={title} aria-pressed={active === undefined ? undefined : active} onClick={onClick}>
+    <button type="button" className={`icon-btn${active ? " is-active" : ""}${className ? ` ${className}` : ""}`} data-glyph={glyph} data-tip={tip ?? label} data-key={keyHint} aria-label={name} aria-pressed={active === undefined ? undefined : active} onClick={onClick}>
       <Icon glyph={glyph} />
     </button>
   );
+}
+
+/** The key for an action, read from the keymap so a rebinding never leaves a stale hint. */
+export function hint(action: string): string | undefined {
+  return keyLabel(action) ?? undefined;
 }
 
 /** The three reply actions as icons, for the thread head, each message, and the bottom of the thread. */
 export function ReplyIcons({ onReply, onReplyAll, onForward }: { onReply: () => void; onReplyAll: () => void; onForward: () => void }) {
   return (
     <>
-      <IconButton glyph="reply" label="Reply" keyHint="R" onClick={onReply} />
-      <IconButton glyph="replyAll" label="Reply all" keyHint="A" onClick={onReplyAll} />
-      <IconButton glyph="forward" label="Forward" keyHint="F" onClick={onForward} />
+      <IconButton glyph="reply" label="Reply" keyHint={hint("reply")} tip="Reply to the sender. The editor opens under this message." onClick={onReply} />
+      <IconButton glyph="replyAll" label="Reply all" keyHint={hint("replyAll")} tip="Reply to everyone on this message, sender and copies." onClick={onReplyAll} />
+      <IconButton glyph="forward" label="Forward" keyHint={hint("forward")} tip="Forward this message to someone else. The quoted text goes; attachments do not yet." onClick={onForward} />
     </>
   );
 }

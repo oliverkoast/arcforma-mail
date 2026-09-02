@@ -106,12 +106,12 @@ export function MessageBody({ message, priorTexts = NO_PRIORS }: { message: Mess
           {message.loadImages ? (
             <>
               <span>Images load from {message.from.email}.</span>
-              <button onClick={() => void setLoadImages(message.from.email, false)}>Stop loading images</button>
+              <button data-tip="Blocks remote images from this sender from now on. Their servers stop hearing when you open their mail." onClick={() => void setLoadImages(message.from.email, false)}>Stop loading images</button>
             </>
           ) : (
             <>
               <span>Images from {message.from.email} are blocked.</span>
-              <button onClick={() => void setLoadImages(message.from.email, true)}>Load images</button>
+              <button data-tip="Loads remote images from this sender, now and from now on. Their servers can tell you opened the mail." onClick={() => void setLoadImages(message.from.email, true)}>Load images</button>
             </>
           )}
         </div>
@@ -126,7 +126,7 @@ export function MessageBody({ message, priorTexts = NO_PRIORS }: { message: Mess
           {textFold.sig ? <pre className="message-text sig">{textFold.sig}</pre> : null}
           {textFold.quoted !== null ? (
             <details className="quote-fold">
-              <summary>
+              <summary data-tip="The earlier messages quoted under this one. Click to show or hide them.">
                 <span className="af-mono qf-show">{SHOW_QUOTED}</span>
                 <span className="af-mono qf-hide">{HIDE_QUOTED}</span>
               </summary>

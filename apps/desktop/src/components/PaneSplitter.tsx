@@ -85,7 +85,7 @@ export function PaneSplitter() {
       role="separator"
       aria-orientation="vertical"
       aria-label="Resize the thread list"
-      title="Drag to resize. Double-click to reset."
+      data-tip="Drag to resize the list. Double-click to reset. Drag all the way to hide the reading pane."
       onMouseDown={onMouseDown}
       onDoubleClick={() => apply(DEFAULT)}
     />

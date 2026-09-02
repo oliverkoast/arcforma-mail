@@ -12,6 +12,8 @@ export interface SidebarGroupProps {
   disabled: boolean;
   isActive: (row: SidebarRowDescriptor) => boolean;
   countOf: (row: SidebarRowDescriptor) => number;
+  /** What the row contains, for its tooltip. */
+  tipOf: (row: SidebarRowDescriptor) => string;
   menuRowId: string | null;
   addOpen: boolean;
   onOpen: (row: SidebarRowDescriptor) => void;
@@ -63,7 +65,7 @@ export function SidebarGroup(p: SidebarGroupProps) {
     <div className={`nav-group${drop !== undefined ? " drop-target" : ""}`} data-group={p.id} onDragOver={over} onDragEnter={over} onDragLeave={leave} onDrop={dropped}>
       <div className="nav-group-head">
         <span className="af-mono nav-eyebrow">{p.label}</span>
-        <button className="nav-add" aria-label="Add a row" aria-expanded={p.addOpen} title="Add a row" disabled={p.disabled} onClick={(e) => p.onAdd(anchorOf(e.currentTarget))}>
+        <button className="nav-add" aria-label="Add a row" aria-expanded={p.addOpen} data-tip={`Add a row to ${p.label}: a category, a saved search, or a row you hid.`} disabled={p.disabled} onClick={(e) => p.onAdd(anchorOf(e.currentTarget))}>
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
             <path d="M7 2.5v9M2.5 7h9" />
           </svg>
@@ -77,6 +79,7 @@ export function SidebarGroup(p: SidebarGroupProps) {
               row={row}
               active={p.isActive(row)}
               count={p.countOf(row)}
+              tip={p.tipOf(row)}
               disabled={p.disabled}
               dragging={p.dragId === row.id}
               menuOpen={p.menuRowId === row.id}

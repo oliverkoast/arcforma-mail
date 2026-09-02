@@ -12,3 +12,4 @@ export * from "./send.js";
 export * from "./drafts.js";
 export * from "./calendar.js";
 export * from "./people.js";
+export * from "./unsubscribe.js";

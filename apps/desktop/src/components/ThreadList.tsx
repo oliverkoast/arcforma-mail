@@ -4,7 +4,22 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { isQueueView, useApp } from "../state/store";
 import { eyebrowDate, listDate, participantsLine, sendsAt } from "../lib/format";
 import { rowDescriptors, viewTitle } from "../lib/sidebarLayout";
-import type { DraftInfo, ThreadSummary } from "../../shared/types";
+import { threadRowTip } from "../lib/tooltip";
+import { keyLabel } from "../keys/keyLabel";
+import { SearchExcerpt } from "./SearchExcerpt";
+import type { DraftInfo, SearchHighlight, ThreadSummary } from "../../shared/types";
+
+/** The search operators, each with what it does, for the hint under an empty focused search field. */
+const SEARCH_OPS: Array<[string, string]> = [
+  ["from:", "Sender name or address: from:dana"],
+  ["to:", "Recipient name or address: to:maya"],
+  ["subject:", "A word in the subject: subject:invoice"],
+  ["has:attachment", "Only threads with a file attached"],
+  ["is:unread", "Only threads with unread mail. Also is:read and is:starred."],
+  ["before:", "Mail before a date: before:2026-09-01"],
+  ["after:", "Mail after a date: after:2026-08-01"],
+  ["newer_than:7d", "Mail from the last N days, weeks, or months: newer_than:7d, older_than:2w"],
+];
 
 const VIEW_TITLES: Record<string, string> = {
   inbox: "Inbox",
@@ -42,9 +57,10 @@ function EmptyState({ headline, detail }: { headline: string; detail: string | n
   );
 }
 
-function Row({ row, selected, owners, onClick, onHover, accountLabel }: { row: ThreadSummary; selected: boolean; owners: Set<string>; onClick: () => void; onHover: (e: React.MouseEvent) => void; accountLabel: string | null }) {
+function Row({ row, selected, owners, onClick, onHover, accountLabel, accountEmail, highlight }: { row: ThreadSummary; selected: boolean; owners: Set<string>; onClick: () => void; onHover: (e: React.MouseEvent) => void; accountLabel: string | null; accountEmail: string | null; highlight?: SearchHighlight | null }) {
+  // The row explains itself only when its own text is cut off: the full subject, the start of the snippet, the account.
   return (
-    <div className={`row${row.unread ? " unread" : ""}${selected ? " selected" : ""}`} onClick={onClick} onMouseMove={onHover} role="option" aria-selected={selected}>
+    <div className={`row${row.unread ? " unread" : ""}${selected ? " selected" : ""}`} onClick={onClick} onMouseMove={onHover} role="option" aria-selected={selected} data-tip={threadRowTip(row.subject, row.snippet, accountEmail)} data-tip-if-truncated=".row-subject, .row-snippet">
       <span className="dot" />
       <div className="row-main">
         {row.noReplyBy ? <span className="af-mono row-eyebrow">No reply by {eyebrowDate(row.noReplyBy)}</span> : null}
@@ -54,18 +70,19 @@ function Row({ row, selected, owners, onClick, onHover, accountLabel }: { row: T
           {row.messageCount > 1 ? <span className="nav-count"> {row.messageCount}</span> : null}
         </div>
         <div className="row-subject">{row.subject || "(no subject)"}</div>
-        <div className="row-snippet">{row.snippet}</div>
+        {highlight ? <div className="row-snippet"><SearchExcerpt highlight={highlight} /></div> : <div className="row-snippet">{row.snippet}</div>}
       </div>
       <div className="row-meta">
         <span>{row.scheduled ? `Sends ${sendsAt(row.scheduled.sendAt)}` : listDate(row.lastMessageAt)}</span>
         {row.starred ? (
-          <span className="star" title="Starred">
+          <span className="star" data-tip="Starred. S removes the star.">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
               <path d="M8 1.5l1.9 4.1 4.5.5-3.3 3.1.9 4.4L8 11.4l-4 2.2.9-4.4L1.6 6.1l4.5-.5L8 1.5z" />
             </svg>
           </span>
         ) : null}
         {accountLabel ? <span className="af-mono row-account">{accountLabel}</span> : null}
+        {row.canUnsubscribe ? <span className="row-unsub" data-tip="Unsubscribe and archive (U)" data-key={keyLabel("unsubscribe") ?? undefined}>U</span> : null}
       </div>
     </div>
   );
@@ -86,7 +103,7 @@ function DraftRows({ drafts, accountLabels, showAccount }: { drafts: DraftInfo[]
     <div className="draft-rows">
       {drafts.map((d) => (
         <div className="draft-row" key={d.draftId}>
-          <button className="draft-open" onClick={() => openDraft(d)}>
+          <button className="draft-open" data-tip="Open this draft in the editor." onClick={() => openDraft(d)}>
             <span className="af-mono row-eyebrow">{mirrorLabel(d)}</span>
             <span className="af-mono">
               {listDate(d.updatedAt)}
@@ -95,7 +112,7 @@ function DraftRows({ drafts, accountLabels, showAccount }: { drafts: DraftInfo[]
             <span className="row-subject">{d.subject || "(no subject)"}</span>
             <span className="row-snippet">{d.to.map((a) => a.name || a.email).join(", ") || "No recipient yet"}</span>
           </button>
-          <button className="draft-delete" onClick={() => void deleteDraft(d.draftId)} title="Deletes the draft here and in Gmail">
+          <button className="draft-delete" data-tip="Deletes the draft here and in Gmail." onClick={() => void deleteDraft(d.draftId)}>
             Delete
           </button>
         </div>
@@ -124,6 +141,7 @@ export function ThreadList() {
   const openSelected = useApp((s) => s.openSelected);
   const setSearchQuery = useApp((s) => s.setSearchQuery);
   const setScope = useApp((s) => s.setScope);
+  const scope = useApp((s) => s.scope);
   const open = useApp((s) => s.open);
   const loadMore = useApp((s) => s.loadMore);
   const counts = useApp((s) => s.counts);
@@ -157,14 +175,14 @@ export function ThreadList() {
         <div className="list-title">
           <h2 className="af-h3">{title}</h2>
           <span className="af-mono">{monoLabel}</span>
-          <button className="pane-toggle" onClick={toggleReadingPane} aria-pressed={readingPane} aria-label={readingPane ? "Hide the reading pane" : "Show the reading pane"} title={`${readingPane ? "Hide" : "Show"} reading pane (Cmd+\\)`}>
+          <button className="pane-toggle" onClick={toggleReadingPane} aria-pressed={readingPane} aria-label={readingPane ? "Hide the reading pane" : "Show the reading pane"} data-tip={readingPane ? "Hide the reading pane. The list runs full width; Enter on a row brings it back." : "Show the reading pane beside the list."} data-key={keyLabel("toggleReadingPane") ?? undefined}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true">
               <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
               <path d="M7 2.5v11" />
             </svg>
           </button>
         </div>
-        <label className="search">
+        <label className="search" data-tip="Search subject, sender, recipients, and message text across every account. Enter runs it." data-key={keyLabel("search") ?? undefined}>
           <span className="af-mono">/</span>
           <input
             id="search-input"
@@ -176,6 +194,13 @@ export function ThreadList() {
             spellCheck={false}
           />
         </label>
+        {scope === "search" && !searchQuery ? (
+          <div className="search-ops" aria-label="Search operators">
+            {SEARCH_OPS.map(([op, tip]) => (
+              <span key={op} data-tip={tip}>{op}</span>
+            ))}
+          </div>
+        ) : null}
         {backfills.length > 0 ? (
           <div className="progress-line" aria-label="Sync progress">
             <i style={{ width: `${total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 12}%` }} />
@@ -185,7 +210,7 @@ export function ThreadList() {
           <div className="notice">
             <span className="af-mono">Error</span>
             <span>{error}</span>
-            <button onClick={() => useApp.setState({ error: null })}>Dismiss</button>
+            <button data-tip="Clears this error. Nothing else changes." onClick={() => useApp.setState({ error: null })}>Dismiss</button>
           </div>
         ) : null}
       </div>
@@ -240,6 +265,8 @@ export function ThreadList() {
                     selected={item.index === selected}
                     owners={owners}
                     accountLabel={filter ? null : accountLabels.get(row.accountId) ?? null}
+                    accountEmail={accounts.find((a) => a.id === row.accountId)?.email ?? null}
+                    highlight={searchHits?.[item.index]?.highlight ?? null}
                     onClick={() => {
                       select(item.index);
                       void openSelected();

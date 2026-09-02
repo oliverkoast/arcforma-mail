@@ -43,6 +43,9 @@ let nextSendId = 1;
           return { id: nextSendId++, sendAt: Date.now() + 10_000, undoUntil: Date.now() + 10_000 };
         case "send:undo":
           return { cancelled: true, draft: { ...(lastSent ?? {}), draftId: null } };
+        case "settings:set":
+          settingsRow = { ...settingsRow, ...(args[0] as Record<string, unknown>) };
+          return settingsRow;
         default:
           return undefined;
       }
@@ -50,6 +53,8 @@ let nextSendId = 1;
   },
 };
 let lastSent: ComposeDraft | null = null;
+/** The fake settings table: settings:set merges the patch and hands the whole row back, the way the main process does. */
+let settingsRow: Record<string, unknown> = { undoWindowSec: 10, autoDraft: false, remoteImages: "always", remindClientsAfterDays: 3, remindScope: ["Clients"] };
 
 const account = (id: string, email: string): AccountInfo => ({ id, email, displayName: null, consent: "internal", authState: "ok", syncState: "live", configured: true, backfill: null, lastSyncAt: null, error: null });
 const accounts = [account("arcforma", "you@example.com"), account("formai", "you@example.net"), account("personal", "you@gmail.com")];
@@ -125,7 +130,7 @@ function message(threadId: string, id: string, over: Partial<MessageView>): Mess
 }
 
 function summary(id: string, subject: string): ThreadSummary {
-  return { accountId: "arcforma", id, subject, snippet: "", participants: [], lastMessageAt: 0, sortAt: 0, messageCount: 1, unread: false, starred: false, inInbox: true, hasAttachments: false, split: null, type: null, categoryId: null, wakeAt: null, noReplyBy: null, queue: null };
+  return { accountId: "arcforma", id, subject, snippet: "", participants: [], lastMessageAt: 0, sortAt: 0, messageCount: 1, unread: false, starred: false, inInbox: true, hasAttachments: false, split: null, type: null, categoryId: null, wakeAt: null, noReplyBy: null, queue: null, canUnsubscribe: false, unsubscribeState: null };
 }
 
 const kickoff: ThreadView = {
@@ -437,4 +442,64 @@ test("closing right after a keystroke cancels the pending autosave, so nothing i
   await new Promise((r) => setTimeout(r, AUTOSAVE_MS + 100));
   assert.equal(calls.filter((c) => c.channel === "drafts:save").length, savesBefore);
   assert.equal(draftRows.size, 0);
+});
+
+test("the Follow-ups settings save as a partial patch: the day count and the client categories, nothing else", async () => {
+  const { useApp } = await import("./store");
+  await useApp.getState().saveSettings({ remindClientsAfterDays: 5 });
+  let call = calls.filter((c) => c.channel === "settings:set").at(-1)!;
+  assert.deepEqual(call.args, [{ remindClientsAfterDays: 5 }]);
+  assert.equal(useApp.getState().settings.remindClientsAfterDays, 5);
+  assert.deepEqual(useApp.getState().settings.remindScope, ["Clients"], "the other key is untouched");
+
+  await useApp.getState().saveSettings({ remindScope: ["Clients", "vendors"] });
+  call = calls.filter((c) => c.channel === "settings:set").at(-1)!;
+  assert.deepEqual(call.args, [{ remindScope: ["Clients", "vendors"] }]);
+  assert.deepEqual(useApp.getState().settings.remindScope, ["Clients", "vendors"]);
+  assert.equal(useApp.getState().settings.remindClientsAfterDays, 5);
+
+  await useApp.getState().saveSettings({ remindClientsAfterDays: 0 });
+  assert.equal(useApp.getState().settings.remindClientsAfterDays, 0, "0 turns the rule off and is stored as 0, not dropped");
+});
+
+test("Cmd+K: the palette opens from the list, the thread, and the compose editor, never from Settings or Ask, and Escape hands the keys back", async () => {
+  const useApp = await freshKickoff();
+  assert.equal(useApp.getState().scope, "thread");
+  useApp.getState().openPalette();
+  let s = useApp.getState();
+  assert.equal(s.paletteOpen, true);
+  assert.equal(s.scope, "palette");
+  assert.equal(s.paletteScope, "thread");
+  useApp.getState().setPaletteQuery("sno");
+  assert.equal(useApp.getState().paletteQuery, "sno");
+  useApp.getState().closePalette();
+  s = useApp.getState();
+  assert.equal(s.paletteOpen, false);
+  assert.equal(s.paletteQuery, "", "the text does not carry over to the next open");
+  assert.equal(s.scope, "thread");
+
+  useApp.getState().openCompose("reply");
+  assert.equal(useApp.getState().scope, "compose");
+  useApp.getState().togglePalette();
+  assert.equal(useApp.getState().scope, "palette");
+  assert.equal(useApp.getState().paletteScope, "compose", "the compose command set");
+  useApp.getState().togglePalette();
+  assert.equal(useApp.getState().scope, "compose");
+  await useApp.getState().closeCompose(false);
+
+  useApp.getState().openSettings();
+  useApp.getState().openPalette();
+  assert.equal(useApp.getState().paletteOpen, false, "Settings keeps the keys");
+  useApp.getState().closeSettings();
+  useApp.getState().openAsk();
+  useApp.getState().openPalette();
+  assert.equal(useApp.getState().paletteOpen, false, "Ask keeps the keys");
+  useApp.getState().closeAsk();
+
+  useApp.getState().setPopover("snooze");
+  useApp.getState().openPalette();
+  s = useApp.getState();
+  assert.equal(s.scope, "palette");
+  assert.equal(s.popover, null, "the popover under it closes so T, W, D never fire behind the palette");
+  useApp.getState().closePalette();
 });

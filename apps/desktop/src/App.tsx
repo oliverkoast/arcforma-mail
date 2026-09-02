@@ -3,6 +3,7 @@ import { PaneSplitter } from "./components/PaneSplitter";
 import { useEffect } from "react";
 import { AddRowPopover } from "./components/AddRowPopover";
 import { AskPanel } from "./components/AskPanel";
+import { CommandPalette } from "./components/CommandPalette";
 import { Compose } from "./components/Compose";
 import { Onboarding } from "./components/Onboarding";
 import { ReadingPane } from "./components/ReadingPane";
@@ -13,6 +14,7 @@ import { SnoozePopover } from "./components/SnoozePopover";
 import { SyncSplash } from "./components/SyncSplash";
 import { ThreadList } from "./components/ThreadList";
 import { Toast } from "./components/Toast";
+import { Tooltip } from "./components/Tooltip";
 import { useKeyboard } from "./keys/useKeyboard";
 import { useApp } from "./state/store";
 
@@ -52,7 +54,9 @@ export function App() {
       <Compose />
       <AskPanel />
       <Settings />
+      <CommandPalette />
       <Toast />
+      <Tooltip />
     </div>
   );
 }

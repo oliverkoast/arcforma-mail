@@ -53,6 +53,10 @@ export interface ThreadListRow extends ThreadRow {
   no_reply_by: number | null;
   /** Daily 0, Weekly 0, Later, or none. Manual rows and the automatic Daily 0 rule, resolved. */
   queue: "daily" | "weekly" | "later" | null;
+  /** What U did to the thread, or null when it never ran. */
+  unsubscribe_state: "none" | "sent" | "opened" | "failed" | null;
+  /** 1 when an inbound message carries a List-Unsubscribe header. */
+  can_unsubscribe: number;
 }
 
 export interface MessageRow {

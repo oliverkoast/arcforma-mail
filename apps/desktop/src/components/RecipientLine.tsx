@@ -9,7 +9,7 @@ function AddressField({ label, value, onCommit, autoFocus }: { label: string; va
   return (
     <label className="compose-field">
       <span className="af-mono">{label}</span>
-      <input value={text} onChange={(e) => setText(e.target.value)} onBlur={() => onCommit(text)} spellCheck={false} autoFocus={autoFocus} placeholder={label === "To" ? "name@example.com" : ""} />
+      <input value={text} onChange={(e) => setText(e.target.value)} onBlur={() => onCommit(text)} spellCheck={false} autoFocus={autoFocus} placeholder={label === "To" ? "name@example.com" : ""} data-tip={label === "To" ? "Recipients, separated by commas. Names in the form Dana Reyes <dana@example.com> work too." : "Copied recipients, separated by commas."} />
     </label>
   );
 }
@@ -23,7 +23,7 @@ export function RecipientLine({ compose, startExpanded }: { compose: ComposeDraf
   const [expanded, setExpanded] = useState(startExpanded);
   if (!expanded) {
     return (
-      <button type="button" className="recipient-line" onClick={() => setExpanded(true)} title="Edit recipients">
+      <button type="button" className="recipient-line" data-tip="Who gets this reply. Click to open the To and Cc fields." onClick={() => setExpanded(true)}>
         <span className="recipient-line-text">{recipientLine(compose.to, compose.cc)}</span>
         <span className="recipient-line-edit">Edit recipients</span>
       </button>

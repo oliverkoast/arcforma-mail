@@ -18,7 +18,8 @@ export interface ContactStats {
   lastToAt: number | null;
 }
 
-const TO_OR_CC = `(EXISTS (SELECT 1 FROM json_each(m.to_json) j WHERE lower(COALESCE(j.value ->> 'email', '')) = ?)
+/** The address is on To or Cc of message m. Takes the lowercased email twice. */
+export const TO_OR_CC = `(EXISTS (SELECT 1 FROM json_each(m.to_json) j WHERE lower(COALESCE(j.value ->> 'email', '')) = ?)
   OR EXISTS (SELECT 1 FROM json_each(m.cc_json) j WHERE lower(COALESCE(j.value ->> 'email', '')) = ?))`;
 
 export function contactStats(db: Db, email: string): ContactStats {

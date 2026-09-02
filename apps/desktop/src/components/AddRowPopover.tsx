@@ -21,10 +21,10 @@ function Field({ label, value, onChange, placeholder, autoFocus }: { label: stri
 function Actions({ submit, disabled, onSubmit, onCancel }: { submit: string; disabled: boolean; onSubmit: () => void; onCancel: () => void }) {
   return (
     <div className="settings-actions">
-      <button className="btn btn-sweep btn-compact" disabled={disabled} onClick={onSubmit}>
+      <button className="btn btn-sweep btn-compact" disabled={disabled} data-tip={submit === "Back" ? "Back to the add menu." : `${submit}.`} onClick={onSubmit}>
         {submit}
       </button>
-      <button className="btn btn-ghost btn-compact" onClick={onCancel}>
+      <button className="btn btn-ghost btn-compact" data-tip="Closes the menu without changing anything." onClick={onCancel}>
         Cancel
       </button>
     </div>
@@ -32,8 +32,9 @@ function Actions({ submit, disabled, onSubmit, onCancel }: { submit: string; dis
 }
 
 function Option({ label, sub, onClick, disabled }: { label: string; sub: string; onClick: () => void; disabled?: boolean }) {
+  // The option already says what it does; the tooltip repeats it for a pointer resting on the label alone.
   return (
-    <button className="popover-item" onClick={onClick} disabled={disabled}>
+    <button className="popover-item" data-tip={sub} onClick={onClick} disabled={disabled}>
       <span>{label}</span>
       <span className="popover-sub">{sub}</span>
     </button>

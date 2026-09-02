@@ -30,6 +30,7 @@ import {
   type Db,
   type SendQueueRow,
 } from "@arcforma/store";
+import { applyClientReminder, sentRecipients } from "./client-reminder.js";
 import { sendMeta } from "./compose/queue.js";
 import { restoreDraft } from "./drafts/mirror.js";
 import { emit } from "./events.js";
@@ -46,6 +47,8 @@ export const SEND_RETRY_MAX_MIN = 10;
 /** What the scheduler needs from the account registry. */
 export interface SchedulerAccounts {
   client(accountId: string): GmailClient | null;
+  /** The addresses the account sends as; a message to oneself never earns a client reminder. Optional for tests. */
+  ownerAddresses?(accountId: string): string[];
 }
 
 export interface SchedulerOptions {
@@ -199,7 +202,7 @@ export class Scheduler {
   private checkReminders(now: number): void {
     const touched = new Set<string>();
     for (const r of dueReminders(this.db, now)) {
-      if (hasNewerInbound(this.db, r.account_id, r.thread_id, r.last_message_id)) {
+      if (hasNewerInbound(this.db, r.account_id, r.thread_id, r.last_message_id, r.created_at)) {
         resolveReminder(this.db, r.id, "replied", now);
         continue;
       }
@@ -239,6 +242,7 @@ export class Scheduler {
         if (gmailDraftId) enqueueOutbox(this.db, { accountId: row.account_id, op: "draftDelete", payload: { gmailDraftId } });
         emit("toast", { text: "Sent." });
         log("scheduler", `send ${row.id} delivered as ${sent.id}${gmailDraftId ? `, Gmail draft ${gmailDraftId} queued for deletion` : ""}`);
+        this.remindIfClient(row, sent, now);
         this.sync.poke(row.account_id);
       } catch (err) {
         const terminal = isTerminalSendError(err);
@@ -254,6 +258,25 @@ export class Scheduler {
         }
         logError("scheduler", `send ${row.id}`, err);
       }
+    }
+  }
+
+  /** The default client reminder: a remind-if-no-reply on the thread the message went into, when the rule applies. */
+  private remindIfClient(row: SendQueueRow, sent: { id: string; threadId: string }, now: number): void {
+    try {
+      const reminder = applyClientReminder(this.db, {
+        accountId: row.account_id,
+        threadId: row.thread_id,
+        sentThreadId: sent.threadId,
+        sentMessageId: sent.id,
+        recipients: sentRecipients(row),
+        ownAddresses: this.accounts.ownerAddresses?.(row.account_id) ?? [],
+        now,
+      });
+      if (reminder) log("scheduler", `send ${row.id}: client reminder ${reminder.id} on ${row.account_id}/${reminder.thread_id}, due ${new Date(reminder.due_at).toISOString()}`);
+    } catch (err) {
+      // The message is out; a reminder that could not be made is a log line, not a failure.
+      logError("scheduler", `client reminder for send ${row.id}`, err);
     }
   }
 

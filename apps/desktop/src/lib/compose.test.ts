@@ -29,7 +29,7 @@ function msg(over: Partial<MessageView>): MessageView {
   };
 }
 
-const thread: ThreadSummary = { accountId: "arcforma", id: "t", subject: "Kickoff", snippet: "", participants: [], lastMessageAt: 0, sortAt: 0, messageCount: 2, unread: false, starred: false, inInbox: true, hasAttachments: false, split: null, type: null, categoryId: null, wakeAt: null, noReplyBy: null, queue: null };
+const thread: ThreadSummary = { accountId: "arcforma", id: "t", subject: "Kickoff", snippet: "", participants: [], lastMessageAt: 0, sortAt: 0, messageCount: 2, unread: false, starred: false, inInbox: true, hasAttachments: false, split: null, type: null, categoryId: null, wakeAt: null, noReplyBy: null, queue: null, canUnsubscribe: false, unsubscribeState: null };
 
 test("subject prefixes stack once", () => {
   assert.equal(replySubject("Kickoff"), "Re: Kickoff");

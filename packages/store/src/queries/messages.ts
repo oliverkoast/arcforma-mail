@@ -18,6 +18,7 @@ const STORED_HEADERS = [
   "References",
   "List-Id",
   "List-Unsubscribe",
+  "List-Unsubscribe-Post",
   "Precedence",
   "Auto-Submitted",
   "X-Autoreply",
@@ -140,8 +141,17 @@ export function getMessage(db: Db, accountId: string, id: string): MessageRow | 
   return (db.prepare("SELECT * FROM messages WHERE account_id = ? AND id = ?").get(accountId, id) as unknown as MessageRow | undefined) ?? null;
 }
 
-export function listThreadMessages(db: Db, accountId: string, threadId: string): MessageRow[] {
-  return db.prepare("SELECT * FROM messages WHERE account_id = ? AND thread_id = ? ORDER BY internal_date, id").all(accountId, threadId) as unknown as MessageRow[];
+/**
+ * Messages of a thread in order. Gmail keeps drafts inside the thread as DRAFT-labelled messages;
+ * they are not mail and never show as sent, so they are excluded unless a caller asks for them.
+ */
+export function listThreadMessages(db: Db, accountId: string, threadId: string, opts: { includeDrafts?: boolean } = {}): MessageRow[] {
+  const rows = db.prepare("SELECT * FROM messages WHERE account_id = ? AND thread_id = ? ORDER BY internal_date, id").all(accountId, threadId) as unknown as MessageRow[];
+  return opts.includeDrafts ? rows : rows.filter((m) => !isDraftMessage(m));
+}
+
+export function isDraftMessage(m: Pick<MessageRow, "label_ids_json">): boolean {
+  try { return (JSON.parse(m.label_ids_json) as string[]).includes("DRAFT"); } catch { return false; }
 }
 
 /** Drops every FTS row and writes one per message. Used by the schema 3 migration; safe to call any time. */
@@ -201,11 +211,15 @@ export function listBodies(db: Db, accountId: string, threadId: string): Message
 
 /** Recomputes the denormalized thread row and thread_labels from its messages. Returns null if the thread has no messages. */
 export function recomputeThread(db: Db, accountId: string, threadId: string, opts: { keepSortAt?: boolean } = {}): ThreadRow | null {
-  const msgs = listThreadMessages(db, accountId, threadId);
-  if (msgs.length === 0) {
+  const all = listThreadMessages(db, accountId, threadId, { includeDrafts: true });
+  if (all.length === 0) {
     db.prepare("DELETE FROM threads WHERE account_id = ? AND id = ?").run(accountId, threadId);
     return null;
   }
+  // Drafts never drive the thread's subject, snippet, participants, dates, or count. A thread
+  // that is only a draft (a new message not yet sent) keeps the draft so it still exists.
+  const live = all.filter((m) => !isDraftMessage(m));
+  const msgs = live.length > 0 ? live : all;
   // Gmail history is per message. A thread is unread, starred, or in the
   // inbox when any live message is; a message in TRASH or SPAM no longer
   // counts, and the thread itself only carries TRASH or SPAM when every

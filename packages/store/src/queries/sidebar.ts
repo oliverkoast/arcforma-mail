@@ -6,7 +6,7 @@
 import type { Db } from "../db.js";
 import { placeholders } from "../db.js";
 import { HAS_LABEL, NOT_JUNK, PENDING_SNOOZE } from "./fragments.js";
-import { toFtsQuery } from "./search.js";
+import { describeSearch, searchCount } from "./search.js";
 import { threadCounts, type ThreadCounts } from "./threads.js";
 import type { SavedSearchRow, SendQueueRow } from "../types.js";
 
@@ -24,7 +24,7 @@ export function createSavedSearch(db: Db, input: { name: string; query: string }
   const name = input.name.trim();
   const query = input.query.trim();
   if (!name) throw new Error("Give the saved search a name.");
-  if (!toFtsQuery(query)) throw new Error("Give the saved search something to look for.");
+  if (describeSearch(query).empty) throw new Error("Give the saved search something to look for.");
   const now = Date.now();
   const pos = (db.prepare("SELECT COALESCE(MAX(position), 0) + 1 AS p FROM saved_searches").get() as { p: number }).p;
   const res = db.prepare("INSERT INTO saved_searches (name, query, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(name, query, pos, now, now);
@@ -37,7 +37,7 @@ export function updateSavedSearch(db: Db, id: number, patch: { name?: string; qu
   const name = patch.name === undefined ? row.name : patch.name.trim();
   const query = patch.query === undefined ? row.query : patch.query.trim();
   if (!name) throw new Error("Give the saved search a name.");
-  if (!toFtsQuery(query)) throw new Error("Give the saved search something to look for.");
+  if (describeSearch(query).empty) throw new Error("Give the saved search something to look for.");
   db.prepare("UPDATE saved_searches SET name = ?, query = ?, updated_at = ? WHERE id = ?").run(name, query, Date.now(), id);
   return getSavedSearch(db, id);
 }
@@ -48,18 +48,7 @@ export function deleteSavedSearch(db: Db, id: number): boolean {
 
 /** Threads a query matches, counted the way the search list would list them: one per thread, junk excluded. */
 export function savedSearchCount(db: Db, query: string, accountIds?: string[]): number {
-  const fts = toFtsQuery(query);
-  if (!fts) return 0;
-  const scope = accountIds && accountIds.length ? `AND f.account_id IN (${placeholders(accountIds.length)})` : "";
-  const row = db
-    .prepare(
-      `SELECT COUNT(*) AS n FROM threads t
-       WHERE ${NOT_JUNK} AND EXISTS (
-         SELECT 1 FROM messages_fts f WHERE messages_fts MATCH ? AND f.account_id = t.account_id AND f.thread_id = t.id ${scope}
-       )`
-    )
-    .get(fts, ...(accountIds ?? [])) as { n: number };
-  return row.n;
+  return searchCount(db, query, { accountIds });
 }
 
 // ---- sidebar layout ------------------------------------------------------------

@@ -1,3 +1,4 @@
+import { recomputeThread } from "./queries/messages.js";
 import { decodeEntities } from "./mail-headers.js";
 import fs from "node:fs";
 import path from "node:path";
@@ -7,7 +8,7 @@ import { reindexAllMessages } from "./queries/messages.js";
 
 export type Db = DatabaseSync;
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 9;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
@@ -122,6 +123,23 @@ function migrateDraftsMirror(db: Db): void {
   db.exec("CREATE INDEX IF NOT EXISTS drafts_gmail ON drafts(account_id, gmail_draft_id)");
 }
 
+// Version 8: what U did to a thread. One row per thread the user unsubscribed
+// from: the method that ran (one-click POST, a mailto message, or the page
+// opened in the browser), where it went, and whether it worked, so the list
+// can read UNSUBSCRIBED and a second press does not send twice.
+const MIGRATION_8 = `
+CREATE TABLE IF NOT EXISTS thread_unsubscribes (
+  account_id TEXT NOT NULL,
+  thread_id  TEXT NOT NULL,
+  state      TEXT NOT NULL DEFAULT 'none',
+  method     TEXT,
+  target     TEXT,
+  error      TEXT,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (account_id, thread_id)
+);
+`;
+
 /** Opens (or creates) the store, applies pragmas, and migrates to the current schema. */
 export function openStore(file: string): Db {
   if (file !== ":memory:") fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -157,6 +175,9 @@ export function migrate(db: Db): void {
     { version: 5, sql: () => MIGRATION_5 },
     { version: 6, sql: () => MIGRATION_6 },
     { version: 7, sql: () => "SELECT 1", after: (d) => migrateDraftsMirror(d) },
+    { version: 8, sql: () => MIGRATION_8 },
+    // Drafts used to count as mail in thread summaries. Recompute every thread that holds one.
+    { version: 9, sql: () => "SELECT 1", after: (d) => recomputeThreadsWithDrafts(d) },
   ];
   for (const step of steps) {
     if (step.version <= current) continue;
@@ -206,4 +227,11 @@ export function repairSnippets(db: Db): void {
       if (fixed !== r.snippet) upd.run(fixed, r.rid);
     }
   }
+}
+
+/** One-time repair: threads whose summary was built while a DRAFT-labelled message counted as mail. */
+export function recomputeThreadsWithDrafts(db: Db): number {
+  const rows = db.prepare(`SELECT DISTINCT account_id, thread_id FROM messages WHERE label_ids_json LIKE '%"DRAFT"%'`).all() as Array<{ account_id: string; thread_id: string }>;
+  for (const r of rows) recomputeThread(db, r.account_id, r.thread_id, { keepSortAt: true });
+  return rows.length;
 }

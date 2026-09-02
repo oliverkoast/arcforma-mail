@@ -38,7 +38,7 @@ export function Onboarding() {
               {a.authState === "ok" ? (
                 <span className="af-mono">Signed in</span>
               ) : (
-                <button className="btn btn-sweep btn-compact" onClick={() => void signIn(a.id)} disabled={!a.configured}>
+                <button className="btn btn-sweep btn-compact" data-tip={!a.configured ? "This account has no OAuth client in oauth-clients.json yet. See docs/google-cloud-setup.md." : "Opens Google in your browser to authorize this account. The refresh token is kept in your Keychain."} onClick={() => void signIn(a.id)} disabled={!a.configured}>
                   {!a.configured ? "Add client id first" : a.authState === "expired" ? "Sign in again" : "Sign in"}
                 </button>
               )}

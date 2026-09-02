@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain, shell } from "electron";
 import { shouldLoadImages } from "../images.js";
 import { fetchThreadFull, findBody, listAttachments } from "@arcforma/gmail";
 import {
@@ -35,8 +35,10 @@ import { categoryInfos } from "./ai.js";
 import { requireAccount, requireEmail, requireId } from "./guard.js";
 import { logError } from "../log.js";
 import { scheduledSendId, scheduledSummary, scheduledView } from "../scheduled.js";
+import type { Scheduler } from "../scheduler.js";
+import { unsubscribeThread } from "../unsubscribe.js";
 import type { SyncManager } from "../sync.js";
-import type { Address, CategoryInfo, ListRequest, ListResponse, MessageView, ThreadSummary, ThreadView } from "../../shared/types.js";
+import type { Address, CategoryInfo, ListRequest, ListResponse, MessageView, ThreadSummary, ThreadView, UnsubscribeResult } from "../../shared/types.js";
 
 export function toSummary(row: ThreadListRow): ThreadSummary {
   return {
@@ -58,6 +60,8 @@ export function toSummary(row: ThreadListRow): ThreadSummary {
     wakeAt: row.wake_at ?? null,
     noReplyBy: row.no_reply_by ?? null,
     queue: row.queue ?? null,
+    canUnsubscribe: row.can_unsubscribe === 1,
+    unsubscribeState: row.unsubscribe_state ?? null,
   };
 }
 
@@ -135,7 +139,7 @@ export function listView(db: Db, req: ListRequest): ListResponse {
   return { rows: page.rows.map(toSummary), nextCursor: page.nextCursor };
 }
 
-export function registerThreadIpc(db: Db, accounts: AccountRegistry, sync: SyncManager): void {
+export function registerThreadIpc(db: Db, accounts: AccountRegistry, sync: SyncManager, scheduler?: Pick<Scheduler, "wakeSoon">): void {
   ipcMain.handle("threads:list", (_e, req: ListRequest) => listView(db, req));
 
   ipcMain.handle("threads:get", async (_e, accountId: string, threadId: string): Promise<ThreadView> => {
@@ -170,7 +174,7 @@ export function registerThreadIpc(db: Db, accounts: AccountRegistry, sync: SyncM
       }
     }
     const list = listThreads(db, { view: "all", accountIds: [accountId], limit: 1, cursor: null });
-    const summaryRow = list.rows.find((r) => r.id === threadId) ?? ({ ...row, split: null, type: null, category_id: null, wake_at: null, no_reply_by: null, queue: null } as ThreadListRow);
+    const summaryRow = list.rows.find((r) => r.id === threadId) ?? ({ ...row, split: null, type: null, category_id: null, wake_at: null, no_reply_by: null, queue: null, unsubscribe_state: null, can_unsubscribe: 0 } as ThreadListRow);
     return { thread: toSummary(summaryRow), messages: messages.map((m) => toMessageView(db, m)), bodiesPending };
   });
 
@@ -193,6 +197,15 @@ export function registerThreadIpc(db: Db, accounts: AccountRegistry, sync: SyncM
     if (!last) throw new Error("Nothing to remind about yet.");
     createReminder(db, { accountId: a, threadId: t, lastMessageId: last.id, dueAt });
   }));
+  // U: the best List-Unsubscribe method, then archive. The result text is the toast.
+  ipcMain.handle("threads:unsubscribe", async (_e, accountId: string, threadId: string): Promise<UnsubscribeResult> => {
+    requireAccount(db, accountId);
+    if (!getThread(db, accountId, requireId(threadId, "thread"))) throw new Error("That thread is no longer in the local store.");
+    const result = await unsubscribeThread(db, accountId, threadId, { openExternal: (url) => shell.openExternal(url) });
+    if (result.sendId !== null) scheduler?.wakeSoon(Date.now());
+    if (result.archived || result.sendId !== null) sync.poke(accountId);
+    return { method: result.method, ok: result.ok, archived: result.archived, state: result.state, text: result.text };
+  });
   ipcMain.handle("threads:counts", (_e, accountIds?: string[]) => threadCounts(db, accountIds));
   // Queue membership is local only, so no sync poke: nothing about it goes to Gmail.
   ipcMain.handle("threads:toggleQueue", (_e, accountId: string, threadId: string, queue: unknown) => {

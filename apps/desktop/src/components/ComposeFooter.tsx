@@ -1,15 +1,15 @@
 import { useMemo, useState } from "react";
 import { SEND_LATER, useApp } from "../state/store";
 import { filterSnippets } from "../lib/snippets";
-import { IconButton } from "./IconButton";
+import { IconButton, hint } from "./IconButton";
 
 function SendLaterPopover() {
   const sendCompose = useApp((s) => s.sendCompose);
   const setSendLater = useApp((s) => s.setSendLater);
   const pick = useApp((s) => s.sendLaterPick);
   const [when, setWhen] = useState("");
-  const item = (label: string, key: string, onClick: () => void) => (
-    <button className="popover-item" onClick={onClick}>
+  const item = (label: string, key: string, tip: string, onClick: () => void) => (
+    <button className="popover-item" data-tip={tip} data-key={key} onClick={onClick}>
       <span>{label}</span>
       <span className="af-mono">{key}</span>
     </button>
@@ -19,10 +19,11 @@ function SendLaterPopover() {
       <span className="af-mono">Send later</span>
       {pick ? (
         <div className="popover-row">
-          <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} autoFocus />
+          <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} autoFocus data-tip="The date and time to send, in your time zone." />
           <button
             className="btn btn-sweep btn-compact"
             disabled={!when}
+            data-tip="Queues the message for that time. It waits under Scheduled until then."
             onClick={() => {
               const t = new Date(when).getTime();
               if (Number.isFinite(t)) void sendCompose(t);
@@ -33,12 +34,12 @@ function SendLaterPopover() {
         </div>
       ) : (
         <>
-          {item("Tomorrow, 9:00", "T", () => void sendCompose(SEND_LATER.tomorrow()))}
-          {item("Next Monday, 9:00", "W", () => void sendCompose(SEND_LATER.nextMonday()))}
-          {item("Pick a time", "D", () => setSendLater(true, true))}
+          {item("Tomorrow, 9:00", "T", "Sends tomorrow at 9:00 in your time zone. It waits under Scheduled until then.", () => void sendCompose(SEND_LATER.tomorrow()))}
+          {item("Next Monday, 9:00", "W", "Sends next Monday at 9:00 in your time zone. It waits under Scheduled until then.", () => void sendCompose(SEND_LATER.nextMonday()))}
+          {item("Pick a time", "D", "Choose any date and time to send.", () => setSendLater(true, true))}
         </>
       )}
-      <button className="popover-item" onClick={() => setSendLater(false)}>
+      <button className="popover-item" data-tip="Closes this menu. The message stays open." data-key={hint("closeSendLater")} onClick={() => setSendLater(false)}>
         <span>Back to the message</span>
         <span className="af-mono">Esc</span>
       </button>
@@ -73,6 +74,7 @@ function SnippetPicker() {
         className="picker-input"
         autoFocus
         placeholder="Type to filter"
+        data-tip="Type to filter by name or trigger. Up and Down move, Enter inserts."
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -85,7 +87,7 @@ function SnippetPicker() {
         <div className="picker-empty">{snippets.length === 0 ? "No snippets yet. Add them in Settings." : "Nothing matches."}</div>
       ) : (
         list.map((s, i) => (
-          <button key={s.id} className="popover-item" aria-current={i === index ? "true" : undefined} onMouseEnter={() => setIndex(i)} onClick={() => insertSnippet(s)}>
+          <button key={s.id} className="popover-item" aria-current={i === index ? "true" : undefined} data-tip={`Inserts at the cursor:\n${s.bodyText.replace(/\s+/g, " ").trim().slice(0, 140)}`} onMouseEnter={() => setIndex(i)} onClick={() => insertSnippet(s)}>
             <span>
               {s.name}
               <span className="picker-preview">{s.bodyText.slice(0, 60)}</span>
@@ -94,7 +96,7 @@ function SnippetPicker() {
           </button>
         ))
       )}
-      <button className="popover-item" onClick={() => setSnippetPicker(false)}>
+      <button className="popover-item" data-tip="Closes the picker without inserting anything." data-key={hint("closeSnippets")} onClick={() => setSnippetPicker(false)}>
         <span>Close</span>
         <span className="af-mono">Esc</span>
       </button>
@@ -113,16 +115,16 @@ export function ComposeFooter() {
   return (
     <>
       <div className="compose-foot">
-        <button className="btn btn-sweep btn-compact" onClick={() => void sendCompose(null)} title="Send (Cmd+Enter)">
+        <button className="btn btn-sweep btn-compact" data-tip="Send now. Z undoes it during the undo window set in Settings." data-key={hint("send")} onClick={() => void sendCompose(null)}>
           Send
         </button>
-        <button className="btn btn-nav btn-compact" onClick={() => setSendLater(true)} title="Send later (Cmd+Shift+Enter)">
+        <button className="btn btn-nav btn-compact" data-tip="Pick a time to send. The message waits under Scheduled until then." data-key={hint("sendLater")} onClick={() => setSendLater(true)}>
           Send later
         </button>
-        <button className="btn btn-ghost btn-compact" onClick={() => setSnippetPicker(true)} title="Snippets (Cmd+;)">
+        <button className="btn btn-ghost btn-compact" data-tip="Insert a saved snippet at the cursor. Typing ;trigger then Space does the same inline." data-key={hint("snippets")} onClick={() => setSnippetPicker(true)}>
           Snippets
         </button>
-        <IconButton glyph="trash" label="Discard draft" keyHint="Cmd+Shift+D" className="compose-trash" onClick={() => void closeCompose(false)} />
+        <IconButton glyph="trash" label="Discard draft" keyHint={hint("discardCompose")} tip="Discard this draft. It is deleted here and in Gmail." className="compose-trash" onClick={() => void closeCompose(false)} />
       </div>
       {sendLaterOpen ? <SendLaterPopover /> : null}
       {snippetPickerOpen ? <SnippetPicker /> : null}

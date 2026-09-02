@@ -99,6 +99,8 @@ export function registerComposeIpc(db: Db, scheduler: Scheduler, mirror: DraftMi
     if (typeof patch.undoWindowSec === "number") setSetting(db, "undoWindowSec", Math.max(0, Math.min(60, Math.round(patch.undoWindowSec))));
     if (typeof patch.autoDraft === "boolean") setSetting(db, "autoDraft", patch.autoDraft);
     if (patch.remoteImages === "always" || patch.remoteImages === "known" || patch.remoteImages === "never") setSetting(db, "remoteImages", patch.remoteImages);
+    if (typeof patch.remindClientsAfterDays === "number" && Number.isFinite(patch.remindClientsAfterDays)) setSetting(db, "remindClientsAfterDays", Math.max(0, Math.min(60, Math.round(patch.remindClientsAfterDays))));
+    if (Array.isArray(patch.remindScope)) setSetting(db, "remindScope", patch.remindScope.filter((v): v is string => typeof v === "string").map((v) => v.trim()).filter(Boolean));
     const next = getSettings(db);
     emit("toast", { text: "Settings saved." });
     return next;

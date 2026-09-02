@@ -4,8 +4,23 @@ import { scopeFor, type ScopeState } from "./scope";
 import { resolveBinding } from "./dispatcher";
 
 function state(over: Partial<ScopeState> = {}): ScopeState {
-  return { settingsOpen: false, ask: { open: false }, compose: null, inlineCollapsed: false, snippetPickerOpen: false, sendLaterOpen: false, popover: null, sidebarMenu: null, open: null, ...over };
+  return { paletteOpen: false, settingsOpen: false, ask: { open: false }, compose: null, inlineCollapsed: false, snippetPickerOpen: false, sendLaterOpen: false, popover: null, sidebarMenu: null, open: null, ...over };
 }
+
+test("the command palette sits above everything: Escape closes it first, plain letters type into it, Cmd+K still resolves", () => {
+  const key = (k: string, meta = false) => ({ key: k, metaKey: meta, shiftKey: false, altKey: false, ctrlKey: false });
+  const everything = state({ paletteOpen: true, popover: "snooze", sidebarMenu: { kind: "add" }, settingsOpen: true, ask: { open: true }, compose: {}, snippetPickerOpen: true, sendLaterOpen: true, open: {} });
+  assert.equal(scopeFor(everything), "palette");
+  assert.equal(scopeFor(state({ paletteOpen: true, compose: {}, open: {} })), "palette", "above the compose editor");
+  assert.equal(scopeFor(state({ paletteOpen: true, popover: "snooze" })), "palette", "above a snooze popover");
+  assert.equal(scopeFor(state({ paletteOpen: true })), "palette");
+  assert.equal(scopeFor(state({ paletteOpen: false, compose: {}, open: {} })), "compose", "closed, the keys go back to the editor");
+  assert.equal(resolveBinding("palette", key("Escape"), true)?.action, "closePalette");
+  assert.equal(resolveBinding("palette", key("k", true), true)?.action, "palette", "Cmd+K toggles it closed");
+  for (const k of ["j", "k", "e", "u", "t", "d", "w", "/"]) assert.equal(resolveBinding("palette", key(k), true), null, `${k} typed into the palette is text`);
+  assert.equal(resolveBinding("palette", key("Enter"), true), null, "Enter belongs to the palette's own list, not the keymap");
+  for (const scope of ["list", "thread", "compose", "popover", "sidebar"] as const) assert.equal(resolveBinding(scope, key("k", true), scope === "compose")?.action, "palette", `Cmd+K opens from ${scope}`);
+});
 
 test("Escape closes the topmost surface: popover, then settings, then Ask, then compose, then the reading pane", () => {
   const everything = state({ popover: "snooze", settingsOpen: true, ask: { open: true }, compose: {}, snippetPickerOpen: true, sendLaterOpen: true, open: {} });

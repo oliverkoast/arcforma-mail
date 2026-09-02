@@ -5,6 +5,6 @@ import type { SearchHitView } from "../../shared/types.js";
 
 export function registerSearchIpc(db: Db): void {
   ipcMain.handle("search:query", (_e, query: string, accountIds?: string[]): SearchHitView[] =>
-    search(db, query, { accountIds, limit: 60 }).map((h) => ({ thread: toSummary(h.row), messageId: h.messageId, excerpt: h.excerpt }))
+    search(db, query, { accountIds, limit: 60 }).map((h) => ({ thread: toSummary(h.row), messageId: h.messageId, excerpt: h.excerpt, highlight: h.highlight }))
   );
 }
