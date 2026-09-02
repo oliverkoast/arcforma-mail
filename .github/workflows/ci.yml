@@ -1,0 +1,24 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm sync-brand || echo "brand assets are not in this checkout; skipping"
+      - run: pnpm -r typecheck
+      - run: pnpm -r test
+      - run: node scripts/brand-check.mjs
+      - name: No secrets in the tree
+        run: node scripts/secret-scan.mjs

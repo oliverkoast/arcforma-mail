@@ -44,3 +44,9 @@ C opens the floating compose panel. R, A, and F reply in the thread: the editor 
 - Calendar events come from a 30-days-back, 14-days-ahead window per account. Google pins that window to the sync token, so the token lives 24 hours and then a full window is fetched again; stale rows are dropped only inside the window.
 - Replacing selected text fails closed: the selection is re-read and compared before anything is pasted.
 - Never launch the apps as children of a shell. Use `open -a`, `launchctl`, or the install scripts.
+
+## Licence
+
+The mail app is AGPL-3.0 (see `LICENSE`). `packages/ai-core`, `packages/ai-daemon`, and `packages/text-tools` are MIT, so the AI runner and the text tool can be reused anywhere. Reporting a vulnerability: `SECURITY.md`. Working on it: `CONTRIBUTING.md`.
+
+The Arcforma name, wordmark, and stipple artwork are not covered by these licences. Fork the code, use your own brand.
