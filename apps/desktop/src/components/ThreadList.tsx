@@ -2,7 +2,7 @@ import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { isQueueView, useApp } from "../state/store";
-import { eyebrowDate, listDate, participantsLine, sendsAt } from "../lib/format";
+import { attentionEyebrow, eyebrowDate, listDate, participantsLine, sendsAt } from "../lib/format";
 import { rowDescriptors, viewTitle } from "../lib/sidebarLayout";
 import { threadRowTip } from "../lib/tooltip";
 import { keyLabel } from "../keys/keyLabel";
@@ -28,6 +28,7 @@ const VIEW_TITLES: Record<string, string> = {
   sent: "Sent",
   drafts: "Drafts",
   starred: "Starred",
+  needsyou: "Needs you",
   daily: "Daily 0",
   weekly: "Weekly 0",
   later: "Later",
@@ -63,6 +64,7 @@ function Row({ row, selected, owners, onClick, onHover, accountLabel, accountEma
     <div className={`row${row.unread ? " unread" : ""}${selected ? " selected" : ""}`} onClick={onClick} onMouseMove={onHover} role="option" aria-selected={selected} data-tip={threadRowTip(row.subject, row.snippet, accountEmail)} data-tip-if-truncated=".row-subject, .row-snippet">
       <span className="dot" />
       <div className="row-main">
+        {row.band === "needs_you" && row.attentionReason ? <span className="af-mono row-eyebrow" data-tip={row.attentionReason}>{attentionEyebrow(row.attentionReason)}</span> : null}
         {row.noReplyBy ? <span className="af-mono row-eyebrow">No reply by {eyebrowDate(row.noReplyBy)}</span> : null}
         {row.wakeAt ? <span className="af-mono row-eyebrow">Back {eyebrowDate(row.wakeAt, true)}</span> : null}
         <div className="row-from">
@@ -165,7 +167,16 @@ export function ThreadList() {
   // The sidebar row that opens this view names it, so a custom category or a saved search reads as itself.
   const rowTitle = useMemo(() => viewTitle(rowDescriptors(categories, savedSearches), { view, split, category }), [categories, savedSearches, view, split, category]);
   const title = searchHits ? `Search: ${searchQuery}` : view === "inbox" && !split && !category ? "Inbox" : rowTitle ?? VIEW_TITLES[view] ?? "Inbox";
-  const queueLabel = view === "daily" ? `${counts.daily} left today` : view === "weekly" ? `${counts.weekly} left this week` : view === "later" ? `${counts.later} later` : null;
+  const queueLabel =
+    view === "needsyou"
+      ? `${counts.needsYou} waiting on you`
+      : view === "daily"
+        ? `${counts.daily} left today`
+        : view === "weekly"
+          ? `${counts.weekly} left this week`
+          : view === "later"
+            ? `${counts.later} later`
+            : null;
   const monoLabel = searchHits ? `${rows.length} hits` : queueLabel ?? (filter ? accountLabels.get(filter) : "all accounts");
 
   return (
@@ -240,6 +251,8 @@ export function ThreadList() {
               <div className="af-mono">Loading</div>
             ) : view === "inbox" ? (
               <EmptyState headline="Nothing here" detail="New mail shows up within a minute of arriving." />
+            ) : view === "needsyou" ? (
+              <EmptyState headline="Nothing is waiting on you." detail="This row holds threads where a person asked you something and you have not replied since. Everything asked of you has an answer." />
             ) : view === "daily" ? (
               <EmptyState headline="Daily zero. Nothing left from today." detail={counts.clearedDaily > 0 ? `You cleared ${counts.clearedDaily} today.` : null} />
             ) : view === "weekly" ? (

@@ -18,6 +18,8 @@ A message a real person wrote to the recipient is never a newsletter, a promotio
 
 A false "other" on a real client or partner is the worst error, so "important" has a low bar and "other" a high one. Cold outreach from a real person is "important" with a lower confidence, not "other".
 
+`type` is the field the app relies on you for. `split` is a second opinion: the app scores who the mail is addressed to, how much history the recipient has with the sender, whether the message asks for anything, and how long it has gone unanswered, and that score decides Important on its own almost every time. Your `split` is read only when that score is genuinely undecided, so answer it as "would a busy person want this in their Important list", and do not try to work out whether a reply is owed. The app knows that already.
+
 Worked examples for the cases the deterministic rules leave open:
 
 From: workspace-noreply@google.com

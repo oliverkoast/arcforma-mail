@@ -65,11 +65,26 @@ export function deleteCategory(db: Db, id: string): void {
 
 export function upsertClassification(db: Db, c: ClassificationInput): void {
   db.prepare(
-    `INSERT INTO classifications (account_id, thread_id, split, type, category_id, confidence, source, last_message_id, classified_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO classifications (account_id, thread_id, split, type, category_id, confidence, source, last_message_id, attention, band, reason, classified_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(account_id, thread_id) DO UPDATE SET split = excluded.split, type = excluded.type, category_id = excluded.category_id,
-       confidence = excluded.confidence, source = excluded.source, last_message_id = excluded.last_message_id, classified_at = excluded.classified_at`
-  ).run(c.accountId, c.threadId, c.split, c.type ?? null, c.categoryId ?? null, c.confidence ?? 0, c.source ?? "rule", c.lastMessageId ?? null, Date.now());
+       confidence = excluded.confidence, source = excluded.source, last_message_id = excluded.last_message_id,
+       attention = excluded.attention, band = excluded.band, reason = excluded.reason, classified_at = excluded.classified_at`
+  ).run(
+    c.accountId,
+    c.threadId,
+    c.split,
+    c.type ?? null,
+    c.categoryId ?? null,
+    c.confidence ?? 0,
+    c.source ?? "rule",
+    c.lastMessageId ?? null,
+    Math.round(c.attention ?? 0),
+    // A caller that has not scored the thread still has to leave a band the queries can read, and the split says which.
+    c.band ?? (c.split === "important" ? "important" : "other"),
+    c.reason ?? null,
+    Date.now()
+  );
 }
 
 export function addCorrection(

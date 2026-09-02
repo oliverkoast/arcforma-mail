@@ -15,6 +15,7 @@ function msg(over: Partial<MessageView>): MessageView {
     replyTo: null,
     to: [{ email: "you@example.com", name: "Oliver Korzen" }],
     cc: [],
+    bcc: [],
     messageIdHeader: "<m@x>",
     references: null,
     subject: "Kickoff",
@@ -29,7 +30,7 @@ function msg(over: Partial<MessageView>): MessageView {
   };
 }
 
-const thread: ThreadSummary = { accountId: "arcforma", id: "t", subject: "Kickoff", snippet: "", participants: [], lastMessageAt: 0, sortAt: 0, messageCount: 2, unread: false, starred: false, inInbox: true, hasAttachments: false, split: null, type: null, categoryId: null, wakeAt: null, noReplyBy: null, queue: null, canUnsubscribe: false, unsubscribeState: null };
+const thread: ThreadSummary = { accountId: "arcforma", id: "t", subject: "Kickoff", snippet: "", participants: [], lastMessageAt: 0, sortAt: 0, messageCount: 2, unread: false, starred: false, inInbox: true, hasAttachments: false, split: null, type: null, categoryId: null, attention: null, band: null, attentionReason: null, wakeAt: null, noReplyBy: null, queue: null, canUnsubscribe: false, unsubscribeState: null };
 
 test("subject prefixes stack once", () => {
   assert.equal(replySubject("Kickoff"), "Re: Kickoff");
@@ -213,7 +214,7 @@ test("the optimistic sent message stands in until the sync carries an outbound m
 
 test("sameMessages sees a new message, a body that arrived, and an image toggle, and nothing else; bodyNotice names the reason bodies did not load", async () => {
   const { sameMessages, bodyNotice } = await import("./compose");
-  const base = (id: string): MessageView => ({ accountId: "a", id, threadId: "t", internalDate: 1, from: { email: "x@y.z", name: "" }, replyTo: null, to: [], cc: [], messageIdHeader: null, references: null, subject: "", snippet: "", labelIds: [], direction: "in", isAuto: false, hasAttachments: false, body: { html: "<p>hi</p>", text: null, attachments: [] }, loadImages: false });
+  const base = (id: string): MessageView => ({ accountId: "a", id, threadId: "t", internalDate: 1, from: { email: "x@y.z", name: "" }, replyTo: null, to: [], cc: [], bcc: [], messageIdHeader: null, references: null, subject: "", snippet: "", labelIds: [], direction: "in", isAuto: false, hasAttachments: false, body: { html: "<p>hi</p>", text: null, attachments: [] }, loadImages: false });
   const a = [base("m1"), base("m2")];
   assert.equal(sameMessages(a, [base("m1"), base("m2")]), true);
   assert.equal(sameMessages(a, [base("m1"), base("m2"), base("m3")]), false, "a reply arrived");

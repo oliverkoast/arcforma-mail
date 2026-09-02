@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getClassification, getSetting, listThreadMessages, openStore, setSetting, upsertAccount, upsertClassification, upsertThreadFromGmail, type Db } from "@arcforma/store";
+import { attentionContext, getClassification, getSetting, listThreadMessages, openStore, setSetting, upsertAccount, upsertClassification, upsertThreadFromGmail, type Db } from "@arcforma/store";
 import { AiClient, type FetchLike } from "../ai/client.js";
 import { Classifier, classifyThread } from "./pipeline.js";
 
@@ -50,7 +50,8 @@ function fakeFetch(handler: (url: string) => { status: number; body: unknown } |
   return { fetch, urls };
 }
 
-const ctx = { repliedDomains: new Set<string>(), repliedAddresses: new Set<string>(), ownerAddresses: new Set(["you@example.com"]) };
+/** The classifier context, with the attention half read from whichever store the test just built. */
+const ctxOf = (db: Db) => ({ repliedDomains: new Set<string>(), repliedAddresses: new Set<string>(), ownerAddresses: new Set(["you@example.com"]), attention: attentionContext(db) });
 
 /** One inbound message the header rules can type on their own. */
 function ruledThread(id: string, from: string, subject: string, headers: Record<string, string> = {}, hoursAgo = 1) {
@@ -78,8 +79,16 @@ test("the residue goes to /v1/classify only; background classification never cal
   upsertThreadFromGmail(db, "arcforma", residueThread("t1"), { ownerAddresses: ["you@example.com"] });
   const { fetch, urls } = fakeFetch((url) => (url.endsWith("/v1/classify") ? { status: 200, body: { ok: true, json: { split: "important", type: "none", category: "none", confidence: 0.91 }, text: "", latencyMs: 3 } } : { status: 500, body: { ok: false, error: "wrong endpoint" } }));
   const ai = new AiClient({ configFile: configFile(), fetch });
-  const out = await classifyThread(db, ai, "arcforma", "t1", ctx);
-  assert.deepEqual(out, { split: "important", type: null, categoryId: null, confidence: 0.91, source: "local" });
+  const out = await classifyThread(db, ai, "arcforma", "t1", ctxOf(db));
+  // The model names the type; the attention model decides the split, and Dana asking a question of a
+  // thread addressed to him alone is Important with a reason attached.
+  assert.equal(out?.type, null);
+  assert.equal(out?.categoryId, null);
+  assert.equal(out?.confidence, 0.91);
+  assert.equal(out?.source, "local");
+  assert.equal(out?.split, "important");
+  assert.ok((out?.attention ?? 0) > 0, "the verdict carries an attention score");
+  assert.ok(out?.reason, "the verdict carries a reason");
   assert.deepEqual(urls.map((u) => new URL(u).pathname), ["/v1/classify"]);
   assert.equal(urls.some((u) => u.includes("/v1/complete")), false);
 });
@@ -89,7 +98,7 @@ test("below the 0.55 floor the thread stays Other with no category", async () =>
   upsertThreadFromGmail(db, "arcforma", residueThread("t1"), { ownerAddresses: ["you@example.com"] });
   const { fetch } = fakeFetch(() => ({ status: 200, body: { ok: true, json: { split: "important", type: "none", category: "none", confidence: 0.54 }, text: "", latencyMs: 3 } }));
   const ai = new AiClient({ configFile: configFile(), fetch });
-  const out = await classifyThread(db, ai, "arcforma", "t1", ctx);
+  const out = await classifyThread(db, ai, "arcforma", "t1", ctxOf(db));
   assert.equal(out?.split, "other");
   assert.equal(out?.categoryId, null);
 });
@@ -150,9 +159,14 @@ test("a rules version bump re-decides every rule verdict and leaves model verdic
   // nothing is written, and what matters is that the stale Newsletters verdict is gone for good.
   assert.equal(getClassification(db, "arcforma", "t-person")?.type ?? null, null, "a person's mail keeps no type at all");
   const model = getClassification(db, "arcforma", "t-model");
-  assert.deepEqual({ split: model?.split, type: model?.type, source: model?.source, confidence: model?.confidence }, { split: "important", type: null, source: "local", confidence: 0.8 }, "a model verdict is untouched");
+  assert.deepEqual({ type: model?.type, source: model?.source, confidence: model?.confidence }, { type: null, source: "local", confidence: 0.8 }, "the rules sweep leaves a model verdict's type alone");
+  // The split is no longer the model's to keep: the attention sweep owns it, and a mailing list
+  // nobody addressed personally scores nothing, so this one drops out of Important.
+  assert.equal(model?.split, "other", "the attention sweep re-decided the split of a bulk thread");
+  assert.equal(model?.band, "other");
   const manual = getClassification(db, "arcforma", "t-manual");
-  assert.deepEqual({ split: manual?.split, type: manual?.type, source: manual?.source }, { split: "important", type: null, source: "manual" }, "a correction is untouched");
+  assert.deepEqual({ split: manual?.split, type: manual?.type, source: manual?.source }, { split: "important", type: null, source: "manual" }, "a correction is untouched, split and all");
+  assert.equal(manual?.band, "important", "the band follows the split the user chose");
   assert.equal(urls.length <= 1, true, "the sweep needs no model, so at most the one residue call was tried");
 });
 

@@ -141,11 +141,19 @@ CREATE TABLE IF NOT EXISTS classifications (
   confidence      REAL NOT NULL DEFAULT 0,
   source          TEXT NOT NULL DEFAULT 'rule',
   last_message_id TEXT,
+  -- The attention model (schema 12): a 0 to 100 score, the band it falls in
+  -- (needs_you, important, other), and the sentence that explains the verdict.
+  -- split stays the column every older query reads: needs_you and important
+  -- both file as important.
+  attention       INTEGER NOT NULL DEFAULT 0,
+  band            TEXT NOT NULL DEFAULT 'other',
+  reason          TEXT,
   classified_at   INTEGER NOT NULL,
   PRIMARY KEY (account_id, thread_id),
   FOREIGN KEY (account_id, thread_id) REFERENCES threads(account_id, id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS classifications_split ON classifications(split, type, category_id);
+CREATE INDEX IF NOT EXISTS classifications_band ON classifications(band, attention DESC);
 
 CREATE TABLE IF NOT EXISTS corrections (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

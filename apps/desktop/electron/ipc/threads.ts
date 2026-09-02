@@ -58,6 +58,9 @@ export function toSummary(row: ThreadListRow): ThreadSummary {
     split: row.split ?? null,
     type: row.type ?? null,
     categoryId: row.category_id ?? null,
+    attention: row.attention ?? null,
+    band: row.band ?? null,
+    attentionReason: row.attention_reason ?? null,
     wakeAt: row.wake_at ?? null,
     noReplyBy: row.no_reply_by ?? null,
     queue: row.queue ?? null,
@@ -70,9 +73,13 @@ function toMessageView(db: Db, m: MessageRow): MessageView {
   const body = getBody(db, m.account_id, m.id);
   const contact = getContact(db, m.from_email);
   let replyTo: Address | null = null;
+  // The store parses Bcc into its own column at sync time; the header is the fallback for a row written before it did.
+  let bcc: Address[] = [];
   try {
     const headers = JSON.parse(m.headers_json) as Record<string, string>;
     replyTo = parseAddressList(headers["Reply-To"] ?? "")[0] ?? null;
+    bcc = (JSON.parse(m.bcc_json) as Address[]) ?? [];
+    if (!bcc.length) bcc = parseAddressList(headers["Bcc"] ?? "");
   } catch {
     replyTo = null;
   }
@@ -85,6 +92,7 @@ function toMessageView(db: Db, m: MessageRow): MessageView {
     replyTo,
     to: JSON.parse(m.to_json) as Address[],
     cc: JSON.parse(m.cc_json) as Address[],
+    bcc,
     messageIdHeader: m.message_id_header,
     references: m.references_header,
     subject: m.subject,
@@ -180,7 +188,7 @@ export function registerThreadIpc(db: Db, accounts: AccountRegistry, sync: SyncM
       }
     }
     // The same columns the list carries, so the header shows the snooze, reminder, queue, and file state for any thread, not only the newest one.
-    const summaryRow = getThreadListRow(db, accountId, threadId) ?? ({ ...row, split: null, type: null, category_id: null, wake_at: null, no_reply_by: null, queue: null, unsubscribe_state: null, can_unsubscribe: 0 } as ThreadListRow);
+    const summaryRow = getThreadListRow(db, accountId, threadId) ?? ({ ...row, split: null, type: null, category_id: null, attention: null, band: null, attention_reason: null, wake_at: null, no_reply_by: null, queue: null, unsubscribe_state: null, can_unsubscribe: 0 } as ThreadListRow);
     return { thread: toSummary(summaryRow), messages: messages.map((m) => toMessageView(db, m)), bodiesPending: bodiesError !== null, bodiesError };
   });
 

@@ -3,10 +3,26 @@
 // Never touches Claude. Idle when the daemon is down; retries on the next poke.
 
 import { getSetting, setSetting } from "@arcforma/store";
-import { getBody, listCategories, listThreadMessages, recentThreads, repliedTo, threadsNeedingClassification, upsertClassification, changeThreadLabels, type Db } from "@arcforma/store";
+import {
+  attentionContext,
+  attentionFactsFor,
+  getBody,
+  listCategories,
+  listThreadMessages,
+  recentThreads,
+  repliedTo,
+  threadsNeedingClassification,
+  updateAttention,
+  upsertClassification,
+  changeThreadLabels,
+  type AttentionBand,
+  type AttentionContext,
+  type Db,
+} from "@arcforma/store";
 import { AiError, type AiClient } from "../ai/client.js";
 import { emit } from "../events.js";
 import { log, logError } from "../log.js";
+import { scoreAttention, splitForBand } from "./attention.js";
 import { labelForCategory, threadExcerpt } from "./corrections.js";
 import { classifyLocally } from "./local.js";
 import { classifyByRules, pickDecidingMessage, ruleInputFromRow } from "./rules.js";
@@ -17,6 +33,11 @@ export interface ClassifyOutcome {
   categoryId: string | null;
   confidence: number;
   source: "rule" | "local";
+  /** 0 to 100 from the attention model. */
+  attention: number;
+  band: AttentionBand;
+  /** One sentence saying why the thread landed in its band. */
+  reason: string;
 }
 
 /** What both passes need to run the rules. Built once per pass, because each half is a full table scan. */
@@ -24,9 +45,34 @@ export interface ClassifyContext {
   repliedDomains: Set<string>;
   repliedAddresses: Set<string>;
   ownerAddresses: Set<string>;
+  /** The shared half of the attention model: who he writes to, sender volume, archive behaviour, re-files. */
+  attention: AttentionContext;
 }
 
-/** The deterministic half. Null when the rules have no verdict and the model has to look. */
+/**
+ * The attention half, for a thread whose type is already decided. The split
+ * follows the band, so needs_you and important both read as Important
+ * everywhere the split column is used. modelSaidImportant is only consulted
+ * inside the grey zone; see classify/attention.ts.
+ */
+export function attentionFor(
+  db: Db,
+  accountId: string,
+  threadId: string,
+  ctx: ClassifyContext,
+  opts: { type: string | null; modelSaidImportant?: boolean }
+): { split: "important" | "other"; attention: number; band: AttentionBand; reason: string } | null {
+  const facts = attentionFactsFor(db, accountId, threadId, ctx.attention, { type: opts.type });
+  if (!facts) return null;
+  const verdict = scoreAttention(facts, { modelSaidImportant: opts.modelSaidImportant });
+  return { split: splitForBand(verdict.band), attention: verdict.score, band: verdict.band, reason: verdict.reason };
+}
+
+/**
+ * The deterministic half: the mailbox type from the header rules, then the
+ * attention model over it. Null when the rules cannot type the thread and the
+ * model has to look; the type is what the model is for, not the split.
+ */
 export function ruleVerdictFor(db: Db, accountId: string, threadId: string, ctx: ClassifyContext): ClassifyOutcome | null {
   const messages = listThreadMessages(db, accountId, threadId);
   const deciding = pickDecidingMessage(messages);
@@ -35,21 +81,42 @@ export function ruleVerdictFor(db: Db, accountId: string, threadId: string, ctx:
   const hasOutbound = messages.some((m) => m.direction === "out");
   const verdict = classifyByRules(ruleInputFromRow(deciding, body?.attachments_json, hasOutbound), ctx);
   if (!verdict.split) return null;
-  return { split: verdict.split, type: verdict.type, categoryId: null, confidence: 1, source: "rule" };
+  const attention = attentionFor(db, accountId, threadId, ctx, { type: verdict.type });
+  if (!attention) return null;
+  return { split: attention.split, type: verdict.type, categoryId: null, confidence: 1, source: "rule", attention: attention.attention, band: attention.band, reason: attention.reason };
 }
 
-/** Rules, then the local model. Throws AiError when the model is needed and unavailable. */
+/** Rules, then the local model for the type it could not name. Throws AiError when the model is needed and unavailable. */
 export async function classifyThread(db: Db, ai: AiClient, accountId: string, threadId: string, ctx: ClassifyContext): Promise<ClassifyOutcome | null> {
   if (listThreadMessages(db, accountId, threadId).length === 0) return null;
   const byRules = ruleVerdictFor(db, accountId, threadId, ctx);
   if (byRules) return byRules;
   const { excerpt } = threadExcerpt(db, accountId, threadId);
   const local = await classifyLocally(db, ai, excerpt);
-  return { split: local.split, type: local.type, categoryId: local.categoryId, confidence: local.confidence, source: "local" };
+  const attention = attentionFor(db, accountId, threadId, ctx, { type: local.type, modelSaidImportant: local.split === "important" });
+  if (!attention) return null;
+  return {
+    split: attention.split,
+    type: local.type,
+    categoryId: local.categoryId,
+    confidence: local.confidence,
+    source: "local",
+    attention: attention.attention,
+    band: attention.band,
+    reason: attention.reason,
+  };
 }
 
 /** Bump when a rule changes meaning, so stored rule verdicts get re-evaluated once. */
 const RULES_VERSION = 3;
+
+/**
+ * Bump when the attention weights or the bands change. Unlike the rules
+ * version, this does not throw verdicts away: the sweep rescores every thread
+ * that already has one, in place, leaving the type and the category alone. A
+ * re-file keeps its split, because that one was the user's answer, not a guess.
+ */
+const ATTENTION_VERSION = 1;
 
 /** Threads per batch. Small enough that a batch of rules work never holds the main process for long. */
 const SWEEP_BATCH = 200;
@@ -75,9 +142,65 @@ export class Classifier {
 
   start(): void {
     const reset = this.reclassifyAfterRuleChange();
+    const rescore = getSetting(this.db, "attentionVersion") < ATTENTION_VERSION;
     this.timer = setInterval(() => this.poke(), 60_000);
-    if (reset > 0) void this.sweepRules();
-    else this.poke();
+    // The attention sweep runs after the rules sweep, never beside it: a thread whose type is about
+    // to change would otherwise be scored against the type it is losing.
+    void (async () => {
+      if (reset > 0) await this.sweepRules();
+      else if (!rescore) this.poke();
+      if (rescore) {
+        await this.sweepAttention();
+        this.poke();
+      }
+    })();
+  }
+
+  /**
+   * Scores every thread that already carries a verdict, so a weight change
+   * reaches the whole mailbox without asking the model for anything. Batched
+   * with a yield between batches, like the rules sweep. Returns how many moved.
+   */
+  async sweepAttention(): Promise<number> {
+    const ctx = this.context();
+    const page = this.db.prepare(
+      `SELECT c.account_id, c.thread_id, c.type, c.source, c.split, c.band
+       FROM classifications c
+       WHERE c.account_id > ? OR (c.account_id = ? AND c.thread_id > ?)
+       ORDER BY c.account_id, c.thread_id LIMIT ?`
+    );
+    let atAccount = "";
+    let atThread = "";
+    let scored = 0;
+    let moved = 0;
+    for (;;) {
+      if (this.stopped) break;
+      const work = page.all(atAccount, atAccount, atThread, SWEEP_BATCH) as unknown as Array<{ account_id: string; thread_id: string; type: string | null; source: string; split: string; band: string }>;
+      if (work.length === 0) break;
+      atAccount = work[work.length - 1]!.account_id;
+      atThread = work[work.length - 1]!.thread_id;
+      const touched = new Set<string>();
+      for (const row of work) {
+        try {
+          const out = attentionFor(this.db, row.account_id, row.thread_id, ctx, { type: row.type });
+          if (!out) continue;
+          scored += 1;
+          // A re-file is the user's answer. Keep the split they chose and record the score beside it.
+          const split = row.source === "manual" ? (row.split === "important" ? "important" : "other") : out.split;
+          const band: AttentionBand = row.source === "manual" ? (split === "important" ? "important" : "other") : out.band;
+          if (split !== row.split || band !== row.band) moved += 1;
+          updateAttention(this.db, { accountId: row.account_id, threadId: row.thread_id, split, attention: out.attention, band, reason: out.reason });
+          touched.add(row.account_id);
+        } catch (err) {
+          logError("classify", `attention ${row.account_id}/${row.thread_id}`, err);
+        }
+      }
+      if (touched.size) this.onChanged(touched);
+      await yieldToLoop();
+    }
+    setSetting(this.db, "attentionVersion", ATTENTION_VERSION);
+    log("classify", `attention v${ATTENTION_VERSION}: scored ${scored} thread(s), ${moved} changed band`);
+    return moved;
   }
 
   /**
@@ -129,7 +252,7 @@ export class Classifier {
           const out = ruleVerdictFor(this.db, t.account_id, t.id, ctx);
           if (!out) continue;
           const last = listThreadMessages(this.db, t.account_id, t.id).at(-1);
-          upsertClassification(this.db, { accountId: t.account_id, threadId: t.id, split: out.split, type: out.type, categoryId: out.categoryId, confidence: out.confidence, source: out.source, lastMessageId: last?.id ?? null });
+          upsertClassification(this.db, { accountId: t.account_id, threadId: t.id, split: out.split, type: out.type, categoryId: out.categoryId, confidence: out.confidence, source: out.source, lastMessageId: last?.id ?? null, attention: out.attention, band: out.band, reason: out.reason });
           decided += 1;
           touched.add(t.account_id);
         } catch (err) {
@@ -147,7 +270,12 @@ export class Classifier {
   /** The replied-to sets and the owner addresses, read once per pass. */
   private context(): ClassifyContext {
     const replied = repliedTo(this.db, 90);
-    return { repliedDomains: replied.domains, repliedAddresses: replied.addresses, ownerAddresses: new Set(this.ownerAddresses().map((a) => a.toLowerCase())) };
+    return {
+      repliedDomains: replied.domains,
+      repliedAddresses: replied.addresses,
+      ownerAddresses: new Set(this.ownerAddresses().map((a) => a.toLowerCase())),
+      attention: attentionContext(this.db),
+    };
   }
 
   stop(): void {
@@ -192,7 +320,7 @@ export class Classifier {
         const out = await classifyThread(this.db, this.ai, t.account_id, t.id, ctx);
         if (!out) continue;
         const last = listThreadMessages(this.db, t.account_id, t.id).at(-1);
-        upsertClassification(this.db, { accountId: t.account_id, threadId: t.id, split: out.split, type: out.type, categoryId: out.categoryId, confidence: out.confidence, source: out.source, lastMessageId: last?.id ?? null });
+        upsertClassification(this.db, { accountId: t.account_id, threadId: t.id, split: out.split, type: out.type, categoryId: out.categoryId, confidence: out.confidence, source: out.source, lastMessageId: last?.id ?? null, attention: out.attention, band: out.band, reason: out.reason });
         touched.add(t.account_id);
       } catch (err) {
         if (err instanceof AiError) {
@@ -230,7 +358,7 @@ export class Classifier {
           const out = await classifyThread(this.db, this.ai, t.account_id, t.id, ctx);
           if (!out) continue;
           const last = listThreadMessages(this.db, t.account_id, t.id).at(-1);
-          upsertClassification(this.db, { accountId: t.account_id, threadId: t.id, split: out.split, type: out.type, categoryId: out.categoryId, confidence: out.confidence, source: out.source, lastMessageId: last?.id ?? null });
+          upsertClassification(this.db, { accountId: t.account_id, threadId: t.id, split: out.split, type: out.type, categoryId: out.categoryId, confidence: out.confidence, source: out.source, lastMessageId: last?.id ?? null, attention: out.attention, band: out.band, reason: out.reason });
           const label = labelForCategory(categories, out.categoryId);
           if (label) changeThreadLabels(this.db, t.account_id, t.id, { addNames: [label] });
           touched.add(t.account_id);

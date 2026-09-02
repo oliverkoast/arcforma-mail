@@ -60,7 +60,22 @@ export function refileThread(db: Db, accountId: string, threadId: string, to: Re
     to: { split: to.split, type: next.type, category: next.categoryId },
     excerpt,
   });
-  upsertClassification(db, { accountId, threadId, split: to.split, type: next.type, categoryId: next.categoryId, confidence: 1, source: "manual", lastMessageId: messageId });
+  // The correction is what teaches the attention model: demotedSenders() reads the sender back out
+  // of the excerpt, and every later thread from that address scores lower. The band follows the
+  // split the user chose, so a thread re-filed out of Needs you leaves the row at once.
+  upsertClassification(db, {
+    accountId,
+    threadId,
+    split: to.split,
+    type: next.type,
+    categoryId: next.categoryId,
+    confidence: 1,
+    source: "manual",
+    lastMessageId: messageId,
+    attention: to.split === "important" ? Math.max(current?.attention ?? 0, 1) : 0,
+    band: to.split === "important" ? "important" : "other",
+    reason: to.split === "important" ? "You filed this as Important." : "You filed this out of Important.",
+  });
   const oldLabel = labelForCategory(categories, current?.category_id ?? current?.type ?? null);
   const newLabel = labelForCategory(categories, next.categoryId ?? next.type);
   if (oldLabel === newLabel) return null;

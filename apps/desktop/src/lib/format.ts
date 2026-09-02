@@ -85,3 +85,23 @@ export function eyebrowDate(t: number, withTime = false): string {
 export function sendsAt(t: number): string {
   return new Date(t).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" });
 }
+
+/** The most characters the list row's reason eyebrow can hold on one line at the mono size. */
+export const EYEBROW_CHARS = 34;
+
+/**
+ * The one-line form of an attention reason, for the list row. The stored
+ * sentence says the whole thing ("Sam asked a question, you have not replied in
+ * 4 days, and you have written to them 11 times"); a mail row has space for the
+ * first clause of it, and the full sentence is a hover away. Cut at a word
+ * boundary so the eyebrow never wraps and pushes the row out of the list's
+ * measured height.
+ */
+export function attentionEyebrow(reason: string | null): string | null {
+  const first = (reason ?? "").split(",")[0]?.trim() ?? "";
+  if (!first) return null;
+  if (first.length <= EYEBROW_CHARS) return first;
+  const cut = first.slice(0, EYEBROW_CHARS);
+  const at = cut.lastIndexOf(" ");
+  return (at > 0 ? cut.slice(0, at) : cut).trim();
+}

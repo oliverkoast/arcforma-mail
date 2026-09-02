@@ -332,13 +332,24 @@ const SMOKE_STEPS: Array<{ name: string; script: string | null; main?: (ctx: Smo
   { name: "calendar", script: "window.__arcmail.closeAsk(); window.__arcmail.toggleRail('calendar');", waitMs: 1500 },
   { name: "availability", script: "window.__arcmailCalendar.showAvailability(true); await new Promise((r) => setTimeout(r, 400)); window.__arcmailCalendar.pickDemo();", waitMs: 1200 },
   { name: "contact", script: "window.__arcmail.toggleRail('contact');", waitMs: 2500 },
-  { name: "daily", script: "window.__arcmail.toggleRail('contact'); window.__arcmail.setView('daily');", waitMs: 1500 },
+  // The Needs you row at the head of the Queues group, with its count and the sentence that says what it holds.
+  { name: "needs-you-row", script: "window.__arcmail.toggleRail('contact'); window.__arcmail.setView('inbox');", hover: ".nav-row[data-row-id='needsyou'] .nav-item", waitMs: 1200 },
+  // The list itself: each row leads with the mono reason eyebrow saying who asked and how long it has waited.
+  // The pointer moves off the sidebar so the row shows its count rather than its hover controls.
+  { name: "needs-you-list", script: "window.__arcmail.setView('needsyou');", hover: ".list-head", waitMs: 1500 },
+  { name: "daily", script: "window.__arcmail.setView('daily');", waitMs: 1500 },
   // E through the queue: each press clears one and advances to the next, until the empty state and its cleared count.
   { name: "daily-empty", script: "for (let i = 0; i < 12 && window.__arcmail.rows.length > 0; i++) { await window.__arcmail.archiveSelected(); await new Promise((r) => setTimeout(r, 300)); }", waitMs: 1500 },
   // The sidebar's add popover, opened from the Inbox group's hover "+" glyph; the buttons are in the DOM whether or not the pointer is over them.
   { name: "sidebar-add", script: "window.__arcmail.setView('inbox'); document.querySelector('.nav-group[data-group=\"inbox\"] .nav-add').click();", waitMs: 1200 },
   { name: "scheduled", script: "window.__arcmail.closeSidebarMenu(); window.__arcmail.setView('scheduled'); await new Promise((r) => setTimeout(r, 600)); window.__arcmail.select(0); await window.__arcmail.openSelected();", waitMs: 2000 },
   { name: "splash", script: "window.__arcmail.setView('drafts');", main: (ctx) => fakeBackfill(ctx, 40, 100), waitMs: 1800 },
+  // The recipient line opened: every address on the message, grouped To and Cc, with the owner's own read as "you".
+  { name: "message-recipients", script: "window.__arcmail.setView('inbox'); await new Promise((r) => setTimeout(r, 600)); await window.__arcmail.openThreadById('arcforma', 't-kickoff'); await new Promise((r) => setTimeout(r, 1500)); document.querySelector('.message.is-last .message-to').click(); document.querySelector('.message.is-last').scrollIntoView({ block: 'start' });", waitMs: 1000 },
+  // A newsletter whose unsubscribe line, postal address, and copyright sit behind one SHOW FOOTER toggle, its tracking pixel gone.
+  { name: "footer-folded", script: "await window.__arcmail.openThreadById('formai', 't-vendor'); await new Promise((r) => setTimeout(r, 1500)); document.querySelector('.messages').scrollTop = 0;", waitMs: 1200 },
+  // The same message with the footer open: nothing was deleted, it was one click away.
+  { name: "footer-expanded", script: "document.querySelector('.message.is-last iframe').contentDocument.querySelector('details.quote-fold').open = true;", waitMs: 1000 },
 ];
 
 /**

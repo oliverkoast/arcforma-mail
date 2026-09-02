@@ -44,6 +44,12 @@ export interface ThreadSummary {
   split: "important" | "other" | null;
   type: string | null;
   categoryId: string | null;
+  /** 0 to 100 from the attention model, null when the thread has no verdict yet. */
+  attention: number | null;
+  /** needs_you, important, or other. needs_you and important both carry split = important. */
+  band: AttentionBand | null;
+  /** One sentence saying why the thread landed in its band, for the row eyebrow and the thread head. */
+  attentionReason: string | null;
   wakeAt: number | null;
   /** Set when a remind-if-no-reply fired and nothing has arrived since: eyebrow NO REPLY BY. */
   noReplyBy: number | null;
@@ -56,6 +62,9 @@ export interface ThreadSummary {
   /** Set on the pseudo-threads the Scheduled view lists: a send_queue row waiting for its send-later time. */
   scheduled?: ScheduledInfo | null;
 }
+
+/** needs_you is Important that is waiting on a reply from Oliver; important is Important that is not. */
+export type AttentionBand = "needs_you" | "important" | "other";
 
 export type UnsubscribeState = "none" | "sent" | "opened" | "failed";
 
@@ -92,6 +101,8 @@ export interface MessageView {
   replyTo: Address | null;
   to: Address[];
   cc: Address[];
+  /** Blind copies, from the stored Bcc header. Only ever on the messages the owner sent. */
+  bcc: Address[];
   messageIdHeader: string | null;
   references: string | null;
   subject: string;
@@ -113,7 +124,7 @@ export interface ThreadView {
   bodiesError?: string | null;
 }
 
-export type InboxView = "inbox" | "all" | "snoozed" | "sent" | "drafts" | "starred" | "unread" | "attachments" | "scheduled" | "archive" | "spam" | "trash" | `search:${string}` | QueueName;
+export type InboxView = "inbox" | "all" | "snoozed" | "sent" | "drafts" | "starred" | "unread" | "attachments" | "scheduled" | "archive" | "spam" | "trash" | "needsyou" | `search:${string}` | QueueName;
 
 export interface ListRequest {
   view: InboxView;
@@ -174,13 +185,15 @@ export interface SidebarCounts extends Counts {
   scheduled: number;
   important: number;
   other: number;
+  /** Inbox threads a person asked something in and nothing has gone back to. */
+  needsYou: number;
   /** Inbox threads per builtin type and custom category id. */
   categories: Record<string, number>;
   /** Matching threads per saved search id. */
   searches: Record<string, number>;
 }
 
-export const EMPTY_SIDEBAR_COUNTS: SidebarCounts = { ...EMPTY_COUNTS, attachments: 0, archive: 0, spam: 0, trash: 0, starred: 0, scheduled: 0, important: 0, other: 0, categories: {}, searches: {} };
+export const EMPTY_SIDEBAR_COUNTS: SidebarCounts = { ...EMPTY_COUNTS, attachments: 0, archive: 0, spam: 0, trash: 0, starred: 0, scheduled: 0, important: 0, other: 0, needsYou: 0, categories: {}, searches: {} };
 
 export interface SavedSearchInfo {
   id: number;

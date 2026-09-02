@@ -48,6 +48,12 @@ export interface ThreadListRow extends ThreadRow {
   split: "important" | "other" | null;
   type: string | null;
   category_id: string | null;
+  /** 0 to 100 from the attention model, null when the thread has no verdict yet. */
+  attention: number | null;
+  /** needs_you, important, or other. needs_you and important both carry split = important. */
+  band: "needs_you" | "important" | "other" | null;
+  /** One sentence saying why the thread landed in its band. */
+  attention_reason: string | null;
   wake_at: number | null;
   /** Due date of a fired remind-if-no-reply that nothing newer has answered. */
   no_reply_by: number | null;
@@ -219,6 +225,11 @@ export interface ClassificationRow {
   confidence: number;
   source: "rule" | "local" | "manual";
   last_message_id: string | null;
+  /** 0 to 100 from the attention model. */
+  attention: number;
+  band: "needs_you" | "important" | "other";
+  /** One sentence saying why. */
+  reason: string | null;
   classified_at: number;
 }
 
@@ -289,6 +300,10 @@ export interface ClassificationInput {
   confidence?: number;
   source?: "rule" | "local" | "manual";
   lastMessageId?: string | null;
+  /** 0 to 100 from the attention model. Left at 0 when the caller has not scored the thread. */
+  attention?: number;
+  band?: "needs_you" | "important" | "other";
+  reason?: string | null;
 }
 
 // ---- Gmail wire subset -----------------------------------------------------
@@ -347,7 +362,7 @@ export interface ApplyHistoryResult {
   lastHistoryId: string | null;
 }
 
-export type InboxView = "inbox" | "all" | "snoozed" | "sent" | "drafts" | "starred" | "daily" | "weekly" | "later" | "unread" | "attachments" | "archive" | "spam" | "trash";
+export type InboxView = "inbox" | "all" | "snoozed" | "sent" | "drafts" | "starred" | "needsyou" | "daily" | "weekly" | "later" | "unread" | "attachments" | "archive" | "spam" | "trash";
 
 export interface SavedSearchRow {
   id: number;

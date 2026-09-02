@@ -8,7 +8,7 @@ import { reindexAllMessages } from "./queries/messages.js";
 
 export type Db = DatabaseSync;
 
-const SCHEMA_VERSION = 11;
+const SCHEMA_VERSION = 12;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
@@ -154,6 +154,29 @@ UPDATE categories SET position = 5, prompt = 'Transactional or platform alerts r
 UPDATE categories SET position = 6 WHERE id = 'receipts';
 `;
 
+// Version 12: the attention model. Every classification gains a 0 to 100 score,
+// the band it lands in, and the sentence that explains it. split is untouched,
+// so every query written before this still reads the same column; needs_you and
+// important both file as important there. Existing rows start at band 'other'
+// with a score of 0, and the classifier's attention sweep fills them in on the
+// next start.
+const MIGRATION_12_COLUMNS: Array<[string, string]> = [
+  ["attention", "INTEGER NOT NULL DEFAULT 0"],
+  ["band", "TEXT NOT NULL DEFAULT 'other'"],
+  ["reason", "TEXT"],
+];
+
+/** ALTER TABLE ADD COLUMN has no IF NOT EXISTS, so each column is checked first; the step can then rerun like the others. */
+function migrateAttention(db: Db): void {
+  const have = new Set((db.prepare("PRAGMA table_info(classifications)").all() as Array<{ name: string }>).map((c) => c.name));
+  for (const [name, type] of MIGRATION_12_COLUMNS) {
+    if (!have.has(name)) db.exec(`ALTER TABLE classifications ADD COLUMN ${name} ${type}`);
+  }
+  // An existing important row keeps its split until the sweep re-decides it, so the band starts where the split is.
+  db.exec("UPDATE classifications SET band = 'important' WHERE split = 'important' AND band = 'other'");
+  db.exec("CREATE INDEX IF NOT EXISTS classifications_band ON classifications(band, attention DESC)");
+}
+
 /** Opens (or creates) the store, applies pragmas, and migrates to the current schema. */
 export function openStore(file: string): Db {
   if (file !== ":memory:") fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -195,6 +218,7 @@ export function migrate(db: Db): void {
     // A thread holding nothing but a draft used to survive as a phantom row (listed under All Mail, opened empty). Recompute removes it.
     { version: 10, sql: () => "SELECT 1", after: (d) => recomputeThreadsWithDrafts(d) },
     { version: 11, sql: () => MIGRATION_11 },
+    { version: 12, sql: () => "SELECT 1", after: (d) => migrateAttention(d) },
   ];
   for (const step of steps) {
     if (step.version <= current) continue;

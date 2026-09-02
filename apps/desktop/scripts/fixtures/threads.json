@@ -422,7 +422,7 @@
             "List-Unsubscribe": "<mailto:unsub@product-weekly.example>",
             "List-Id": "product-weekly.example"
           },
-          "html": "<p>Five releases worth a look.</p>"
+          "html": "<div><p>Five releases worth a look this week, including the new editor and a faster import.</p><p>The editor rewrite lands for everyone on Thursday. Import gets a progress bar, and the old CSV path goes away at the end of the month.</p><img src=\"https://track.product-weekly.example/o.gif\" width=\"1\" height=\"1\"><div>You are receiving this because you subscribed to Product Weekly at product-weekly.example.</div><div><a href=\"https://product-weekly.example/u/9f2\">Unsubscribe</a> | <a href=\"https://product-weekly.example/prefs\">Manage preferences</a> | <a href=\"https://product-weekly.example/web/41\">View in browser</a></div><div>Product Weekly, 1200 Market Street, Suite 400, Springfield, IL 62704</div><div>Copyright 2026 Product Weekly. All rights reserved.</div></div>"
         }
       ],
       "queue": {
@@ -644,6 +644,74 @@
           "html": "<p>Four years of TypeScript and Postgres. Open the profile to reply.</p>"
         }
       ]
+    },
+    {
+      "accountId": "arcforma",
+      "id": "t-notice",
+      "messages": [
+        {
+          "id": "m-n1",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "sam@harbor-legal.example",
+          "subject": "Harbor Legal | engagement letter",
+          "hoursAgo": 60,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>Sam, the redlines are back with you. Anything else before we sign?</p>"
+        },
+        {
+          "id": "m-n2",
+          "from": "Sam Okafor <sam@harbor-legal.example>",
+          "to": "you@example.com",
+          "subject": "Re: Harbor Legal | engagement letter",
+          "hoursAgo": 34,
+          "labels": [
+            "INBOX",
+            "UNREAD"
+          ],
+          "html": "<p>One open point left. Can you confirm the termination notice period by Friday so we can file on time?</p>"
+        }
+      ],
+      "classification": {
+        "split": "important",
+        "source": "local",
+        "confidence": 0.9
+      }
+    },
+    {
+      "accountId": "arcforma",
+      "id": "t-testimonial",
+      "messages": [
+        {
+          "id": "m-w1",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "mika@lumen-studio.example",
+          "subject": "Lumen Studio | site is live",
+          "hoursAgo": 90,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>Mika, the site is live. Thank you for the push on the timeline.</p>"
+        },
+        {
+          "id": "m-w2",
+          "from": "Mika Alvarez <mika@lumen-studio.example>",
+          "to": "you@example.com",
+          "subject": "Re: Lumen Studio | site is live",
+          "hoursAgo": 38,
+          "labels": [
+            "INBOX",
+            "UNREAD"
+          ],
+          "html": "<p>Glad it is out. Would you be up for a short testimonial? Please let me know by the end of the week.</p>"
+        }
+      ],
+      "classification": {
+        "split": "important",
+        "source": "local",
+        "confidence": 0.9
+      }
     }
   ],
   "calendar": [

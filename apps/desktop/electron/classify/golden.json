@@ -1,28 +1,62 @@
 {
   "note": "Synthetic labelled messages for the classifier. No real people, and no real company beyond the well-known service domains the rules name by hand. expect.rules is what the header rules alone should return: a split and type, or null when the rules are meant to pass the message to the local model.",
   "context": {
-    "repliedDomains": ["northwind-coaching.example", "harbor-legal.example", "lumen-studio.example", "vector-labs.example", "granite-partners.example", "stone-bridge.example"],
-    "ownerAddresses": ["you@example.com", "you@example.net", "you@gmail.com"],
-    "sentAddresses": ["rowan.hale@vector-labs.example"]
+    "repliedDomains": [
+      "northwind-coaching.example",
+      "harbor-legal.example",
+      "lumen-studio.example",
+      "vector-labs.example",
+      "granite-partners.example",
+      "stone-bridge.example"
+    ],
+    "ownerAddresses": [
+      "you@example.com",
+      "you@example.net",
+      "you@gmail.com"
+    ],
+    "sentAddresses": [
+      "rowan.hale@vector-labs.example"
+    ]
   },
   "messages": [
     {
       "id": "g01",
       "from": "digest@weekly-notes.example",
       "subject": "This week in AI tooling",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@weekly-notes.example>", "List-Id": "weekly-notes.example" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@weekly-notes.example>",
+        "List-Id": "weekly-notes.example"
+      },
       "body": "Five things worth reading this week.",
-      "label": { "split": "other", "type": "newsletters" },
-      "expect": { "rules": { "split": "other", "type": "newsletters" } }
+      "label": {
+        "split": "other",
+        "type": "newsletters"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "newsletters"
+        }
+      }
     },
     {
       "id": "g02",
       "from": "notifications@github.com",
       "subject": "[arcforma/portal] PR #12 merged",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@github.com>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@github.com>"
+      },
       "body": "Merged by a teammate.",
-      "label": { "split": "other", "type": "notifications" },
-      "expect": { "rules": { "split": "other", "type": "notifications" } }
+      "label": {
+        "split": "other",
+        "type": "notifications"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "notifications"
+        }
+      }
     },
     {
       "id": "g03",
@@ -30,8 +64,16 @@
       "subject": "Your receipt from Example Co",
       "headers": {},
       "body": "Amount paid 149.00 USD.",
-      "label": { "split": "other", "type": "receipts" },
-      "expect": { "rules": { "split": "other", "type": "receipts" } }
+      "label": {
+        "split": "other",
+        "type": "receipts"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "receipts"
+        }
+      }
     },
     {
       "id": "g04",
@@ -40,8 +82,16 @@
       "headers": {},
       "hasCalendarPart": true,
       "body": "You have been invited to Kickoff on Tuesday.",
-      "label": { "split": "other", "type": "calendar" },
-      "expect": { "rules": { "split": "other", "type": "calendar" } }
+      "label": {
+        "split": "other",
+        "type": "calendar"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "calendar"
+        }
+      }
     },
     {
       "id": "g05",
@@ -49,8 +99,16 @@
       "subject": "Re: Session notes",
       "headers": {},
       "body": "Thanks for the notes. Two questions before Thursday.",
-      "label": { "split": "important", "type": null },
-      "expect": { "rules": { "split": "important", "type": null } }
+      "label": {
+        "split": "important",
+        "type": null
+      },
+      "expect": {
+        "rules": {
+          "split": "important",
+          "type": null
+        }
+      }
     },
     {
       "id": "g06",
@@ -58,17 +116,35 @@
       "subject": "Draft agreement attached",
       "headers": {},
       "body": "Redlines are in the attachment. Call me if anything is unclear.",
-      "label": { "split": "important", "type": null },
-      "expect": { "rules": { "split": "important", "type": null } }
+      "label": {
+        "split": "important",
+        "type": null
+      },
+      "expect": {
+        "rules": {
+          "split": "important",
+          "type": null
+        }
+      }
     },
     {
       "id": "g07",
       "from": "noreply@render.com",
       "subject": "Deploy succeeded for arcforma-portal",
-      "headers": { "Precedence": "bulk" },
+      "headers": {
+        "Precedence": "bulk"
+      },
       "body": "Your service is live.",
-      "label": { "split": "other", "type": "notifications" },
-      "expect": { "rules": { "split": "other", "type": "notifications" } }
+      "label": {
+        "split": "other",
+        "type": "notifications"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "notifications"
+        }
+      }
     },
     {
       "id": "g08",
@@ -76,17 +152,35 @@
       "subject": "Your statement is ready",
       "headers": {},
       "body": "The August statement is available.",
-      "label": { "split": "other", "type": "receipts" },
-      "expect": { "rules": { "split": "other", "type": "receipts" } }
+      "label": {
+        "split": "other",
+        "type": "receipts"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "receipts"
+        }
+      }
     },
     {
       "id": "g09",
       "from": "mailer-daemon@mail.example",
       "subject": "Delivery Status Notification (Failure)",
-      "headers": { "Auto-Submitted": "auto-replied" },
+      "headers": {
+        "Auto-Submitted": "auto-replied"
+      },
       "body": "Address not found.",
-      "label": { "split": "other", "type": null },
-      "expect": { "rules": { "split": "other", "type": null } }
+      "label": {
+        "split": "other",
+        "type": null
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": null
+        }
+      }
     },
     {
       "id": "g10",
@@ -94,8 +188,13 @@
       "subject": "Quick question about your coaching practice",
       "headers": {},
       "body": "We help founders book more calls. Open to a chat?",
-      "label": { "split": "important", "type": null },
-      "expect": { "rules": null }
+      "label": {
+        "split": "important",
+        "type": null
+      },
+      "expect": {
+        "rules": null
+      }
     },
     {
       "id": "g11",
@@ -103,26 +202,54 @@
       "subject": "Logo files v3",
       "headers": {},
       "body": "Final files attached. Let me know if the cobalt reads right on screen.",
-      "label": { "split": "important", "type": null },
-      "expect": { "rules": { "split": "important", "type": null } }
+      "label": {
+        "split": "important",
+        "type": null
+      },
+      "expect": {
+        "rules": {
+          "split": "important",
+          "type": null
+        }
+      }
     },
     {
       "id": "g12",
       "from": "team@figma.com",
       "subject": "Someone commented on Brand board",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@figma.com>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@figma.com>"
+      },
       "body": "A new comment was left.",
-      "label": { "split": "other", "type": "notifications" },
-      "expect": { "rules": { "split": "other", "type": "notifications" } }
+      "label": {
+        "split": "other",
+        "type": "notifications"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "notifications"
+        }
+      }
     },
     {
       "id": "g13",
       "from": "editor@long-reads.example",
       "subject": "Issue 41: the slow web",
-      "headers": { "List-Id": "long-reads.example" },
+      "headers": {
+        "List-Id": "long-reads.example"
+      },
       "body": "An essay on patience.",
-      "label": { "split": "other", "type": "newsletters" },
-      "expect": { "rules": { "split": "other", "type": "newsletters" } }
+      "label": {
+        "split": "other",
+        "type": "newsletters"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "newsletters"
+        }
+      }
     },
     {
       "id": "g14",
@@ -130,8 +257,16 @@
       "subject": "Order confirmation #4821",
       "headers": {},
       "body": "Thanks for your order.",
-      "label": { "split": "other", "type": "receipts" },
-      "expect": { "rules": { "split": "other", "type": "receipts" } }
+      "label": {
+        "split": "other",
+        "type": "receipts"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "receipts"
+        }
+      }
     },
     {
       "id": "g15",
@@ -139,8 +274,13 @@
       "subject": "Intro from a mutual friend",
       "headers": {},
       "body": "Alex suggested we talk about your AI coaching work.",
-      "label": { "split": "important", "type": null },
-      "expect": { "rules": null }
+      "label": {
+        "split": "important",
+        "type": null
+      },
+      "expect": {
+        "rules": null
+      }
     },
     {
       "id": "g16",
@@ -149,8 +289,16 @@
       "headers": {},
       "hasCalendarPart": true,
       "body": "This event has been changed.",
-      "label": { "split": "other", "type": "calendar" },
-      "expect": { "rules": { "split": "other", "type": "calendar" } }
+      "label": {
+        "split": "other",
+        "type": "calendar"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "calendar"
+        }
+      }
     },
     {
       "id": "g17",
@@ -158,17 +306,32 @@
       "subject": "Following up on my last email",
       "headers": {},
       "body": "Did you get a chance to look at the proposal?",
-      "label": { "split": "important", "type": null },
-      "expect": { "rules": null }
+      "label": {
+        "split": "important",
+        "type": null
+      },
+      "expect": {
+        "rules": null
+      }
     },
     {
       "id": "g18",
       "from": "no-reply@accounts.example",
       "subject": "Your password was changed",
-      "headers": { "Auto-Submitted": "auto-generated" },
+      "headers": {
+        "Auto-Submitted": "auto-generated"
+      },
       "body": "If this was not you, reset it now.",
-      "label": { "split": "other", "type": "notifications" },
-      "expect": { "rules": { "split": "other", "type": "notifications" } }
+      "label": {
+        "split": "other",
+        "type": "notifications"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "notifications"
+        }
+      }
     },
     {
       "id": "g19",
@@ -176,54 +339,110 @@
       "subject": "Dinner Saturday?",
       "headers": {},
       "body": "Are you around this weekend?",
-      "label": { "split": "important", "type": null },
-      "expect": { "rules": null }
+      "label": {
+        "split": "important",
+        "type": null
+      },
+      "expect": {
+        "rules": null
+      }
     },
     {
       "id": "g20",
       "from": "news@product-updates.example",
       "subject": "What is new in September",
-      "headers": { "Precedence": "bulk" },
+      "headers": {
+        "Precedence": "bulk"
+      },
       "body": "New features and fixes.",
-      "label": { "split": "other", "type": "newsletters" },
-      "expect": { "rules": { "split": "other", "type": "newsletters" } }
+      "label": {
+        "split": "other",
+        "type": "newsletters"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "newsletters"
+        }
+      }
     },
     {
       "id": "g21",
       "from": "avery.nolan@gmail.com",
       "subject": "AI engineer, LangGraph and FastAPI, open to contract work",
-      "headers": { "List-Id": "<jobs.arcforma.example>", "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Id": "<jobs.arcforma.example>",
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "Portfolio and notice period below.",
-      "label": { "split": "important", "type": null },
-      "expect": { "rules": null }
+      "label": {
+        "split": "important",
+        "type": null
+      },
+      "expect": {
+        "rules": null
+      }
     },
     {
       "id": "g22",
       "from": "rowan.hale@vector-labs.example",
       "subject": "Scoping the second phase",
-      "headers": { "List-Id": "<updates.vector-labs.example>", "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Id": "<updates.vector-labs.example>",
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "Two options for the next block of work.",
-      "label": { "split": "important", "type": null },
-      "expect": { "rules": { "split": "important", "type": null } }
+      "label": {
+        "split": "important",
+        "type": null
+      },
+      "expect": {
+        "rules": {
+          "split": "important",
+          "type": null
+        }
+      }
     },
     {
       "id": "g23",
       "from": "taylor@granite-partners.example",
       "subject": "The numbers you asked for",
-      "headers": { "List-Id": "<clients.granite-partners.example>", "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Id": "<clients.granite-partners.example>",
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "Attached, with the assumptions written out.",
-      "label": { "split": "important", "type": null },
-      "expect": { "rules": { "split": "important", "type": null } },
+      "label": {
+        "split": "important",
+        "type": null
+      },
+      "expect": {
+        "rules": {
+          "split": "important",
+          "type": null
+        }
+      },
       "threadHasOutbound": true
     },
     {
       "id": "g24",
       "from": "morgan@stone-bridge.example",
       "subject": "Re: the September plan",
-      "headers": { "List-Id": "<plans.stone-bridge.example>", "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Id": "<plans.stone-bridge.example>",
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "One change to the second week.",
-      "label": { "split": "important", "type": null },
-      "expect": { "rules": { "split": "important", "type": null } }
+      "label": {
+        "split": "important",
+        "type": null
+      },
+      "expect": {
+        "rules": {
+          "split": "important",
+          "type": null
+        }
+      }
     },
     {
       "id": "g25",
@@ -231,98 +450,207 @@
       "subject": "Re: ticket 4180 was closed",
       "headers": {},
       "body": "The ticket you were watching is closed.",
-      "label": { "split": "other", "type": "notifications" },
-      "expect": { "rules": { "split": "other", "type": "notifications" } }
+      "label": {
+        "split": "other",
+        "type": "notifications"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "notifications"
+        }
+      }
     },
     {
       "id": "g26",
       "from": "gustonoreply@gusto.com",
       "subject": "Your payroll is ready for approval",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "Approve by Thursday to pay on time.",
-      "label": { "split": "other", "type": "notifications" },
-      "expect": { "rules": { "split": "other", "type": "notifications" } }
+      "label": {
+        "split": "other",
+        "type": "notifications"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "notifications"
+        }
+      }
     },
     {
       "id": "g28",
       "from": "shop@nordic-outfitters.example",
       "subject": "New arrivals are here, 20% off select styles",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "The autumn range has landed.",
-      "label": { "split": "other", "type": "promotions" },
-      "expect": { "rules": { "split": "other", "type": "promotions" } }
+      "label": {
+        "split": "other",
+        "type": "promotions"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "promotions"
+        }
+      }
     },
     {
       "id": "g29",
       "from": "hello@lumen-events.example",
       "subject": "You are invited: the September webinar",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "Ninety minutes on pipeline design.",
-      "label": { "split": "other", "type": "promotions" },
-      "expect": { "rules": { "split": "other", "type": "promotions" } }
+      "label": {
+        "split": "other",
+        "type": "promotions"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "promotions"
+        }
+      }
     },
     {
       "id": "g30",
       "from": "microsoftstore@microsoftstore.microsoft.com",
       "subject": "Get a school-ready Surface",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "Devices for the new term.",
-      "label": { "split": "other", "type": "promotions" },
-      "expect": { "rules": { "split": "other", "type": "promotions" } }
+      "label": {
+        "split": "other",
+        "type": "promotions"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "promotions"
+        }
+      }
     },
     {
       "id": "g31",
       "from": "no-reply@mail.harbor-goods.example",
       "subject": "Save up to $200 on the autumn range",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "Ends Sunday.",
-      "label": { "split": "other", "type": "promotions" },
-      "expect": { "rules": { "split": "other", "type": "promotions" } }
+      "label": {
+        "split": "other",
+        "type": "promotions"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "promotions"
+        }
+      }
     },
     {
       "id": "g32",
       "from": "talent@wellfound.com",
       "subject": "Avery Nolan is interested in AI Engineer at Arcforma",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "See the profile and reply from the dashboard.",
-      "label": { "split": "other", "type": "jobs" },
-      "expect": { "rules": { "split": "other", "type": "jobs" } }
+      "label": {
+        "split": "other",
+        "type": "jobs"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "jobs"
+        }
+      }
     },
     {
       "id": "g33",
       "from": "team@hi.wellfound.com",
       "subject": "4 new candidates applied to Arcforma",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "Review them before the applications expire.",
-      "label": { "split": "other", "type": "jobs" },
-      "expect": { "rules": { "split": "other", "type": "jobs" } }
+      "label": {
+        "split": "other",
+        "type": "jobs"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "jobs"
+        }
+      }
     },
     {
       "id": "g34",
       "from": "jobs-noreply@linkedin.com",
       "subject": "Your job alert: 12 new roles this week",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "Roles matching your saved search.",
-      "label": { "split": "other", "type": "jobs" },
-      "expect": { "rules": { "split": "other", "type": "jobs" } }
+      "label": {
+        "split": "other",
+        "type": "jobs"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "jobs"
+        }
+      }
     },
     {
       "id": "g35",
       "from": "no-reply@greenhouse.io",
       "subject": "Interview scheduled with Avery Nolan",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "Tuesday at 10:00, video link inside.",
-      "label": { "split": "other", "type": "jobs" },
-      "expect": { "rules": { "split": "other", "type": "jobs" } }
+      "label": {
+        "split": "other",
+        "type": "jobs"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "jobs"
+        }
+      }
     },
     {
       "id": "g36",
       "from": "regis@sway-collective.example",
       "subject": "Follow-up, CV for the contract engineering role",
-      "headers": { "List-Id": "<jobs.arcforma.example>", "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Id": "<jobs.arcforma.example>",
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "Attaching the CV again in case the first went astray.",
-      "label": { "split": "other", "type": "jobs" },
-      "expect": { "rules": { "split": "other", "type": "jobs" } }
+      "label": {
+        "split": "other",
+        "type": "jobs"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "jobs"
+        }
+      }
     },
     {
       "id": "g37",
@@ -330,8 +658,16 @@
       "subject": "Full-stack CV for your open role",
       "headers": {},
       "body": "Five years of TypeScript and Postgres.",
-      "label": { "split": "other", "type": "jobs" },
-      "expect": { "rules": { "split": "other", "type": "jobs" } }
+      "label": {
+        "split": "other",
+        "type": "jobs"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "jobs"
+        }
+      }
     },
     {
       "id": "g38",
@@ -339,71 +675,386 @@
       "subject": "New sign-in from a new device",
       "headers": {},
       "body": "If this was not you, review the session.",
-      "label": { "split": "other", "type": "notifications" },
-      "expect": { "rules": { "split": "other", "type": "notifications" } }
+      "label": {
+        "split": "other",
+        "type": "notifications"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "notifications"
+        }
+      }
     },
     {
       "id": "g39",
       "from": "support@e.usa.experian.com",
       "subject": "Your credit report has an update",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "One new item was added this month.",
-      "label": { "split": "other", "type": "notifications" },
-      "expect": { "rules": { "split": "other", "type": "notifications" } }
+      "label": {
+        "split": "other",
+        "type": "notifications"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "notifications"
+        }
+      }
     },
     {
       "id": "g40",
       "from": "noreply@support.facebook.com",
       "subject": "We have verified information about you",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "Your account details were confirmed.",
-      "label": { "split": "other", "type": "notifications" },
-      "expect": { "rules": { "split": "other", "type": "notifications" } }
+      "label": {
+        "split": "other",
+        "type": "notifications"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "notifications"
+        }
+      }
     },
     {
       "id": "g41",
       "from": "workspace-noreply@google.com",
       "subject": "Get paid by referring Google Workspace",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "Earn a bonus for every seat you refer.",
-      "label": { "split": "other", "type": "promotions" },
-      "expect": { "rules": null }
+      "label": {
+        "split": "other",
+        "type": "promotions"
+      },
+      "expect": {
+        "rules": null
+      }
     },
     {
       "id": "g42",
       "from": "updates@e.stripe.com",
       "subject": "Save on your next payout with Capital",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "Financing offers for your account.",
-      "label": { "split": "other", "type": "promotions" },
-      "expect": { "rules": null }
+      "label": {
+        "split": "other",
+        "type": "promotions"
+      },
+      "expect": {
+        "rules": null
+      }
     },
     {
       "id": "g43",
       "from": "hello@mail.wispr-tools.example",
       "subject": "We redesigned the mobile app",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "A new editor and faster sync.",
-      "label": { "split": "other", "type": "promotions" },
-      "expect": { "rules": null }
+      "label": {
+        "split": "other",
+        "type": "promotions"
+      },
+      "expect": {
+        "rules": null
+      }
     },
     {
       "id": "g44",
       "from": "noreply@news.harbor-journal.example",
       "subject": "Markets Daily: yields at an 18 year high",
-      "headers": { "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "What moved overnight.",
-      "label": { "split": "other", "type": "newsletters" },
-      "expect": { "rules": { "split": "other", "type": "newsletters" } }
+      "label": {
+        "split": "other",
+        "type": "newsletters"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "newsletters"
+        }
+      }
     },
     {
       "id": "g45",
       "from": "post+the-weekender@substack.com",
       "subject": "The weekender: five reads",
-      "headers": { "List-Id": "<weekender.substack.com>", "List-Unsubscribe": "<mailto:unsub@example.invalid>" },
+      "headers": {
+        "List-Id": "<weekender.substack.com>",
+        "List-Unsubscribe": "<mailto:unsub@example.invalid>"
+      },
       "body": "Long reads for the weekend.",
-      "label": { "split": "other", "type": "newsletters" },
-      "expect": { "rules": { "split": "other", "type": "newsletters" } }
+      "label": {
+        "split": "other",
+        "type": "newsletters"
+      },
+      "expect": {
+        "rules": {
+          "split": "other",
+          "type": "newsletters"
+        }
+      }
+    }
+  ],
+  "attentionNote": "Labelled threads for the attention model. Each one names only the signals that matter to it; everything else takes the neutral default in attention.test.ts. expect is the band scoreAttention() must return. Synthetic, no real people.",
+  "attention": [
+    {
+      "id": "a01",
+      "note": "a client asking a question, two days unanswered",
+      "from": "dana@northwind-coaching.example",
+      "name": "Dana Reyes",
+      "subject": "Re: Session notes",
+      "text": "Two questions before Thursday. Can you confirm the room?",
+      "addressing": "to",
+      "repliedCount": 14,
+      "repliedDaysAgo": 3,
+      "inThread": true,
+      "unansweredDays": 2,
+      "clientDomain": true,
+      "expect": "needs_you"
+    },
+    {
+      "id": "a02",
+      "note": "the same question, but he answered it",
+      "from": "dana@northwind-coaching.example",
+      "name": "Dana Reyes",
+      "subject": "Re: Session notes",
+      "text": "Two questions before Thursday. Can you confirm the room?",
+      "addressing": "to",
+      "repliedCount": 14,
+      "repliedDaysAgo": 1,
+      "inThread": true,
+      "unansweredDays": null,
+      "clientDomain": true,
+      "expect": "important"
+    },
+    {
+      "id": "a03",
+      "note": "a lawyer with a deadline, five days unanswered",
+      "from": "sam@harbor-legal.example",
+      "name": "Sam Okafor",
+      "subject": "Signature needed on the engagement letter",
+      "text": "We need this signed by Friday to file on time.",
+      "addressing": "to",
+      "repliedCount": 9,
+      "repliedDaysAgo": 6,
+      "inThread": true,
+      "unansweredDays": 5,
+      "expect": "needs_you"
+    },
+    {
+      "id": "a04",
+      "note": "a partner following up after seven weeks",
+      "from": "bailey@lumen-studio.example",
+      "name": "Bailey Cross",
+      "subject": "Following up",
+      "text": "Following up on the proposal. Let me know where you landed.",
+      "addressing": "to",
+      "repliedCount": 14,
+      "repliedDaysAgo": 50,
+      "inThread": true,
+      "unansweredDays": 54,
+      "expect": "needs_you"
+    },
+    {
+      "id": "a05",
+      "note": "a first mail from a real person with a request, at a domain he writes to",
+      "from": "jibran@vector-labs.example",
+      "name": "Jibran Ali",
+      "subject": "Demo | Arcforma",
+      "text": "Could you take a look at the demo and let me know if Thursday works?",
+      "addressing": "to",
+      "repliedCount": 1,
+      "repliedDaysAgo": 4,
+      "repliedDomain": true,
+      "unansweredDays": 4,
+      "expect": "needs_you"
+    },
+    {
+      "id": "a06",
+      "note": "a long correspondent writing with nothing asked",
+      "from": "mike@granite-partners.example",
+      "name": "Mike Thomas",
+      "subject": "Statement of account",
+      "text": "Attaching the statement for the quarter.",
+      "addressing": "to",
+      "repliedCount": 47,
+      "repliedDaysAgo": 2,
+      "inThread": true,
+      "unansweredDays": 1,
+      "expect": "important"
+    },
+    {
+      "id": "a07",
+      "note": "a client he has written to twice, direct, nothing waiting",
+      "from": "rick@stone-bridge.example",
+      "name": "Rick Vance",
+      "subject": "Availability next week",
+      "text": "Here are three slots that work on our side.",
+      "addressing": "to",
+      "repliedCount": 2,
+      "repliedDaysAgo": 20,
+      "inThread": true,
+      "startedByYou": true,
+      "unansweredDays": null,
+      "expect": "important"
+    },
+    {
+      "id": "a08",
+      "note": "a person he does not know, cold, asking a real question: Important, but nothing he owes an answer to yet",
+      "from": "ada@brand-new.example",
+      "name": "Ada Lin",
+      "subject": "Quick question about Arcforma",
+      "text": "Do you take on projects like this?",
+      "addressing": "to",
+      "firstTime": true,
+      "senderThreads": 1,
+      "unansweredDays": 1,
+      "expect": "important"
+    },
+    {
+      "id": "a09",
+      "note": "a newsletter with a question in the subject",
+      "from": "digest@weekly-notes.example",
+      "subject": "Ready for fall?",
+      "text": "Five things worth reading this week.",
+      "addressing": "to",
+      "bulk": true,
+      "type": "newsletters",
+      "threadsPerWeek": 1,
+      "expect": "other"
+    },
+    {
+      "id": "a10",
+      "note": "a platform notification, no-reply, direct to him",
+      "from": "no-reply@render.com",
+      "subject": "Deploy succeeded for arcforma-portal",
+      "text": "Your service is live. Do you want to see the logs?",
+      "addressing": "to",
+      "auto": true,
+      "type": "notifications",
+      "threadsPerWeek": 6,
+      "expect": "other"
+    },
+    {
+      "id": "a11",
+      "note": "a question sent to a group alias he is not named on",
+      "from": "regis@sway-collective.example",
+      "name": "Regis Fell",
+      "subject": "Can someone confirm the schedule?",
+      "text": "Can someone confirm the schedule for next week?",
+      "addressing": "alias",
+      "unansweredDays": 2,
+      "expect": "other"
+    },
+    {
+      "id": "a12",
+      "note": "a shop he archives unread, asking a question",
+      "from": "hello@nordic-outfitters.example",
+      "subject": "Did you see the autumn range?",
+      "text": "Did you see the autumn range? Shop now.",
+      "addressing": "to",
+      "bulk": true,
+      "senderThreads": 22,
+      "archiveWithoutReadRate": 0.95,
+      "threadsPerWeek": 4,
+      "expect": "other"
+    },
+    {
+      "id": "a13",
+      "note": "a reminder robot quoting his own thread back at him",
+      "from": "reminder@superhuman.com",
+      "name": "Reminder",
+      "subject": "Arcforma | AI Fluency",
+      "text": "Can you follow up on this thread?",
+      "addressing": "to",
+      "unansweredDays": 7,
+      "senderThreads": 40,
+      "threadsPerWeek": 4,
+      "expect": "other"
+    },
+    {
+      "id": "a14",
+      "note": "mail from one of his own addresses",
+      "from": "you@example.com",
+      "name": "Oliver Korzen",
+      "subject": "Quick check-in before today's session",
+      "text": "Can you confirm the time?",
+      "addressing": "to",
+      "ownSender": true,
+      "repliedCount": 88,
+      "repliedDaysAgo": 1,
+      "unansweredDays": 30,
+      "expect": "other"
+    },
+    {
+      "id": "a15",
+      "note": "a client he re-filed out of Important twice, still asking",
+      "from": "tal@vector-labs.example",
+      "name": "Tal Berg",
+      "subject": "Testimonial",
+      "text": "Could you send the testimonial when you get a moment?",
+      "addressing": "to",
+      "repliedCount": 5,
+      "repliedDaysAgo": 60,
+      "unansweredDays": 63,
+      "demotions": 2,
+      "expect": "other"
+    },
+    {
+      "id": "a16",
+      "note": "a high-volume sender he does read, cc only, no ask",
+      "from": "updates@granite-partners.example",
+      "subject": "Weekly ops roll-up",
+      "text": "Here is where each workstream stands.",
+      "addressing": "cc",
+      "repliedCount": 3,
+      "repliedDaysAgo": 10,
+      "threadsPerWeek": 12,
+      "expect": "other"
+    },
+    {
+      "id": "a17",
+      "note": "an applicant writing to the hiring alias",
+      "from": "avery@gmail.com",
+      "name": "Avery Nolan",
+      "subject": "AI engineer, available from October",
+      "text": "Please let me know if you would like to talk.",
+      "addressing": "alias",
+      "type": "jobs",
+      "firstTime": true,
+      "unansweredDays": 3,
+      "expect": "other"
+    },
+    {
+      "id": "a18",
+      "note": "a client on To with others, asking, unanswered a day",
+      "from": "elena@granite-partners.example",
+      "name": "Elena Ruiz",
+      "subject": "Two quick fixes on the dashboard",
+      "text": "Two quick fixes on the dashboard. Can you take a look today?",
+      "addressing": "to_with_others",
+      "repliedCount": 25,
+      "repliedDaysAgo": 2,
+      "inThread": true,
+      "unansweredDays": 1,
+      "expect": "needs_you"
     }
   ]
 }

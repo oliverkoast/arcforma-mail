@@ -1,7 +1,8 @@
 // A minimal HTML DOM for node:test: enough of the DOM's shape (nodeType,
 // nodeName, childNodes, textContent, remove, insertBefore, attributes) for
 // the reading-aid pass in mailhtml.ts to run without a browser. Test harness
-// only; nothing in the app imports it. Well-formed HTML in, the same out.
+// and the reading report; nothing in the app itself imports it. Well-formed
+// HTML in, the same out.
 
 import type { MailDocument, MailElement, MailNode } from "./mailhtml";
 

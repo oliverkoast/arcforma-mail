@@ -27,6 +27,8 @@ export interface SidebarRowDescriptor {
   hiddenByDefault?: boolean;
   /** Where a row the stored layout never saw wants to land: right after this row id, when that row is in the same group. */
   after?: string;
+  /** A row the stored layout never saw that belongs at the head of its group rather than the end. */
+  first?: boolean;
   /** The category id or saved search id behind a category or search row, for rename and remove. */
   ref?: string;
 }
@@ -50,6 +52,9 @@ const BUILTIN_TYPES: ReadonlyArray<{ id: string; label: string }> = [
 const none = () => 0;
 
 const BUILTIN_ROWS: SidebarRowDescriptor[] = [
+  // The one row that answers "what do I have to deal with". It sits above the queues because it is
+  // the only list where something is waiting on him rather than on his calendar.
+  { id: "needsyou", kind: "builtin", label: "Needs you", group: "queues", view: { view: "needsyou" }, count: (c) => c.needsYou, first: true },
   { id: "daily", kind: "builtin", label: "Daily 0", group: "queues", view: { view: "daily" }, count: (c) => c.daily },
   { id: "weekly", kind: "builtin", label: "Weekly 0", group: "queues", view: { view: "weekly" }, count: (c) => c.weekly },
   { id: "later", kind: "builtin", label: "Later", group: "queues", view: { view: "later" }, count: (c) => c.later },
@@ -149,8 +154,9 @@ export function reconcileLayout(saved: unknown, rows: SidebarRowDescriptor[]): S
     const group = groups.find((g) => g.id === r.group)!;
     const row = { id: r.id, hidden: r.hiddenByDefault === true };
     const at = r.after ? group.rows.findIndex((x) => x.id === r.after) : -1;
-    if (at < 0) group.rows.push(row);
-    else group.rows.splice(at + 1, 0, row);
+    if (at >= 0) group.rows.splice(at + 1, 0, row);
+    else if (r.first) group.rows.unshift(row);
+    else group.rows.push(row);
   }
   return { version: 1, groups };
 }

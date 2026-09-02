@@ -240,6 +240,7 @@ export function sentMessage(input: SentMessageInput): MessageView {
     replyTo: null,
     to: draft.to,
     cc: draft.cc,
+    bcc: draft.bcc,
     messageIdHeader: null,
     references: draft.references ?? null,
     subject: draft.subject,

@@ -15,6 +15,7 @@ export * from "./queries/misc.js";
 export * from "./queries/drafts.js";
 export * from "./queries/settings.js";
 export * from "./queries/classify.js";
+export * from "./queries/attention.js";
 export * from "./queries/calendar.js";
 export * from "./queries/contacts.js";
 export * from "./queries/queues.js";

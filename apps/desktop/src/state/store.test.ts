@@ -131,6 +131,7 @@ function message(threadId: string, id: string, over: Partial<MessageView>): Mess
     replyTo: null,
     to: [{ email: "you@example.com", name: "Oliver Korzen" }],
     cc: [],
+    bcc: [],
     messageIdHeader: `<${id}@x>`,
     references: null,
     subject: "Kickoff next week",
@@ -146,7 +147,7 @@ function message(threadId: string, id: string, over: Partial<MessageView>): Mess
 }
 
 function summary(id: string, subject: string): ThreadSummary {
-  return { accountId: "arcforma", id, subject, snippet: "", participants: [], lastMessageAt: 0, sortAt: 0, messageCount: 1, unread: false, starred: false, inInbox: true, hasAttachments: false, split: null, type: null, categoryId: null, wakeAt: null, noReplyBy: null, queue: null, canUnsubscribe: false, unsubscribeState: null };
+  return { accountId: "arcforma", id, subject, snippet: "", participants: [], lastMessageAt: 0, sortAt: 0, messageCount: 1, unread: false, starred: false, inInbox: true, hasAttachments: false, split: null, type: null, categoryId: null, attention: null, band: null, attentionReason: null, wakeAt: null, noReplyBy: null, queue: null, canUnsubscribe: false, unsubscribeState: null };
 }
 
 const kickoff: ThreadView = {

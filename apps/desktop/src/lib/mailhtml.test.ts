@@ -104,13 +104,17 @@ import { HIDE_QUOTED, SHOW_QUOTED, foldPlainText, htmlToText, isAttributionLine,
 import { find, findAll, innerHtml, parseHtml, type MiniElement } from "./minidom";
 
 const SUMMARY = `<summary><span class="qf-show">${SHOW_QUOTED}</span><span class="qf-hide">${HIDE_QUOTED}</span></summary>`;
+const ANY_SUMMARY = /<summary><span class="qf-show">[^<]*<\/span><span class="qf-hide">[^<]*<\/span><\/summary>/;
 
 function tidy(html: string, priors: string[] = []) {
   const doc = parseHtml(html);
   const result = tidyMessage(doc, priors);
   const fold = find(doc.body, (el) => el.tag === "details" && el.className === "quote-fold");
   const foldBody = fold ? find(fold, (el) => el.className === "quote-fold-body") : null;
-  const out = innerHtml(doc.body);
+  const label = fold ? lineText(find(fold, (el) => el.className === "qf-show")!) : null;
+  const hideLabel = fold ? lineText(find(fold, (el) => el.className === "qf-hide")!) : null;
+  // The summary text is checked on its own; every other assertion reads the markup with a fixed placeholder in it.
+  const out = innerHtml(doc.body).replace(ANY_SUMMARY, SUMMARY);
   // What the reader sees with the fold closed: the body's lines with the fold lifted out, blank lines dropped.
   let visible: string;
   if (fold) {
@@ -121,7 +125,7 @@ function tidy(html: string, priors: string[] = []) {
     parent.insertBefore(fold, next);
   } else visible = lineText(doc.body);
   visible = visible.split("\n").map((l) => l.trim()).filter(Boolean).join("\n");
-  return { doc, result, fold, foldBody, out, visible, quoted: foldBody ? lineText(foldBody) : "" };
+  return { doc, result, fold, foldBody, out, visible, label, hideLabel, quoted: foldBody ? lineText(foldBody) : "" };
 }
 
 test("minidom round-trips the markup the fixtures use", () => {
@@ -177,9 +181,14 @@ test("an Outlook reply folds from the From/Sent/To/Subject header, the hr before
   assert.ok(h.quoted.endsWith("Earlier from Oliver."));
   const rule = '<div>New text</div><div id="Signature">George</div><hr><div id="divRplyFwdMsg"><b>From:</b> A<br><b>Sent:</b> B<br><b>To:</b> C<br><b>Subject:</b> D</div><div>Old</div>';
   const r = tidy(rule);
-  assert.equal(r.visible, "New text\nGeorge");
-  assert.ok(r.out.includes('<div id="Signature" class="sig">George</div><details'), r.out);
-  assert.ok(r.quoted.startsWith("From: A"));
+  // The signature joins the quoted history in the one fold, and the label names both.
+  assert.equal(r.visible, "New text");
+  assert.equal(r.result.signature, true);
+  assert.ok(r.out.includes('<div>New text</div><details'), r.out);
+  assert.equal(r.label, "Show quoted text and signature, 6 lines");
+  assert.equal(r.hideLabel, "Hide quoted text and signature");
+  assert.ok(r.quoted.startsWith("George"));
+  assert.ok(r.quoted.includes("From: A"));
   const original = "<p>New</p><hr><p>-----Original Message-----<br>From: X<br>Sent: Y<br>To: Z<br>Subject: S</p><p>Old</p>";
   const o = tidy(original);
   assert.equal(o.visible, "New");
@@ -323,4 +332,149 @@ test("repeat matching helpers: normalisation, tail search, html to text, and whi
   assert.equal(messageText({ html: "<p>h</p>", text: "  " }), "h");
   assert.equal(messageText({ html: null, text: null }), null);
   assert.equal(messageText(null), null);
+});
+
+// ---- Trailing regions: signature, legal notice, client footer, bulk footer, link farms ----
+
+import { findTrailingRegion, foldLabels, isLegalText, isPostalAddressLine, isProse, isTrackingImage } from "./mailhtml";
+
+test("a signature that is the only thing below the message keeps its first two lines and folds the rest", () => {
+  const html = "<p>The plan and the invoice go out tonight.</p><p>-- </p><p>Dana Reyes</p><p>Head of Product, Northwind</p><p>+1 555 0100</p><p>northwind-coaching.example</p>";
+  const t = tidy(html);
+  assert.equal(t.visible, "The plan and the invoice go out tonight.\n--\nDana Reyes\nHead of Product, Northwind");
+  assert.equal(t.label, "Show signature, 2 lines");
+  assert.equal(t.hideLabel, "Hide signature");
+  assert.equal(t.quoted, "+1 555 0100\n\nnorthwind-coaching.example");
+  assert.equal(t.result.signature, true);
+  // Two lines is the whole signature, so there is nothing to put behind a toggle.
+  assert.equal(tidy("<p>Text</p><p>-- </p><p>Dana Reyes</p><p>Northwind</p>").fold, null);
+  // One block with the whole signature in it is cut at the line breaks.
+  const oneBlock = tidy("<p>Sending the plan tonight, as promised.</p><div>-- <br>Dana Reyes<br>Head of Product<br>+1 555 0100<br>northwind-coaching.example</div>");
+  assert.equal(oneBlock.visible, "Sending the plan tonight, as promised.\n--\nDana Reyes\nHead of Product");
+  assert.equal(oneBlock.quoted, "+1 555 0100\nnorthwind-coaching.example");
+});
+
+test("a confidentiality notice folds, and the same words inside the message do not", () => {
+  const notice = "This email and any attachments are confidential and may be privileged. If you are not the intended recipient, delete it and tell the sender.";
+  const t = tidy(`<p>Redlines attached. The only open point is the termination notice period.</p><p>${notice}</p>`);
+  assert.deepEqual(t.result.kinds, ["legal"]);
+  assert.equal(t.label, "Show footer, 1 line");
+  assert.equal(t.visible, "Redlines attached. The only open point is the termination notice period.");
+  assert.ok(t.quoted.startsWith("This email and any attachments"));
+  // Over 200 characters the block has to be mostly boilerplate: a message that mentions the phrase once stays.
+  const mentions = "The contents of this email were agreed on the call this morning. We ship the plan on Tuesday and the invoice on Wednesday, then review both at the end of the month with the wider team before the next coaching block starts in October.";
+  assert.equal(tidy(`<p>Hi Oliver, here is where we landed.</p><p>${mentions}</p>`).fold, null);
+  assert.equal(isLegalText(mentions), false);
+  const boilerplate = "This message is confidential and intended solely for the addressee. If you have received this in error, notify the sender and delete it. Unauthorised use or disclosure is prohibited. The contents of this email may not be copied.";
+  assert.equal(isLegalText(boilerplate), true);
+  assert.equal(isLegalText("Unauthorized disclosure is a breach of the agreement."), true);
+  assert.equal(isLegalText("Two things about Tuesday."), false);
+});
+
+test("a phone or client footer folds on its own line", () => {
+  for (const line of ["Sent from my iPhone", "Sent from my iPad", "Get Outlook for iOS", "Sent via Superhuman", "Sent with Shortwave", "Sent from Gmail Mobile"]) {
+    const t = tidy(`<p>On my way now, should be there in about ten minutes.</p><p>${line}</p>`);
+    assert.equal(t.label, "Show footer, 1 line", line);
+    assert.equal(t.visible, "On my way now, should be there in about ten minutes.", line);
+    assert.equal(t.quoted, line, line);
+  }
+  // The same words in a sentence are the message, not a footer.
+  assert.equal(tidy("<p>Hi</p><p>I sent from my iPhone the wrong file this morning, sorry about the mix-up.</p>").fold, null);
+});
+
+test("a bulk mail footer folds as one region, tracking pixel and all", () => {
+  const html =
+    "<p>Five releases worth a look this week, including the new editor.</p>" +
+    '<div><img src="https://t.example/p.gif" width="1" height="1"></div>' +
+    "<div>You are receiving this because you subscribed to Product Weekly.</div>" +
+    '<div><a href="https://product-weekly.example/u/1">Unsubscribe</a> | <a href="https://product-weekly.example/prefs">Manage preferences</a></div>' +
+    "<div>Product Weekly, 1200 Market Street, Springfield, IL 62704</div>";
+  const t = tidy(html);
+  assert.equal(t.result.pixels, 1);
+  assert.deepEqual(t.result.kinds, ["bulk"]);
+  assert.equal(t.visible, "Five releases worth a look this week, including the new editor.");
+  assert.equal(t.label, "Show footer, 3 lines");
+  assert.ok(t.quoted.includes("Unsubscribe"));
+  // View in browser and a privacy line count too.
+  const other = tidy('<p>Your invoice for September is ready to download from the dashboard.</p><div><a href="https://x.example/w">View in browser</a></div><div>Privacy Policy | Terms</div>');
+  assert.equal(other.label, "Show footer, 2 lines");
+});
+
+test("a tail of nothing but links folds once there are more than eight of them", () => {
+  const link = (n: number) => `<div><a href="https://shop.example/c/${n}">Category ${n}</a></div>`;
+  const tail = (n: number) => Array.from({ length: n }, (_, i) => link(i)).join("");
+  const opening = "<p>Your order shipped this morning and arrives on Thursday.</p>";
+  const t = tidy(opening + tail(9));
+  assert.deepEqual(t.result.kinds, ["links"]);
+  assert.equal(t.label, "Show footer, 9 lines");
+  assert.equal(t.visible, "Your order shipped this morning and arrives on Thursday.");
+  // Eight is a set of buttons, not a farm.
+  assert.equal(tidy(opening + tail(8)).fold, null);
+});
+
+test("quoted history and a footer in the same message share one fold, and the label names both", () => {
+  const html =
+    "<p>Yes, Tuesday at nine works for me.</p><p>-- </p><p>Dana Reyes</p><p>Northwind</p>" +
+    '<div>This message is confidential and intended solely for the addressee.</div>' +
+    '<div class="gmail_quote"><div class="gmail_attr">On Tue, Sep 1, 2026 at 7:40 PM Oliver Korzen &lt;you@example.com&gt; wrote:<br></div><blockquote class="gmail_quote">Does nine suit you?</blockquote></div>';
+  const t = tidy(html);
+  assert.equal(t.visible, "Yes, Tuesday at nine works for me.");
+  assert.deepEqual(t.result.kinds.sort(), ["legal", "quote", "signature"]);
+  assert.equal(t.label, "Show quoted text, signature and footer, 6 lines");
+  assert.equal(findAll(t.doc.body, (el) => el.tag === "details").length, 1, "one fold, not three");
+  assert.equal(t.result.signature, true);
+});
+
+test("tracking pixels and spacers are removed outright, and a real picture is left alone", () => {
+  const t = tidy('<p>Hi</p><img src="https://t.example/o.gif" width="1" height="1"><img src="https://t.example/s.gif" style="width:2px;height:400px"><img src="https://cdn.example/hero.png" width="600" height="300">');
+  assert.equal(t.result.pixels, 2);
+  assert.ok(t.out.includes("hero.png"), t.out);
+  assert.equal(t.out.includes("o.gif"), false);
+  assert.equal(t.out.includes("s.gif"), false);
+});
+
+test("nothing folds when the message would disappear behind the toggle", () => {
+  const onlyFooter = '<div>You are receiving this because you subscribed to Product Weekly.</div><div><a href="https://x.example/u">Unsubscribe</a></div>';
+  const f = tidy(onlyFooter);
+  assert.equal(f.fold, null);
+  assert.equal(f.out, onlyFooter);
+  const onlyLegal = "<p>This message is confidential and intended solely for the addressee.</p>";
+  assert.equal(tidy(onlyLegal).fold, null);
+  const onlyClient = "<p>Sent from my iPhone</p>";
+  assert.equal(tidy(onlyClient).fold, null);
+  // A signature with no message above it keeps its first two lines, so the mail is never blank.
+  const sigOnly = "<p>-- </p><p>Dana Reyes</p><p>Northwind</p><p>+1 555 0100</p>";
+  assert.equal(tidy(sigOnly).visible, "--\nDana Reyes\nNorthwind");
+});
+
+test("the disclosure label says what is inside it and how many lines", () => {
+  assert.equal(foldLabels(["quote"], 14).show, "Show quoted text, 14 lines");
+  assert.equal(foldLabels(["repeat"], 2).show, "Show quoted text, 2 lines");
+  assert.equal(foldLabels(["bulk"], 14).show, "Show footer, 14 lines");
+  assert.equal(foldLabels(["signature"], 1).show, "Show signature, 1 line");
+  assert.equal(foldLabels(["quote", "bulk"], 22).show, "Show quoted text and footer, 22 lines");
+  assert.equal(foldLabels(["legal", "client", "bulk"], 5).show, "Show footer, 5 lines");
+  assert.equal(foldLabels(["quote", "signature", "bulk"], 30).show, "Show quoted text, signature and footer, 30 lines");
+  assert.equal(foldLabels(["quote"], 0).show, "Show quoted text");
+  assert.equal(foldLabels(["bulk"], 3).hide, "Hide footer");
+});
+
+test("the region helpers: prose, postal addresses, tracking sizes, and where a region starts", () => {
+  assert.equal(isProse("Could you send the session plan before Tuesday?"), true);
+  assert.equal(isProse("Dana Reyes"), false);
+  assert.equal(isProse("Unsubscribe"), false);
+  assert.equal(isPostalAddressLine("Product Weekly, 1200 Market Street, Springfield, IL 62704"), true);
+  assert.equal(isPostalAddressLine("Acme Ltd, 40 Rosebery Avenue, London, EC1R 4RX"), true);
+  assert.equal(isPostalAddressLine("Studio Lumen, 12 Rue de la Paix, 75002 Paris, France"), true);
+  assert.equal(isPostalAddressLine("Dana Reyes, Head of Product"), false);
+  assert.equal(isPostalAddressLine("Tuesday at 9:00"), false);
+  const img = (attrs: string) => find(parseHtml(`<img ${attrs}>`).body, (el) => el.tag === "img")!;
+  assert.equal(isTrackingImage(img('src="x" width="1" height="1"')), true);
+  assert.equal(isTrackingImage(img('src="x" height="3"')), true);
+  assert.equal(isTrackingImage(img('src="x" style="width:1px;height:600px"')), true);
+  assert.equal(isTrackingImage(img('src="x" width="600" height="300"')), false);
+  assert.equal(isTrackingImage(img('src="x"')), false);
+  const blocks = Array.from(parseHtml("<p>Hi Oliver, here is the plan you asked for on Tuesday.</p><p>-- </p><p>Dana</p>").body.childNodes);
+  assert.deepEqual(findTrailingRegion(blocks), { start: 1, kinds: ["signature"] });
+  assert.equal(findTrailingRegion(Array.from(parseHtml("<p>Hi Oliver, here is the plan you asked for on Tuesday.</p>").body.childNodes)), null);
 });

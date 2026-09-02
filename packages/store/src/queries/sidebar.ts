@@ -5,6 +5,7 @@
 
 import type { Db } from "../db.js";
 import { placeholders } from "../db.js";
+import { needsYouCount } from "./attention.js";
 import { HAS_LABEL, NOT_JUNK, PENDING_SNOOZE } from "./fragments.js";
 import { describeSearch, searchCount } from "./search.js";
 import { threadCounts, type ThreadCounts } from "./threads.js";
@@ -93,6 +94,8 @@ export interface SidebarCounts extends ThreadCounts {
   scheduled: number;
   important: number;
   other: number;
+  /** Inbox threads in the needs_you band: a person asked, and nothing has gone back. */
+  needsYou: number;
   /** Inbox threads per builtin type and custom category id. */
   categories: Record<string, number>;
   /** Matching threads per saved search id. */
@@ -145,6 +148,7 @@ export function sidebarCounts(db: Db, accountIds?: string[], now = Date.now()): 
     scheduled,
     important,
     other,
+    needsYou: needsYouCount(db, accountIds),
     categories,
     searches,
   };

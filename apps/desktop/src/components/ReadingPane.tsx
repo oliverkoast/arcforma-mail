@@ -7,6 +7,7 @@ import { InstantReplies, SummaryCard } from "./AiCards";
 import { InlineReply } from "./InlineReply";
 import { IconButton, ReplyIcons, hint } from "./IconButton";
 import { MessageBody } from "./MessageBody";
+import { MessageHeader } from "./MessageHeader";
 import type { RefileTarget, ThreadSummary } from "../../shared/types";
 
 const NO_PRIORS: string[] = [];
@@ -74,6 +75,8 @@ export function ReadingPane() {
   const unsubscribeSelected = useApp((s) => s.unsubscribeSelected);
   const refreshOpen = useApp((s) => s.refreshOpen);
   const messages = open?.messages;
+  // Every address the owner reads mail on, so the header can say "you" wherever one of them appears.
+  const owners = useMemo(() => accounts.map((a) => a.email), [accounts]);
   // Each message's predecessors as plain text, oldest first, so MessageBody can fold history pasted without quote
   // markup. Memoised on the messages array, so the iframes do not re-render on every store change.
   const priorTexts = useMemo(() => {
@@ -147,25 +150,18 @@ export function ReadingPane() {
         <SummaryCard />
         {open.messages.map((m, i) => (
           <article className={`message${i === open.messages.length - 1 ? " is-last" : ""}`} key={m.id}>
-            <div className="message-head">
-              <div>
-                <div className="message-from">
-                  {m.from.name || m.from.email} {m.from.name ? <span>{m.from.email}</span> : null}
-                </div>
-                <div className="message-to">
-                  to {m.to.map((a) => a.name || a.email).join(", ") || "(none)"}
-                  {m.cc.length ? `, cc ${m.cc.map((a) => a.name || a.email).join(", ")}` : ""}
-                </div>
-              </div>
-              <div className="message-meta">
-                <div className="message-date">{fullDate(m.internalDate)}</div>
-                {t.scheduled ? null : (
+            <MessageHeader
+              message={m}
+              owners={owners}
+              repeatSender={open.messages.slice(0, i).some((p) => p.from.email.toLowerCase() === m.from.email.toLowerCase())}
+              actions={
+                t.scheduled ? null : (
                   <div className="message-actions">
                     <ReplyIcons onReply={() => openCompose("reply", { messageId: m.id })} onReplyAll={() => openCompose("replyAll", { messageId: m.id })} onForward={() => openCompose("forward", { messageId: m.id })} />
                   </div>
-                )}
-              </div>
-            </div>
+                )
+              }
+            />
             <MessageBody message={m} priorTexts={priorTexts[i] ?? NO_PRIORS} pending={open.bodiesPending} />
             {m.body && m.body.attachments.filter((a) => !a.inline).length > 0 ? (
               <div className="attachments">

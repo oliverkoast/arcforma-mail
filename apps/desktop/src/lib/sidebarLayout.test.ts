@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EMPTY_SIDEBAR_COUNTS, type CategoryInfo, type SavedSearchInfo, type SidebarLayout } from "../../shared/types";
 import { defaultLayout, groupOf, hiddenRows, isActiveView, moveRow, reconcileLayout, rowDescriptors, setRowHidden, viewTitle, visibleRows } from "./sidebarLayout";
+import { sidebarRowTip } from "./tips";
 
 const categories: CategoryInfo[] = [
   { id: "newsletters", name: "Newsletters", kind: "builtin", prompt: "" },
@@ -29,9 +30,30 @@ test("descriptors: builtins, the six types, custom categories, and saved searche
   for (const id of ["unread", "attachments", "scheduled", "archive", "spam", "trash"]) assert.ok(byId.has(id), `${id} is a row`);
 });
 
+test("Needs you: the row leads the Queues group, counts its own threads, and says what it holds", () => {
+  const row = rows.find((r) => r.id === "needsyou")!;
+  assert.equal(row.label, "Needs you");
+  assert.equal(row.group, "queues");
+  assert.deepEqual(row.view, { view: "needsyou" });
+  assert.equal(row.count({ ...EMPTY_SIDEBAR_COUNTS, needsYou: 4 }), 4);
+  assert.equal(row.count(EMPTY_SIDEBAR_COUNTS), 0, "an empty row shows no count at all");
+  assert.equal(row.hiddenByDefault, undefined, "the one row he asked for is not hidden to start with");
+  assert.equal(defaultLayout(rows).groups.find((g) => g.id === "queues")!.rows[0]!.id, "needsyou");
+  // A layout saved before the row existed gains it at the head of Queues rather than under Later.
+  const saved = { version: 1, groups: [{ id: "queues", rows: [{ id: "daily", hidden: false }, { id: "weekly", hidden: false }, { id: "later", hidden: false }] }] };
+  assert.deepEqual(ids(reconcileLayout(saved, rows), "queues"), ["needsyou", "daily", "weekly", "later"]);
+  // The tooltip has to be honest about the rule, because the row is a promise.
+  const tip = sidebarRowTip(row, categories, searches);
+  assert.match(tip, /asked you something/);
+  assert.match(tip, /have not replied/);
+  assert.equal(isActiveView(row.view, { view: "needsyou", split: null, category: null }), true);
+  assert.equal(isActiveView(row.view, { view: "inbox", split: "important", category: null }), false, "Important is a different list");
+  assert.equal(viewTitle(rows, { view: "needsyou", split: null, category: null }), "Needs you");
+});
+
 test("the default layout puts every row in its group; Spam and Trash start hidden", () => {
   const layout = defaultLayout(rows);
-  assert.deepEqual(ids(layout, "queues"), ["daily", "weekly", "later"]);
+  assert.deepEqual(ids(layout, "queues"), ["needsyou", "daily", "weekly", "later"], "Needs you leads the queues");
   assert.deepEqual(ids(layout, "inbox"), ["inbox", "important", "other", "unread", "attachments", "category:newsletters", "category:promotions", "category:jobs", "category:calendar", "category:notifications", "category:receipts", "category:clients"]);
   assert.deepEqual(ids(layout, "folders"), ["snoozed", "starred", "sent", "drafts", "scheduled", "archive", "spam", "trash", "search:3"]);
   assert.deepEqual(hiddenRows(layout, rows).map((r) => r.id), ["spam", "trash"]);
@@ -48,8 +70,8 @@ test("reconcile: saved order and hidden flags survive, unknown rows drop, new ro
     ],
   };
   const layout = reconcileLayout(saved, rows);
-  assert.deepEqual(ids(layout, "queues"), ["later", "daily", "weekly"], "weekly was never placed, so it appends");
-  assert.equal(layout.groups[0]!.rows[1]!.hidden, true, "the hidden flag is kept");
+  assert.deepEqual(ids(layout, "queues"), ["needsyou", "later", "daily", "weekly"], "weekly was never placed, so it appends; Needs you goes to the head of its group instead");
+  assert.equal(layout.groups[0]!.rows.find((r) => r.id === "daily")!.hidden, true, "the hidden flag is kept");
   assert.deepEqual(ids(layout, "inbox").slice(0, 2), ["category:clients", "inbox"]);
   assert.equal(ids(layout, "inbox").includes("category:gone"), false, "a deleted category leaves the layout");
   assert.equal(ids(layout, "folders").includes("search:99"), false, "a deleted saved search leaves the layout");
@@ -106,20 +128,20 @@ test("reconcile: garbage, an old shape, and null all give the default layout", (
   assert.deepEqual(reconcileLayout({ version: 1 }, rows), def);
   assert.deepEqual(reconcileLayout({ version: 1, groups: [{ id: "elsewhere", rows: [{ id: "inbox" }] }] }, rows), def, "an unknown group id is ignored");
   const bareIds = reconcileLayout({ version: 1, groups: [{ id: "queues", rows: ["weekly"] }] }, rows);
-  assert.deepEqual(ids(bareIds, "queues"), ["weekly", "daily", "later"], "a row given as a bare id string is read as visible");
+  assert.deepEqual(ids(bareIds, "queues"), ["needsyou", "weekly", "daily", "later"], "a row given as a bare id string is read as visible");
 });
 
 test("moveRow reorders within a group and carries a row into another group, before a row or at the end", () => {
   const layout = defaultLayout(rows);
   const within = moveRow(layout, "later", "queues", "daily");
-  assert.deepEqual(ids(within, "queues"), ["later", "daily", "weekly"]);
+  assert.deepEqual(ids(within, "queues"), ["needsyou", "later", "daily", "weekly"]);
   const across = moveRow(within, "unread", "queues", "weekly");
-  assert.deepEqual(ids(across, "queues"), ["later", "daily", "unread", "weekly"]);
+  assert.deepEqual(ids(across, "queues"), ["needsyou", "later", "daily", "unread", "weekly"]);
   assert.equal(ids(across, "inbox").includes("unread"), false);
   assert.equal(groupOf(across, "unread"), "queues");
   const toEnd = moveRow(across, "daily", "folders", null);
   assert.equal(ids(toEnd, "folders").at(-1), "daily");
-  assert.deepEqual(ids(toEnd, "queues"), ["later", "unread", "weekly"]);
+  assert.deepEqual(ids(toEnd, "queues"), ["needsyou", "later", "unread", "weekly"]);
   assert.equal(moveRow(toEnd, "nothing", "queues", null), toEnd, "an unknown row is a no-op");
   assert.equal(moveRow(toEnd, "later", "queues", "later"), toEnd, "dropping a row on itself is a no-op");
   const before = moveRow(toEnd, "later", "inbox", "important");

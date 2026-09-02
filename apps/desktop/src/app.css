@@ -1730,3 +1730,87 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .row:hover .row-unsub {
   display: inline-block;
 }
+
+/* ---- the message header: an initials avatar, who wrote it, who else is on it, and how long ago ---- */
+.message-head {
+  align-items: flex-start;
+  gap: 12px;
+}
+.message-avatar {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--af-bg-alt);
+  color: var(--af-text-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 11px/1 var(--af-mono);
+  letter-spacing: 0.06em;
+}
+/* The one place the brand colour names a person: a message the owner sent. */
+.message-avatar.is-you {
+  background: var(--af-cobalt);
+  color: var(--af-reverse);
+}
+.message-who {
+  flex: 1;
+  min-width: 0;
+}
+.message-eyebrow {
+  margin-bottom: 2px;
+}
+.message-to {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: var(--af-text-soft);
+  text-align: left;
+  cursor: pointer;
+}
+.message-to:hover {
+  color: var(--af-text);
+}
+.message-recipients {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+.message-recipient {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.message-recipient dt {
+  flex: none;
+  width: 30px;
+}
+.message-recipient dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+.message-recipient-name,
+.message-recipient-you {
+  color: var(--af-text);
+}
+.message-recipient-you {
+  font-weight: 600;
+}
+.message-recipient-mail {
+  color: var(--af-text-soft);
+}
+/* The address after the name, when it adds something the name did not. */
+.message-from span {
+  margin-left: 6px;
+}

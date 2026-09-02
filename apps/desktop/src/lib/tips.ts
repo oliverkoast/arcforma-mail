@@ -6,6 +6,7 @@ import type { AccountInfo, CategoryInfo, SavedSearchInfo } from "../../shared/ty
 import type { SidebarRowDescriptor } from "./sidebarLayout";
 
 const ROW_TIPS: Record<string, string> = {
+  needsyou: "Threads where a person asked you something and you have not replied since. Nothing bulk, nothing automated, nothing you have already answered.",
   daily: "Important threads with new mail since you last left the app, plus anything added with D and every snooze or reminder that woke today. Clear it every day.",
   weekly: "Threads added with W, and whatever was left in Daily 0 when the day rolled over. Clear it by the end of the week.",
   later: "Weekly 0 threads older than a week. Nothing here is on a clock.",

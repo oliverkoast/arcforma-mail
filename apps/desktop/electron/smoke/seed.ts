@@ -5,6 +5,8 @@
 
 import fs from "node:fs";
 import {
+  attentionContext,
+  attentionFactsFor,
   createCategory,
   createReminder,
   createSavedSearch,
@@ -15,6 +17,7 @@ import {
   setQueue,
   setSetting,
   setSummary,
+  updateAttention,
   updateAccount,
   upsertAccount,
   upsertCalendarEvents,
@@ -24,6 +27,7 @@ import {
   type Db,
   type GmailThreadInput,
 } from "@arcforma/store";
+import { scoreAttention, splitForBand } from "../classify/attention.js";
 
 interface FixtureMessage {
   id: string;
@@ -203,5 +207,26 @@ export function seedFixture(db: Db, file: string, now = Date.now()): { threads: 
       })
     );
   }
+  scoreSeededThreads(db, now);
   return { threads: fx.threads.length, events: (fx.calendar ?? []).length };
+}
+
+/**
+ * The attention model over the seeded mailbox, run through the app's own
+ * scorer. The fixture carries no scores of its own, so what the smoke shots
+ * show is what the model actually says about the seeded threads, Needs you
+ * included.
+ */
+function scoreSeededThreads(db: Db, now: number): void {
+  const ctx = attentionContext(db, now);
+  const rows = db.prepare("SELECT account_id, thread_id, type, source, split FROM classifications").all() as unknown as Array<{ account_id: string; thread_id: string; type: string | null; source: string; split: string }>;
+  for (const r of rows) {
+    const f = attentionFactsFor(db, r.account_id, r.thread_id, ctx, { type: r.type });
+    if (!f) continue;
+    const v = scoreAttention(f);
+    // A re-file keeps the split the user chose; the score and the sentence are recorded either way.
+    const split = r.source === "manual" ? (r.split === "important" ? "important" : "other") : splitForBand(v.band);
+    const band = r.source === "manual" ? (split === "important" ? "important" : "other") : v.band;
+    updateAttention(db, { accountId: r.account_id, threadId: r.thread_id, split, attention: v.score, band, reason: v.reason });
+  }
 }

@@ -10,6 +10,8 @@ export interface Settings {
   remoteImages: "always" | "known" | "never";
   /** Version of the deterministic rules the stored rule-sourced classifications were made with. */
   rulesVersion: number;
+  /** Version of the attention weights the stored scores were made with. A bump rescores every verdict in place. */
+  attentionVersion: number;
   /** When the current day began for Daily 0: the last activity of the night before. 0 until the app has seen a day. */
   dayStartAt: number;
   /** Last keyboard or mouse activity the app recorded, throttled. 0 until the first one. */
@@ -27,6 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoDraft: false,
   remoteImages: "always",
   rulesVersion: 0,
+  attentionVersion: 0,
   dayStartAt: 0,
   lastActiveAt: 0,
   weekStartAt: 0,
@@ -58,6 +61,7 @@ export function getSettings(db: Db): Settings {
     autoDraft: getSetting(db, "autoDraft"),
     remoteImages: getSetting(db, "remoteImages"),
     rulesVersion: getSetting(db, "rulesVersion"),
+    attentionVersion: getSetting(db, "attentionVersion"),
     dayStartAt: getSetting(db, "dayStartAt"),
     lastActiveAt: getSetting(db, "lastActiveAt"),
     weekStartAt: getSetting(db, "weekStartAt"),

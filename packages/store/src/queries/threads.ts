@@ -97,6 +97,11 @@ export function listThreads(db: Db, opts: ListThreadsOptions = {}): ListThreadsR
   }
   if (isQueue(view)) where.push(`${queueSql} = '${view}'`);
   switch (view) {
+    case "needsyou":
+      // The promise of the row: a person asked, and he has not answered. Only mail still in the
+      // inbox and awake, because a thread he archived or snoozed is one he has already dealt with.
+      where.push("c.band = 'needs_you'", "t.in_inbox = 1", `NOT ${PENDING_SNOOZE}`);
+      break;
     case "inbox":
       where.push("t.in_inbox = 1", `NOT ${PENDING_SNOOZE}`);
       break;
@@ -157,7 +162,7 @@ export function listThreads(db: Db, opts: ListThreadsOptions = {}): ListThreadsR
 
 /** The SELECT and joins behind every thread list row: the thread, its classification, snooze, reminder, queue, and unsubscribe state. */
 function threadListSelect(queueSql: string): string {
-  return `SELECT t.*, c.split, c.type, c.category_id,
+  return `SELECT t.*, c.split, c.type, c.category_id, c.attention, c.band, c.reason AS attention_reason,
       (SELECT s.wake_at FROM snoozes s WHERE s.account_id = t.account_id AND s.thread_id = t.id AND s.status = 'pending' ORDER BY s.id DESC LIMIT 1) AS wake_at,
       ${NO_REPLY_BY} AS no_reply_by,
       ${queueSql} AS queue,

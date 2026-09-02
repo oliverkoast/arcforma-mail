@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import DOMPurify from "dompurify";
 import type { MessageView } from "../../shared/types";
 import { useApp } from "../state/store";
-import { HIDE_QUOTED, PURIFY_CONFIG, SHOW_QUOTED, buildMessageCsp, foldPlainText, hardenNode, hasRemoteImages, tidyMessage, tooLarge, type HookNode, type MailDocument } from "../lib/mailhtml";
+import { PURIFY_CONFIG, buildMessageCsp, foldLabels, foldPlainText, hardenNode, hasRemoteImages, tidyMessage, tooLarge, type HookNode, type MailDocument } from "../lib/mailhtml";
 
 function token(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -70,6 +70,8 @@ export function MessageBody({ message, priorTexts = NO_PRIORS, pending = false }
 
   const text = message.body?.text ?? null;
   const textFold = useMemo(() => (srcdoc || !text ? null : foldPlainText(text, priorTexts)), [srcdoc, text, priorTexts]);
+  // The plain-text fold carries the same label as the HTML one: what is inside, and how many lines.
+  const textLabels = foldLabels(["quote"], textFold?.quoted ? textFold.quoted.split("\n").filter((l) => l.trim()).length : 0);
 
   useEffect(() => {
     const frame = ref.current;
@@ -139,8 +141,8 @@ export function MessageBody({ message, priorTexts = NO_PRIORS, pending = false }
           {textFold.quoted !== null ? (
             <details className="quote-fold">
               <summary data-tip="The earlier messages quoted under this one. Click to show or hide them.">
-                <span className="af-mono qf-show">{SHOW_QUOTED}</span>
-                <span className="af-mono qf-hide">{HIDE_QUOTED}</span>
+                <span className="af-mono qf-show">{textLabels.show}</span>
+                <span className="af-mono qf-hide">{textLabels.hide}</span>
               </summary>
               <pre className="message-text message-text-quoted">{textFold.quoted}</pre>
             </details>
