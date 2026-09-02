@@ -230,6 +230,9 @@ async function boot(): Promise<void> {
     runSmoke(mainWindow, SMOKE_DIR, { db, accounts });
   } else {
     sync.start();
+    // Drafts saved in the last moments before the previous quit read Saving with nothing queued; queue them now.
+    const recovered = mirror.recover();
+    if (recovered) log("drafts", `queued ${recovered} draft(s) left pending by the last run`);
     scheduler.start();
     classifier.start();
     calendar.start();
@@ -257,15 +260,28 @@ async function boot(): Promise<void> {
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();
   });
-  app.on("before-quit", () => {
+  let quitting = false;
+  app.on("before-quit", (event) => {
+    if (quitting) return;
     // A draft edited in the last two seconds is queued now; the outbox row survives the quit and drains on the next start.
-    void mirror?.flush();
-    mirror?.stop();
-    sync?.stop();
-    scheduler?.stop();
-    classifier?.stop();
-    calendar?.stop();
-    db?.close();
+    // The flush builds the message asynchronously, so the quit waits for it (briefly) before the store closes under it.
+    quitting = true;
+    event.preventDefault();
+    void (async () => {
+      try {
+        await Promise.race([mirror?.flush(), new Promise((r) => setTimeout(r, 3000))]);
+      } catch (err) {
+        logError("drafts", "flush before quit", err);
+      }
+      mirror?.stop();
+      sync?.stop();
+      scheduler?.stop();
+      classifier?.stop();
+      calendar?.stop();
+      db?.close();
+      db = null;
+      app.quit();
+    })();
   });
 }
 

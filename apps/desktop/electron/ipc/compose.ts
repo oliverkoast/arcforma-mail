@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
 import { deleteSnippet, getSettings, listDrafts, listSnippets, saveDraft, setSetting, updateSnippet, upsertSnippet, type Db, type DraftRow } from "@arcforma/store";
-import { queueSend, signatureFor, undoSend } from "../compose/queue.js";
-import { detachDraftForSend, discardDraft, restoreDraft, type DraftMirror } from "../drafts/mirror.js";
+import { signatureFor, undoSend } from "../compose/queue.js";
+import { discardDraft, restoreDraft, sendDraft, type DraftMirror } from "../drafts/mirror.js";
 import { emit } from "../events.js";
 import { log } from "../log.js";
 import type { Scheduler } from "../scheduler.js";
@@ -34,13 +34,8 @@ function snippets(db: Db): SnippetInfo[] {
 
 export function registerComposeIpc(db: Db, scheduler: Scheduler, mirror: DraftMirror, sync: Pick<SyncManager, "poke">): void {
   ipcMain.handle("compose:send", async (_e, draft: ComposeDraft, sendAt?: number | null) => {
-    // The local row leaves Drafts now; its Gmail draft goes once the send has succeeded.
-    let gmailDraftId: string | null = null;
-    if (draft.draftId) {
-      mirror.cancel(draft.draftId);
-      gmailDraftId = detachDraftForSend(db, draft.draftId);
-    }
-    const result = await queueSend(db, draft, { sendAt: sendAt ?? null, gmailDraftId });
+    // Checked first, then the local row leaves Drafts; its Gmail draft goes once the send has succeeded.
+    const result = await sendDraft(db, draft, { sendAt: sendAt ?? null, cancelMirror: (id) => mirror.cancel(id) });
     log("compose", `queued send ${result.id} for ${new Date(result.sendAt).toISOString()}`);
     scheduler.wakeSoon(result.sendAt);
     return result;

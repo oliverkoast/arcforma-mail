@@ -106,3 +106,11 @@ test("a send-later message is dated when it goes out", async () => {
   const date = /^Date: (.+)$/m.exec(getSend(store, r.id)!.raw_mime)?.[1] ?? "";
   assert.equal(Date.parse(date), later, `Date header ${date} should be the scheduled time`);
 });
+
+test("validateDraft refuses a message with nothing written, unless it forwards quoted history", () => {
+  assert.throws(() => validateDraft({ ...draft, bodyHtml: "<p></p>", quotedHtml: "" }), /Write something/);
+  assert.throws(() => validateDraft({ ...draft, bodyHtml: "<p>&nbsp;</p>", quotedHtml: "" }), /Write something/);
+  assert.throws(() => validateDraft({ ...draft, bodyHtml: "" }), /Write something/, "a reply that only quotes is a slip");
+  assert.doesNotThrow(() => validateDraft({ ...draft, mode: "forward", bodyHtml: "", quotedHtml: "<div>Forwarded message</div>" }));
+  assert.doesNotThrow(() => validateDraft(draft));
+});

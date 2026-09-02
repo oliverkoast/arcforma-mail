@@ -21,6 +21,7 @@ import {
   hasOpenDraftUpsert,
   knownGmailMessageIds,
   listMirroredDrafts,
+  listPendingMirrorDrafts,
   queuedGmailDraftIds,
   saveDraft,
   setDraftMirror,
@@ -30,10 +31,10 @@ import {
   type DraftUpsertPayload,
   type HistoryChange,
 } from "@arcforma/store";
-import { senderFor, signatureFor } from "../compose/queue.js";
+import { queueSend, senderFor, signatureFor, validateDraft } from "../compose/queue.js";
 import { log, logError } from "../log.js";
 import { MirrorDebounce } from "./debounce.js";
-import type { Address, ComposeDraft } from "../../shared/types.js";
+import type { Address, ComposeDraft, SendResult } from "../../shared/types.js";
 
 /** An edit made here inside this window beats an edit made in Gmail at the same time. */
 export const LOCAL_WINS_MS = 60_000;
@@ -123,6 +124,22 @@ export function detachDraftForSend(db: Db, draftId: number): string | null {
   dropPendingDraftUpserts(db, draftId);
   deleteDraft(db, draftId);
   return row.gmail_draft_id;
+}
+
+/**
+ * Send from the compose: the draft is checked first, then its local row and any
+ * waiting mirror go, then the send is queued. The check comes first on purpose:
+ * a refused send (no recipient, nothing written) must leave the draft exactly
+ * where it was, in the table and in Gmail, rather than delete it and then fail.
+ */
+export async function sendDraft(db: Db, draft: ComposeDraft, opts: { sendAt?: number | null; cancelMirror?: (draftId: number) => void } = {}): Promise<SendResult> {
+  validateDraft(draft);
+  let gmailDraftId: string | null = null;
+  if (draft.draftId) {
+    opts.cancelMirror?.(draft.draftId);
+    gmailDraftId = detachDraftForSend(db, draft.draftId);
+  }
+  return queueSend(db, draft, { sendAt: opts.sendAt ?? null, gmailDraftId });
 }
 
 export interface DraftAckOutcome {
@@ -269,6 +286,21 @@ export class DraftMirror {
     this.accounts.set(draftId, accountId);
     this.debounce.touch(draftId, this.now(), flush);
     this.arm();
+  }
+
+  /**
+   * On start: a draft saved in the last two seconds before a quit, or before a
+   * crash, is marked pending with no outbox row behind it. Without this it reads
+   * Saving until the next edit. Returns how many were queued.
+   */
+  recover(): number {
+    let n = 0;
+    for (const row of listPendingMirrorDrafts(this.db)) {
+      if (hasOpenDraftUpsert(this.db, row.id)) continue;
+      this.touch(row.id, row.account_id, true);
+      n += 1;
+    }
+    return n;
   }
 
   /** The draft is gone (sent or discarded); nothing more goes up for it. */

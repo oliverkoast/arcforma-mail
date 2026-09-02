@@ -1,7 +1,7 @@
 // Pure compose rules: who a reply goes to, what the subject becomes, and how
 // the quoted history reads. No DOM, so node:test covers it directly.
 
-import type { Address, ComposeDraft, ComposeMode, MessageView, ThreadSummary } from "../../shared/types";
+import type { Address, ComposeDraft, ComposeMode, MessageView, ThreadSummary, ThreadView } from "../../shared/types";
 
 const RE_PREFIX = /^\s*(re|aw|sv)\s*:\s*/i;
 const FWD_PREFIX = /^\s*(fwd?|wg)\s*:\s*/i;
@@ -255,6 +255,27 @@ export function sentMessage(input: SentMessageInput): MessageView {
 
 export function isPending(m: Pick<MessageView, "id">): boolean {
   return m.id.startsWith(PENDING_PREFIX);
+}
+
+/**
+ * True when a refetched thread shows the same messages the pane already has:
+ * same ids in the same order, each with the same body state and image setting.
+ * The pane keeps its array then, so the sandboxed frames do not reload and
+ * scroll back to the top on every sync that touched some other thread.
+ */
+export function sameMessages(a: MessageView[], b: MessageView[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((m, i) => {
+    const n = b[i]!;
+    return m.id === n.id && (m.body === null) === (n.body === null) && m.loadImages === n.loadImages && (m.body?.html?.length ?? -1) === (n.body?.html?.length ?? -1) && (m.body?.text?.length ?? -1) === (n.body?.text?.length ?? -1) && (m.body?.attachments.length ?? -1) === (n.body?.attachments.length ?? -1);
+  });
+}
+
+/** The eyebrow over a thread whose bodies did not come, with the reason when there is one; null when they did. */
+export function bodyNotice(view: Pick<ThreadView, "bodiesPending" | "bodiesError">): string | null {
+  if (!view.bodiesPending) return null;
+  const reason = (view.bodiesError ?? "").trim().replace(/[.\s]+$/, "");
+  return reason ? `Messages not loaded. ${reason}.` : "Messages not loaded.";
 }
 
 /**

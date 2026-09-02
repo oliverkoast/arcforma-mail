@@ -49,8 +49,15 @@ export function composeHtml(draft: Pick<ComposeDraft, "bodyHtml" | "quotedHtml">
   return `${body}<br><div class="gmail_quote">${draft.quotedHtml}</div>`;
 }
 
+/** True when the body carries text. A forward is the exception: its quoted history is the message, so it may go with nothing added. A reply that only quotes is a slip. */
+export function hasSendableBody(draft: Pick<ComposeDraft, "mode" | "bodyHtml" | "quotedHtml">): boolean {
+  const text = draft.bodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
+  return text.length > 0 || (draft.mode === "forward" && draft.quotedHtml.trim().length > 0);
+}
+
 export function validateDraft(draft: ComposeDraft): void {
   if (draft.to.length === 0 && draft.cc.length === 0 && draft.bcc.length === 0) throw new Error("Add at least one recipient.");
+  if (!hasSendableBody(draft)) throw new Error("Write something before sending.");
   const bad = [...draft.to, ...draft.cc, ...draft.bcc].find((a) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email));
   if (bad) throw new Error(`${bad.email} is not a valid address.`);
 }

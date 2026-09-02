@@ -209,7 +209,7 @@ export function listBodies(db: Db, accountId: string, threadId: string): Message
     .all(accountId, threadId) as unknown as MessageBodyRow[];
 }
 
-/** Recomputes the denormalized thread row and thread_labels from its messages. Returns null if the thread has no messages. */
+/** Recomputes the denormalized thread row and thread_labels from its messages. Returns null, with the row removed, when the thread has no live (non-draft) messages. */
 export function recomputeThread(db: Db, accountId: string, threadId: string, opts: { keepSortAt?: boolean } = {}): ThreadRow | null {
   const all = listThreadMessages(db, accountId, threadId, { includeDrafts: true });
   if (all.length === 0) {
@@ -217,9 +217,15 @@ export function recomputeThread(db: Db, accountId: string, threadId: string, opt
     return null;
   }
   // Drafts never drive the thread's subject, snippet, participants, dates, or count. A thread
-  // that is only a draft (a new message not yet sent) keeps the draft so it still exists.
+  // that is only a draft (a new message not yet sent, or a reply whose original went away) is
+  // not mail: it would list under All Mail with the draft's subject and open empty, since the
+  // draft itself lives in the drafts table. The row goes; the cascade takes its messages.
   const live = all.filter((m) => !isDraftMessage(m));
-  const msgs = live.length > 0 ? live : all;
+  if (live.length === 0) {
+    db.prepare("DELETE FROM threads WHERE account_id = ? AND id = ?").run(accountId, threadId);
+    return null;
+  }
+  const msgs = live;
   // Gmail history is per message. A thread is unread, starred, or in the
   // inbox when any live message is; a message in TRASH or SPAM no longer
   // counts, and the thread itself only carries TRASH or SPAM when every

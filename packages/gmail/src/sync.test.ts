@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { GmailClient } from "./client.js";
 import { GmailApiError } from "./errors.js";
-import { backfill, fetchThreadsMetadata } from "./sync.js";
+import { backfill, fetchThreadsMetadata, fetchThreadsMetadataPartial } from "./sync.js";
 import { fakeTransport, token, type Canned } from "../test/helpers.js";
 
 /** A multipart/mixed batch response with one part per (id, status, body). */
@@ -67,4 +67,19 @@ test("backfill records the watermark before listing, persists the cursor only af
   assert.deepEqual(events, ["threads t3", "cursor null"]);
   assert.equal(calls.filter((c) => /\/profile$/.test(c.url)).length, profileCalls, "a resumed backfill keeps the original watermark");
   assert.deepEqual(result, { threads: 3, finished: true });
+});
+
+test("fetchThreadsMetadataPartial hands back what landed and names the thread that failed, so a poll can move on and retry just that one", async () => {
+  const { transport } = fakeTransport([
+    batchResponse([
+      { id: "item0", status: 200, body: thread("t1") },
+      { id: "item1", status: 500, body: { error: { message: "backend" } } },
+      { id: "item2", status: 404, body: { error: { message: "gone" } } },
+      { id: "item3", status: 200, body: thread("t4") },
+    ]),
+  ]);
+  const client = new GmailClient({ accessToken: token, transport, sleep: async () => {}, maxAttempts: 1 });
+  const r = await fetchThreadsMetadataPartial(client, ["t1", "t2", "t3", "t4"]);
+  assert.deepEqual(r.threads.map((t) => t.id), ["t1", "t4"], "the good parts land in order");
+  assert.deepEqual(r.failed.map((f) => [f.id, f.error.status]), [["t2", 500]], "the failure is reported by thread id; the vanished thread is simply skipped");
 });

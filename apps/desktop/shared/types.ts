@@ -107,7 +107,10 @@ export interface MessageView {
 export interface ThreadView {
   thread: ThreadSummary;
   messages: MessageView[];
+  /** True when at least one message has no body yet: the fetch failed or there was no client. Retry reopens the thread. */
   bodiesPending: boolean;
+  /** Why the bodies did not come, for the eyebrow; null when they did. */
+  bodiesError?: string | null;
 }
 
 export type InboxView = "inbox" | "all" | "snoozed" | "sent" | "drafts" | "starred" | "unread" | "attachments" | "scheduled" | "archive" | "spam" | "trash" | `search:${string}` | QueueName;

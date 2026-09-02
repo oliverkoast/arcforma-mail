@@ -26,8 +26,9 @@ const NO_PRIORS: string[] = [];
  * earlier messages of the thread as plain text, oldest first, so history pasted
  * without quote markup folds too.
  */
-export function MessageBody({ message, priorTexts = NO_PRIORS }: { message: MessageView; priorTexts?: string[] }) {
+export function MessageBody({ message, priorTexts = NO_PRIORS, pending = false }: { message: MessageView; priorTexts?: string[]; pending?: boolean }) {
   const setLoadImages = useApp((s) => s.setLoadImages);
+  const refreshOpen = useApp((s) => s.refreshOpen);
   const ref = useRef<HTMLIFrameElement>(null);
   const rawHtml = message.body?.html ?? null;
   const oversized = rawHtml ? tooLarge(rawHtml) : false;
@@ -97,7 +98,18 @@ export function MessageBody({ message, priorTexts = NO_PRIORS }: { message: Mess
     };
   }, [srcdoc]);
 
-  if (!message.body) return <div className="af-mono">Loading message</div>;
+  if (!message.body) {
+    // Never a blank: the snippet stands in, and when the fetch failed the line says so and offers another try.
+    return (
+      <div className="message-body">
+        <div className="notice">
+          <span className="af-mono">{pending ? "Not loaded" : "Loading message"}</span>
+          {message.snippet ? <span>{message.snippet}</span> : null}
+          {pending ? <button data-tip="Asks Gmail for this thread's message bodies again." onClick={() => void refreshOpen()}>Fetch this message again</button> : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="message-body">

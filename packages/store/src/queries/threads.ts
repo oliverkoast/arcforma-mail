@@ -21,7 +21,7 @@ function reapplyPendingMasks(db: Db, accountId: string, threadId: string): void 
   const masks = listPendingMasks(db, accountId, threadId);
   if (masks.length === 0) return;
   const resolve = (l: string) => (l.includes("/") || /[a-z]/.test(l) ? labelIdByName(db, accountId, l) : l);
-  for (const m of listThreadMessages(db, accountId, threadId)) {
+  for (const m of listThreadMessages(db, accountId, threadId, { includeDrafts: true })) {
     const labels = new Set(JSON.parse(m.label_ids_json) as string[]);
     for (const mask of masks) {
       for (const l of mask.remove) {
@@ -47,9 +47,11 @@ export function upsertThreadFromGmail(db: Db, accountId: string, thread: GmailTh
       upsertMessage(db, accountId, { ...m, threadId: thread.id }, ctx);
       seen.add(m.id);
     }
-    // A full thread response is authoritative: messages Gmail no longer lists are gone.
+    // A full thread response is authoritative: messages Gmail no longer lists are gone. That
+    // includes the DRAFT-labelled message behind a draft deleted or re-saved in Gmail, which
+    // otherwise sits in the table for good.
     if ((thread.messages ?? []).length > 0) {
-      for (const m of listThreadMessages(db, accountId, thread.id)) {
+      for (const m of listThreadMessages(db, accountId, thread.id, { includeDrafts: true })) {
         if (!seen.has(m.id)) deleteMessage(db, accountId, m.id);
       }
     }
@@ -143,15 +145,7 @@ export function listThreads(db: Db, opts: ListThreadsOptions = {}): ListThreadsR
     where.push("(t.sort_at < ? OR (t.sort_at = ? AND (t.account_id > ? OR (t.account_id = ? AND t.id > ?))))");
     args.push(cursor[0], cursor[0], cursor[1], cursor[1], cursor[2]);
   }
-  const sql = `SELECT t.*, c.split, c.type, c.category_id,
-      (SELECT s.wake_at FROM snoozes s WHERE s.account_id = t.account_id AND s.thread_id = t.id AND s.status = 'pending' ORDER BY s.id DESC LIMIT 1) AS wake_at,
-      ${NO_REPLY_BY} AS no_reply_by,
-      ${queueSql} AS queue,
-      ${UNSUBSCRIBE_STATE} AS unsubscribe_state,
-      ${CAN_UNSUBSCRIBE} AS can_unsubscribe
-    FROM threads t
-    LEFT JOIN classifications c ON c.account_id = t.account_id AND c.thread_id = t.id
-    ${QUEUE_JOIN}
+  const sql = `${threadListSelect(queueSql)}
     WHERE ${where.join(" AND ")}
     ORDER BY t.sort_at DESC, t.account_id, t.id
     LIMIT ?`;
@@ -159,6 +153,26 @@ export function listThreads(db: Db, opts: ListThreadsOptions = {}): ListThreadsR
   const page = rows.slice(0, limit);
   const last = page[page.length - 1];
   return { rows: page, nextCursor: rows.length > limit && last ? encodeCursor(last) : null };
+}
+
+/** The SELECT and joins behind every thread list row: the thread, its classification, snooze, reminder, queue, and unsubscribe state. */
+function threadListSelect(queueSql: string): string {
+  return `SELECT t.*, c.split, c.type, c.category_id,
+      (SELECT s.wake_at FROM snoozes s WHERE s.account_id = t.account_id AND s.thread_id = t.id AND s.status = 'pending' ORDER BY s.id DESC LIMIT 1) AS wake_at,
+      ${NO_REPLY_BY} AS no_reply_by,
+      ${queueSql} AS queue,
+      ${UNSUBSCRIBE_STATE} AS unsubscribe_state,
+      ${CAN_UNSUBSCRIBE} AS can_unsubscribe
+    FROM threads t
+    LEFT JOIN classifications c ON c.account_id = t.account_id AND c.thread_id = t.id
+    ${QUEUE_JOIN}`;
+}
+
+/** One thread with the same columns a list row carries, for the reading pane header. Null when the thread is gone. */
+export function getThreadListRow(db: Db, accountId: string, threadId: string): ThreadListRow | null {
+  const queueSql = effectiveQueueSql(getSetting(db, "dayStartAt"));
+  const row = db.prepare(`${threadListSelect(queueSql)} WHERE t.account_id = ? AND t.id = ?`).get(accountId, threadId) as unknown as ThreadListRow | undefined;
+  return row ?? null;
 }
 
 /** Convenience alias used by the desktop IPC layer. */
@@ -179,7 +193,8 @@ export function changeThreadLabels(db: Db, accountId: string, threadId: string, 
   const add = change.add ?? [];
   const remove = change.remove ?? [];
   return transaction(db, () => {
-    for (const m of listThreadMessages(db, accountId, threadId)) {
+    // threads.modify touches every message of the thread in Gmail, drafts included; the local copy does the same.
+    for (const m of listThreadMessages(db, accountId, threadId, { includeDrafts: true })) {
       const labels = new Set(JSON.parse(m.label_ids_json) as string[]);
       for (const l of remove) labels.delete(l);
       for (const l of add) labels.add(l);
@@ -218,7 +233,7 @@ export function moveToInbox(db: Db, accountId: string, threadId: string): number
 export function trash(db: Db, accountId: string, threadId: string): number {
   return transaction(db, () => {
     clearQueue(db, accountId, threadId);
-    for (const m of listThreadMessages(db, accountId, threadId)) {
+    for (const m of listThreadMessages(db, accountId, threadId, { includeDrafts: true })) {
       const labels = new Set(JSON.parse(m.label_ids_json) as string[]);
       labels.delete("INBOX");
       labels.add("TRASH");

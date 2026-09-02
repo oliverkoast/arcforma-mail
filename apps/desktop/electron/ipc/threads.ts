@@ -11,6 +11,7 @@ import {
   getSavedSearch,
   getSend,
   getThread,
+  getThreadListRow,
   listBodies,
   listScheduledSends,
   listThreadMessages,
@@ -154,28 +155,33 @@ export function registerThreadIpc(db: Db, accounts: AccountRegistry, sync: SyncM
     let messages = listThreadMessages(db, accountId, threadId);
     const cached = new Set(listBodies(db, accountId, threadId).map((b) => b.message_id));
     const missing = messages.filter((m) => !cached.has(m.id));
-    let bodiesPending = false;
+    let bodiesError: string | null = null;
     if (missing.length > 0) {
       const client = accounts.client(accountId);
       if (client) {
         try {
           const full = await fetchThreadFull(client, threadId);
+          const known = new Set(messages.map((m) => m.id));
           for (const m of full.messages ?? []) {
+            // Only messages the store knows: a body for a message the sync has not landed yet would violate the key.
+            if (!known.has(m.id)) continue;
             const body = findBody(m.payload);
             saveBody(db, accountId, m.id, { html: body.html, text: body.text, attachments: listAttachments(m.payload) });
           }
           messages = listThreadMessages(db, accountId, threadId);
+          const still = listBodies(db, accountId, threadId).length;
+          if (still < messages.length) bodiesError = "Gmail did not return every message of this thread.";
         } catch (err) {
-          bodiesPending = true;
+          bodiesError = (err as Error).message || "The message bodies could not be fetched.";
           logError("threads", `bodies for ${accountId}/${threadId}`, err);
         }
       } else {
-        bodiesPending = true;
+        bodiesError = "Not signed in, so the message bodies cannot be fetched.";
       }
     }
-    const list = listThreads(db, { view: "all", accountIds: [accountId], limit: 1, cursor: null });
-    const summaryRow = list.rows.find((r) => r.id === threadId) ?? ({ ...row, split: null, type: null, category_id: null, wake_at: null, no_reply_by: null, queue: null, unsubscribe_state: null, can_unsubscribe: 0 } as ThreadListRow);
-    return { thread: toSummary(summaryRow), messages: messages.map((m) => toMessageView(db, m)), bodiesPending };
+    // The same columns the list carries, so the header shows the snooze, reminder, queue, and file state for any thread, not only the newest one.
+    const summaryRow = getThreadListRow(db, accountId, threadId) ?? ({ ...row, split: null, type: null, category_id: null, wake_at: null, no_reply_by: null, queue: null, unsubscribe_state: null, can_unsubscribe: 0 } as ThreadListRow);
+    return { thread: toSummary(summaryRow), messages: messages.map((m) => toMessageView(db, m)), bodiesPending: bodiesError !== null, bodiesError };
   });
 
   // Every mutation checks the account and the thread first: a bad id would otherwise write an outbox row nothing can drain.

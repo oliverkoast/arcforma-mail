@@ -31,7 +31,7 @@ import {
 import { TYPING_SCOPES, type Scope } from "../keys/keymap";
 import { scopeFor } from "../keys/scope";
 import { installActivityTracker } from "../lib/activity";
-import { buildDraft, hasBody, isPending, mergePending, sentMessage, textToHtml } from "../lib/compose";
+import { buildDraft, hasBody, isPending, mergePending, sameMessages, sentMessage, textToHtml } from "../lib/compose";
 import { nextMondayAt, tomorrowAt } from "../lib/format";
 import { expandSnippet, missingVariablesText, stripCursorToken, type ExpandedSnippet, type SnippetContext } from "../lib/snippets";
 
@@ -156,7 +156,8 @@ export interface AppState {
   select: (index: number) => void;
   move: (delta: number) => void;
   openSelected: () => Promise<void>;
-  openThreadById: (accountId: string, threadId: string) => Promise<void>;
+  /** Opens a thread in the reading pane. Resolves true when it is showing; false when the fetch failed (the error shows unless quiet) or a later open overtook it. */
+  openThreadById: (accountId: string, threadId: string, opts?: { quiet?: boolean }) => Promise<boolean>;
   closeThread: () => void;
   archiveSelected: () => Promise<void>;
   starSelected: () => Promise<void>;
@@ -203,8 +204,12 @@ export interface AppState {
   dismissCompose: () => Promise<void>;
   /** Reopens a collapsed inline reply from its strip. */
   expandInline: () => void;
-  /** After a sync: refetches the open thread when it shows a sent message the sync has not confirmed yet. */
-  confirmSent: () => Promise<void>;
+  /**
+   * After a sync: re-reads the open thread so a reply that just arrived shows, a sent message the sync confirmed
+   * replaces its optimistic copy, and bodies that failed to load get another try. Nothing changed means the pane
+   * keeps its messages as they are. A thread that left the store closes with a toast.
+   */
+  refreshOpen: () => Promise<void>;
   sendCompose: (sendAt?: number | null) => Promise<void>;
   setSendLater: (open: boolean, pick?: boolean) => void;
   setSnippetPicker: (open: boolean) => void;
@@ -234,6 +239,8 @@ export interface AppState {
   updateCategory: (id: string, patch: { name?: string; prompt?: string }) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
   loadDrafts: () => Promise<void>;
+  /** After a drafts reload: when the open compose's row now carries different text (edited in Gmail), the compose takes it. */
+  adoptDraftChange: (drafts: DraftInfo[]) => void;
   openDraft: (d: DraftInfo) => void;
   deleteDraft: (id: number) => Promise<void>;
 }
@@ -255,6 +262,13 @@ let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 let autosaveInflight: Promise<void> | null = null;
 /** Bumped whenever a compose opens or closes; an autosave that resolves for an older session drops its result. */
 let composeSession = 0;
+/** What the open compose last wrote to the drafts table, so an unchanged compose is not saved again and a row that differs is known to have changed elsewhere (Gmail). */
+let lastSaved: { draftId: number; key: string } | null = null;
+function saveKey(d: ComposeDraft): string {
+  return JSON.stringify([d.to, d.cc, d.bcc, d.subject, d.bodyHtml]);
+}
+/** Bumped on every open, close, or view change of the reading pane; a threads:get that resolves for an older open is dropped, so a fast J J never lands the first thread over the second. */
+let openSeq = 0;
 
 function cancelAutosave(): void {
   if (autosaveTimer) clearTimeout(autosaveTimer);
@@ -379,7 +393,7 @@ export const useApp = create<AppState>((set, get) => ({
     });
     on("threads:changed", () => {
       void get().loadThreads(true);
-      void get().confirmSent();
+      void get().refreshOpen();
     });
     on("sync:progress", (p) => set((s) => ({ progress: { ...s.progress, [p.accountId]: p } })));
     on("toast", (t) => get().showToast(t));
@@ -421,6 +435,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   setView(view, opts = {}) {
+    openSeq += 1;
     set({ view, split: opts.split ?? null, category: opts.category ?? null, selected: 0, open: null, searchHits: null, searchQuery: "", summary: null, replies: null });
     get().syncScope();
     void get().loadThreads(true);
@@ -428,12 +443,14 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   setAccountFilter(id) {
+    openSeq += 1;
     set({ accountFilter: id, selected: 0, open: null, summary: null, replies: null });
     get().syncScope();
     void get().loadThreads(true);
   },
 
   openAccountInbox(id) {
+    openSeq += 1;
     set({ accountFilter: id, view: "inbox", split: null, category: null, selected: 0, open: null, searchHits: null, searchQuery: "", summary: null, replies: null });
     get().syncScope();
     void get().loadThreads(true);
@@ -460,26 +477,33 @@ export const useApp = create<AppState>((set, get) => ({
     await s.openThreadById(row.accountId, row.id);
   },
 
-  async openThreadById(accountId, threadId) {
+  async openThreadById(accountId, threadId, opts = {}) {
+    const seq = ++openSeq;
     set({ openLoading: true, popover: null, summary: null, replies: null });
     try {
       const view = await invoke("threads:get", accountId, threadId);
+      // A later open (or a close) won the race: this result is for a thread nobody is looking at.
+      if (seq !== openSeq) return false;
       set({ open: view, openLoading: false });
       get().syncScope();
       const row = get().rows.find((r) => r.id === threadId && r.accountId === accountId);
       if (row?.unread) {
-        await invoke("threads:markRead", accountId, threadId, true);
         set((cur) => ({ rows: cur.rows.map((r) => (r.id === threadId && r.accountId === accountId ? { ...r, unread: false } : r)) }));
+        invoke("threads:markRead", accountId, threadId, true).catch((err: Error) => get().showToast({ eyebrow: "NOT MARKED READ", text: err.message }));
       }
       void get().loadAiForOpen();
+      return true;
     } catch (err) {
-      set({ openLoading: false, error: (err as Error).message });
+      if (seq !== openSeq) return false;
+      set(opts.quiet ? { openLoading: false } : { openLoading: false, error: (err as Error).message });
       get().syncScope();
+      return false;
     }
   },
 
   closeThread() {
-    set({ open: null, popover: null, summary: null, replies: null });
+    openSeq += 1;
+    set({ open: null, openLoading: false, popover: null, summary: null, replies: null });
     get().syncScope();
   },
 
@@ -857,6 +881,7 @@ export const useApp = create<AppState>((set, get) => ({
       if (placement === "inline" && (!view || !anchorMessage)) return;
       if (s.compose && !docked) void s.closeCompose(true);
       composeSession += 1;
+      lastSaved = null;
       set({
         compose: d,
         autosavedDraftId: null,
@@ -922,11 +947,15 @@ export const useApp = create<AppState>((set, get) => ({
       return;
     }
 
-    // Coming back to a thread with a parked reply: R reopens that draft rather than starting over.
-    if (placement === "inline" && view && !opts.messageId && !opts.bodyHtml && (mode === "reply" || mode === "replyAll")) {
+    // Coming back to a thread with a parked reply: R reopens that draft rather than starting over. A reply
+    // aimed at another message of the thread moves that draft there, the way it moves an open box: one thread,
+    // one reply draft, never a second row the strip cannot show.
+    if (placement === "inline" && view && !opts.bodyHtml && (mode === "reply" || mode === "replyAll")) {
       const saved = s.drafts.find((d) => d.threadId === view.thread.id && d.accountId === view.thread.accountId);
       if (saved) {
         get().openCompose(saved.mode, { draft: saved, placement: "inline" });
+        const anchor = get().inlineAnchor;
+        if (get().compose && anchor && ((opts.messageId && opts.messageId !== anchor.messageId) || mode !== saved.mode)) get().openCompose(mode, { messageId: opts.messageId ?? anchor.messageId });
         return;
       }
     }
@@ -945,6 +974,7 @@ export const useApp = create<AppState>((set, get) => ({
     }
     if (placement === "inline" && !get().readingPane) get().setReadingPane(true);
     composeSession += 1;
+    lastSaved = null;
     set({
       compose: draft,
       autosavedDraftId: null,
@@ -979,15 +1009,21 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   async autosaveCompose() {
+    // One save at a time: a second save leaving before the first has its row id back would open a second row for the same text.
+    while (autosaveInflight) await autosaveInflight;
     const s = get();
     const d = s.compose;
     if (!d || s.inlineCollapsed) return;
     // Recipients alone are not a draft; the same bar Esc uses.
     if (!(s.composePlacement === "inline" ? hasBody(d) : hasContent(d))) return;
     const session = composeSession;
+    const rowId = d.draftId ?? s.autosavedDraftId;
+    // Nothing typed since the last save (the text came back from Gmail, or a stray update event): no row churn.
+    if (rowId && lastSaved && lastSaved.draftId === rowId && lastSaved.key === saveKey(d)) return;
     const run = (async () => {
       try {
-        const id = await invoke("drafts:save", { ...d, draftId: d.draftId ?? s.autosavedDraftId });
+        const id = await invoke("drafts:save", { ...d, draftId: rowId });
+        lastSaved = { draftId: id, key: saveKey(d) };
         if (composeSession === session && get().compose) set({ autosavedDraftId: id });
         void get().loadDrafts();
       } catch {
@@ -1005,9 +1041,10 @@ export const useApp = create<AppState>((set, get) => ({
     const inline = get().composePlacement === "inline";
     cancelAutosave();
     // An autosave that has left but not landed owns the row id; wait for it so the delete or save hits that row.
-    if (autosaveInflight) await autosaveInflight;
+    while (autosaveInflight) await autosaveInflight;
     const draftId = d.draftId ?? get().autosavedDraftId ?? null;
     composeSession += 1;
+    lastSaved = null;
     set({ compose: null, autosavedDraftId: null, composePlacement: "panel", inlineCollapsed: false, inlineAnchor: null, composeGhost: null, sendLaterOpen: false, snippetPickerOpen: false, editorApi: null });
     get().syncScope();
     // An untouched inline reply has recipients but nothing written; that is not a draft worth keeping.
@@ -1020,7 +1057,11 @@ export const useApp = create<AppState>((set, get) => ({
         set({ error: (err as Error).message });
       }
     } else if (draftId) {
-      await invoke("drafts:delete", draftId).catch(() => undefined);
+      try {
+        await invoke("drafts:delete", draftId);
+      } catch (err) {
+        get().showToast({ eyebrow: "NOT DELETED", text: (err as Error).message });
+      }
       void get().loadDrafts();
     }
   },
@@ -1038,12 +1079,13 @@ export const useApp = create<AppState>((set, get) => ({
       return;
     }
     cancelAutosave();
-    if (autosaveInflight) await autosaveInflight;
+    while (autosaveInflight) await autosaveInflight;
     set({ inlineCollapsed: true, sendLaterOpen: false, snippetPickerOpen: false, editorApi: null });
     get().syncScope();
     // The strip shows from memory at once; the draft also lands in the drafts table (and Gmail) so it survives a restart.
     try {
       const draftId = await invoke("drafts:save", { ...d, draftId: d.draftId ?? get().autosavedDraftId }, { flush: true });
+      lastSaved = { draftId, key: saveKey(d) };
       set((cur) => (cur.compose && cur.compose.threadId === d.threadId && cur.compose.mode === d.mode ? { compose: { ...cur.compose, draftId }, autosavedDraftId: null } : {}));
       void get().loadDrafts();
     } catch (err) {
@@ -1057,30 +1099,50 @@ export const useApp = create<AppState>((set, get) => ({
     get().syncScope();
   },
 
-  async confirmSent() {
+  async refreshOpen() {
     const open = get().open;
-    if (!open || !open.messages.some(isPending)) return;
+    if (!open || open.thread.scheduled || get().openLoading) return;
     const { accountId, id } = open.thread;
+    const seq = openSeq;
     try {
       const fresh = await invoke("threads:get", accountId, id);
+      if (seq !== openSeq) return;
       set((cur) => {
         if (!cur.open || cur.open.thread.id !== id || cur.open.thread.accountId !== accountId) return {};
-        return { open: { ...fresh, messages: mergePending(fresh.messages, cur.open.messages.filter(isPending)) } };
+        const messages = mergePending(fresh.messages, cur.open.messages.filter(isPending));
+        // Same messages, same bodies: keep the array the frames are keyed on, so nothing reloads under the reader.
+        return { open: { ...fresh, messages: sameMessages(cur.open.messages, messages) ? cur.open.messages : messages } };
       });
-    } catch {
-      // The next change refetches.
+    } catch (err) {
+      if (seq !== openSeq) return;
+      // Gone from the store: deleted in Gmail, or its account signed out. The pane closes rather than showing stale mail as current.
+      const still = get().open;
+      if (!still || still.thread.id !== id || still.thread.accountId !== accountId) return;
+      get().closeThread();
+      get().showToast({ eyebrow: "THREAD GONE", text: (err as Error).message });
     }
   },
 
   async sendCompose(sendAt = null) {
     const d = get().compose;
     if (!d) return;
+    // Refused here, before the main process touches the draft: the compose stays open with everything in it.
+    if (d.to.length === 0 && d.cc.length === 0 && d.bcc.length === 0) {
+      get().showToast({ eyebrow: "NOT SENT", text: "Add at least one recipient." });
+      return;
+    }
+    // A forward may go with only its quoted history; a reply with nothing written is a slip.
+    if (!hasBody(d) && !(d.mode === "forward" && d.quotedHtml.trim())) {
+      get().showToast({ eyebrow: "NOT SENT", text: "Write something before sending." });
+      return;
+    }
     const inline = get().composePlacement === "inline";
     cancelAutosave();
-    if (autosaveInflight) await autosaveInflight;
+    while (autosaveInflight) await autosaveInflight;
     try {
       const r = await invoke("compose:send", { ...d, draftId: d.draftId ?? get().autosavedDraftId ?? null }, sendAt);
       composeSession += 1;
+      lastSaved = null;
       set({ compose: null, autosavedDraftId: null, composePlacement: "panel", inlineCollapsed: false, inlineAnchor: null, composeGhost: null, sendLaterOpen: false, snippetPickerOpen: false, editorApi: null });
       get().syncScope();
       void get().loadDrafts();
@@ -1262,18 +1324,61 @@ export const useApp = create<AppState>((set, get) => ({
 
   async loadDrafts() {
     try {
-      set({ drafts: await invoke("drafts:list", selectedAccountIds(get())) });
-    } catch {
-      set({ drafts: [] });
+      const drafts = await invoke("drafts:list", selectedAccountIds(get()));
+      set({ drafts });
+      get().adoptDraftChange(drafts);
+    } catch (err) {
+      // The list on screen stays; emptying it would make the sidebar count and the strips lie.
+      get().showToast({ eyebrow: "DRAFTS", text: `Drafts could not be read: ${(err as Error).message}` });
     }
   },
 
+  adoptDraftChange(drafts) {
+    // The open compose's row changed under it: an edit made in Gmail replaced the text, because nothing was typed
+    // here in the last minute (the main process keeps a fresher local edit and pushes it instead). The compose
+    // takes that text, so the next keystroke builds on Gmail's version rather than writing over it.
+    const s = get();
+    const d = s.compose;
+    const rowId = d?.draftId ?? s.autosavedDraftId;
+    if (!d || !rowId || !lastSaved || lastSaved.draftId !== rowId) return;
+    const row = drafts.find((r) => r.draftId === rowId);
+    if (!row) return;
+    const rowKey = saveKey(row);
+    if (rowKey === lastSaved.key || rowKey === saveKey(d)) return;
+    const adopted: ComposeDraft = { ...d, to: row.to, cc: row.cc, bcc: row.bcc, subject: row.subject, bodyHtml: row.bodyHtml, quotedHtml: row.quotedHtml };
+    lastSaved = { draftId: rowId, key: rowKey };
+    cancelAutosave();
+    set({ compose: adopted });
+    if (!s.inlineCollapsed) s.editorApi?.setHtml(row.bodyHtml);
+    get().showToast({ eyebrow: "UPDATED FROM GMAIL", text: "This draft was edited in Gmail. The editor now shows that version." });
+  },
+
   openDraft(d) {
-    get().openCompose(d.mode, { draft: d });
+    // A reply goes back under its thread when that thread can be shown; a new message or a forward, and a reply whose thread is not in the store, get the panel.
+    const s = get();
+    const inlineable = Boolean(d.threadId) && (d.mode === "reply" || d.mode === "replyAll");
+    if (!inlineable) {
+      s.openCompose(d.mode, { draft: d });
+      return;
+    }
+    const showing = s.open && s.open.thread.id === d.threadId && s.open.thread.accountId === d.accountId;
+    if (showing) {
+      s.openCompose(d.mode, { draft: d, placement: "inline" });
+      return;
+    }
+    void s.openThreadById(d.accountId, d.threadId!, { quiet: true }).then((opened) => {
+      const o = get().open;
+      if (opened && o && o.thread.id === d.threadId && o.thread.accountId === d.accountId) get().openCompose(d.mode, { draft: d, placement: "inline" });
+      else get().openCompose(d.mode, { draft: d, placement: "panel" });
+    });
   },
 
   async deleteDraft(id) {
-    await invoke("drafts:delete", id).catch(() => undefined);
+    try {
+      await invoke("drafts:delete", id);
+    } catch (err) {
+      get().showToast({ eyebrow: "NOT DELETED", text: (err as Error).message });
+    }
     void get().loadDrafts();
   },
 }));

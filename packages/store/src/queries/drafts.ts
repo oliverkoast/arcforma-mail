@@ -111,6 +111,11 @@ export function knownGmailMessageIds(db: Db, accountId: string): Set<string> {
   return new Set(rows.map((r) => r.gmail_message_id));
 }
 
+/** Drafts whose last local edit has not reached Gmail, for the mirror to pick up again after a restart. */
+export function listPendingMirrorDrafts(db: Db): DraftRow[] {
+  return db.prepare("SELECT * FROM drafts WHERE mirror_state = 'pending' ORDER BY id").all() as unknown as DraftRow[];
+}
+
 /** Every local draft that has a Gmail counterpart, for reconciling against drafts.list. */
 export function listMirroredDrafts(db: Db, accountId: string): DraftRow[] {
   return db.prepare("SELECT * FROM drafts WHERE account_id = ? AND gmail_draft_id IS NOT NULL ORDER BY id").all(accountId) as unknown as DraftRow[];

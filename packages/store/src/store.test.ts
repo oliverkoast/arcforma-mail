@@ -105,9 +105,9 @@ function seed(db: ReturnType<typeof openStore>) {
 
 test("migrate is idempotent and records the schema version", () => {
   const { db } = tempDb();
-  assert.equal(schemaVersion(db), 9);
+  assert.equal(schemaVersion(db), 10);
   migrate(db);
-  assert.equal(schemaVersion(db), 9);
+  assert.equal(schemaVersion(db), 10);
   const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table') ORDER BY name").all() as Array<{ name: string }>).map((r) => r.name);
   for (const t of ["accounts", "threads", "messages", "message_bodies", "labels", "thread_labels", "thread_labels_pending", "categories", "classifications", "corrections", "snoozes", "reminders", "send_queue", "snippets", "summaries", "outbox", "contacts", "calendar_events", "messages_fts", "drafts", "settings", "reply_options", "saved_searches", "thread_unsubscribes"]) {
     assert.ok(tables.includes(t), `missing table ${t}`);
@@ -310,7 +310,7 @@ test("a schema 2 store gains fts_id and a rebuilt index on the way to schema 3",
   db.exec("DELETE FROM schema_version WHERE version >= 3");
   assert.equal(schemaVersion(db), 2);
   migrate(db);
-  assert.equal(schemaVersion(db), 9);
+  assert.equal(schemaVersion(db), 10);
   const rows = db.prepare("SELECT id, rowid, fts_id FROM messages").all() as Array<{ id: string; rowid: number; fts_id: number }>;
   assert.ok(rows.length > 0);
   for (const r of rows) assert.equal(r.fts_id, r.rowid, "existing rows keep the rowid the index already used");
@@ -456,7 +456,7 @@ test("a schema 6 drafts table gains the Gmail mirror columns on the way to schem
     DELETE FROM schema_version WHERE version >= 7;`);
   assert.equal(schemaVersion(db), 6);
   migrate(db);
-  assert.equal(schemaVersion(db), 9);
+  assert.equal(schemaVersion(db), 10);
   const cols = (db.prepare("PRAGMA table_info(drafts)").all() as Array<{ name: string }>).map((c) => c.name);
   for (const c of ["gmail_draft_id", "gmail_message_id", "mirror_state", "mirror_error", "mirrored_at", "origin", "local_edited_at"]) assert.ok(cols.includes(c), `missing ${c}`);
   const row = listDrafts(db)[0]!;
@@ -466,7 +466,7 @@ test("a schema 6 drafts table gains the Gmail mirror columns on the way to schem
   assert.equal(row.gmail_draft_id, null);
   assert.equal(row.local_edited_at, 200, "its last save counts as its last local edit");
   migrate(db);
-  assert.equal(schemaVersion(db), 9, "idempotent");
+  assert.equal(schemaVersion(db), 10, "idempotent");
 });
 
 test("draft rows carry their mirror state: a save marks pending, an import from Gmail is synced, ids are found both ways", () => {
@@ -535,4 +535,75 @@ test("a DRAFT-labelled message never renders as mail or drives the thread summar
   assert.equal(t.message_count, 1);
   assert.equal(t.last_message_at, 1000);
   assert.ok(!t.participants_json.includes("me@x.com"));
+});
+
+test("a thread that is nothing but a draft is not a thread: recompute drops the row, the migration repair does too, and a full refetch removes a stale draft message", async () => {
+  const { recomputeThreadsWithDrafts } = await import("./db.js");
+  const { getThreadListRow, trash } = await import("./queries/threads.js");
+  const { db } = tempDb();
+  seed(db);
+  // A new message written in Gmail: history brings a one-message thread whose only message is the draft.
+  const row = upsertThreadFromGmail(db, "arcforma", thread("t-draft", [{ id: "d1", from: "Oliver Korzen <you@example.com>", subject: "Half written", date: T0, labels: ["DRAFT"] }]), { ownerAddresses: ["you@example.com"] });
+  assert.equal(row, null, "upsert reports no thread");
+  assert.equal(getThread(db, "arcforma", "t-draft"), null, "no phantom row under All Mail");
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM messages WHERE id = 'd1'").get()!["n"], 0, "the cascade took the draft message");
+  assert.equal(listThreads(db, { view: "all", accountIds: ["arcforma"] }).rows.some((r) => r.id === "t-draft"), false);
+
+  // The repair the schema 10 step runs: a phantom row written by the old code goes the same way.
+  db.prepare("INSERT INTO threads (account_id, id, subject, updated_at) VALUES ('arcforma', 't-old', 'Old phantom', 1)").run();
+  db.prepare(`INSERT INTO messages (account_id, id, thread_id, internal_date, fts_id, label_ids_json, updated_at) VALUES ('arcforma', 'd-old', 't-old', ${T0}, 9100, '["DRAFT"]', 1)`).run();
+  assert.equal(recomputeThreadsWithDrafts(db) >= 1, true);
+  assert.equal(getThread(db, "arcforma", "t-old"), null, "the repair removed the phantom thread");
+
+  // A reply drafted in Gmail sits in a live thread as a DRAFT message; the thread stays, the draft is not mail.
+  upsertThreadFromGmail(db, "arcforma", thread("t1", [
+    { id: "m1", from: "Maya Glenn <maya@arcforma.ai>", subject: "Invoice for August", date: T0, labels: ["INBOX", "UNREAD"] },
+    { id: "d2", from: "Oliver Korzen <you@example.com>", subject: "Re: Invoice for August", date: T0 + 1, labels: ["DRAFT"] },
+  ]), { ownerAddresses: ["you@example.com"] });
+  assert.deepEqual(listThreadMessages(db, "arcforma", "t1").map((m) => m.id), ["m1"]);
+  assert.equal(getThread(db, "arcforma", "t1")!.message_count, 1);
+  // Trash reaches the draft message too, the way threads.trash does in Gmail.
+  trash(db, "arcforma", "t1");
+  assert.ok(JSON.parse(db.prepare("SELECT label_ids_json FROM messages WHERE id = 'd2'").get()!["label_ids_json"] as string).includes("TRASH"));
+  // Gmail's next full response no longer lists the draft (deleted there): the local copy goes with it.
+  upsertThreadFromGmail(db, "arcforma", thread("t1", [{ id: "m1", from: "Maya Glenn <maya@arcforma.ai>", subject: "Invoice for August", date: T0, labels: ["INBOX", "UNREAD"] }]), { ownerAddresses: ["you@example.com"] });
+  assert.deepEqual(listThreadMessages(db, "arcforma", "t1", { includeDrafts: true }).map((m) => m.id), ["m1"], "the stale DRAFT message left with the refetch");
+  assert.ok(getThreadListRow(db, "arcforma", "t1"));
+});
+
+test("history replay is idempotent: the same batch applied twice leaves threads and message labels exactly as after the first pass", () => {
+  const { db } = tempDb();
+  seed(db);
+  const batch: Parameters<typeof applyHistory>[2] = [
+    { type: "labelRemoved", historyId: "101", messageId: "m1", threadId: "t1", changedLabelIds: ["UNREAD"] },
+    { type: "labelAdded", historyId: "102", messageId: "m4", threadId: "t3", changedLabelIds: ["INBOX", "STARRED"] },
+    { type: "messageAdded", historyId: "103", messageId: "m2", threadId: "t2", labelIds: ["INBOX", "IMPORTANT"] },
+    { type: "messageDeleted", historyId: "104", messageId: "m3", threadId: "t2" },
+    { type: "messageAdded", historyId: "105", messageId: "m9", threadId: "t9", labelIds: ["INBOX"] },
+  ];
+  const snapshot = () => ({
+    threads: db.prepare("SELECT account_id, id, subject, snippet, message_count, unread, starred, in_inbox, last_message_at FROM threads ORDER BY account_id, id").all(),
+    labels: db.prepare("SELECT account_id, id, label_ids_json FROM messages ORDER BY account_id, id").all(),
+    threadLabels: db.prepare("SELECT account_id, thread_id, label_id FROM thread_labels ORDER BY account_id, thread_id, label_id").all(),
+  });
+  const first = applyHistory(db, "arcforma", batch);
+  const after1 = snapshot();
+  const second = applyHistory(db, "arcforma", batch);
+  assert.deepEqual(snapshot(), after1, "a replayed page changes nothing");
+  assert.deepEqual(second.threadsToFetch, first.threadsToFetch, "the unknown thread is asked for again, never invented");
+  assert.equal(second.lastHistoryId, "105");
+  assert.equal(getThread(db, "arcforma", "t1")!.unread, 0);
+  assert.equal(getThread(db, "arcforma", "t2")!.message_count, 1, "the deleted reply stays deleted");
+});
+
+test("getThreadListRow carries the same columns as the list row for that thread, so the reading pane header sees snooze, reminder, queue, and classification", async () => {
+  const { getThreadListRow } = await import("./queries/threads.js");
+  const { db } = tempDb();
+  seed(db);
+  createSnooze(db, { accountId: "arcforma", threadId: "t2", wakeAt: T0 + 86_400_000 });
+  const listed = listThreads(db, { view: "snoozed", accountIds: ["arcforma"] }).rows.find((r) => r.id === "t2")!;
+  const one = getThreadListRow(db, "arcforma", "t2")!;
+  assert.deepEqual(one, listed);
+  assert.equal(one.wake_at, T0 + 86_400_000, "a thread far down the list still reports its snooze");
+  assert.equal(getThreadListRow(db, "arcforma", "nope"), null);
 });

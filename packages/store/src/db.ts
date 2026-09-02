@@ -8,7 +8,7 @@ import { reindexAllMessages } from "./queries/messages.js";
 
 export type Db = DatabaseSync;
 
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
@@ -178,6 +178,8 @@ export function migrate(db: Db): void {
     { version: 8, sql: () => MIGRATION_8 },
     // Drafts used to count as mail in thread summaries. Recompute every thread that holds one.
     { version: 9, sql: () => "SELECT 1", after: (d) => recomputeThreadsWithDrafts(d) },
+    // A thread holding nothing but a draft used to survive as a phantom row (listed under All Mail, opened empty). Recompute removes it.
+    { version: 10, sql: () => "SELECT 1", after: (d) => recomputeThreadsWithDrafts(d) },
   ];
   for (const step of steps) {
     if (step.version <= current) continue;
@@ -229,7 +231,7 @@ export function repairSnippets(db: Db): void {
   }
 }
 
-/** One-time repair: threads whose summary was built while a DRAFT-labelled message counted as mail. */
+/** Repair: recomputes every thread that holds a DRAFT-labelled message, so none counts a draft as mail and a drafts-only thread goes. */
 export function recomputeThreadsWithDrafts(db: Db): number {
   const rows = db.prepare(`SELECT DISTINCT account_id, thread_id FROM messages WHERE label_ids_json LIKE '%"DRAFT"%'`).all() as Array<{ account_id: string; thread_id: string }>;
   for (const r of rows) recomputeThread(db, r.account_id, r.thread_id, { keepSortAt: true });

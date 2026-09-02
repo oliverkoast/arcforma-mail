@@ -82,6 +82,35 @@ export async function fetchThreadsMetadata(client: GmailClient, ids: string[], s
   return out;
 }
 
+export interface ThreadFetchOutcome {
+  threads: GmailThread[];
+  /** Threads whose part failed with something other than a 404, with the error, for the caller to retry later. */
+  failed: Array<{ id: string; error: GmailApiError }>;
+}
+
+/**
+ * The tolerant form for the history poll: every thread that came back is
+ * returned, a vanished thread is skipped, and any other failure is reported
+ * per thread instead of failing the batch. One bad thread must not hold the
+ * watermark back for every other change in the page.
+ */
+export async function fetchThreadsMetadataPartial(client: GmailClient, ids: string[], signal?: AbortSignal): Promise<ThreadFetchOutcome> {
+  const results = await client.batch<GmailThread>(
+    ids.map((id) => ({ path: `threads/${encodeURIComponent(id)}`, query: { format: "metadata", metadataHeaders: METADATA_HEADERS }, cost: 10 })),
+    signal
+  );
+  const out: ThreadFetchOutcome = { threads: [], failed: [] };
+  results.forEach((r, i) => {
+    if (r.body && !r.error) {
+      out.threads.push(r.body);
+      return;
+    }
+    if (r.error && r.error.status === 404) return;
+    out.failed.push({ id: ids[i]!, error: r.error ?? new GmailApiError(r.status, "batch part returned no body") });
+  });
+  return out;
+}
+
 export async function fetchThreadFull(client: GmailClient, id: string, signal?: AbortSignal): Promise<GmailThread> {
   return client.request<GmailThread>(`threads/${encodeURIComponent(id)}`, { query: { format: "full" }, signal });
 }

@@ -10,12 +10,24 @@ const threadViews = new Map<string, ThreadView>();
 const draftRows = new Map<number, DraftInfo>();
 let nextDraftId = 1;
 let nextSendId = 1;
+/** Per-thread delay on threads:get, to race two opens. */
+const threadDelays = new Map<string, number>();
+/** Delay on drafts:save, to overlap two autosaves. */
+let saveDelay = 0;
+/** Channels whose next call fails, to check the failure reaches a toast. */
+const failNext = new Map<string, string>();
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 (globalThis as { window?: unknown }).window = {
   arcmail: {
     platform: "test",
     on: () => () => {},
     invoke: async (channel: string, ...args: unknown[]) => {
       calls.push({ channel, args });
+      const failure = failNext.get(channel);
+      if (failure) {
+        failNext.delete(channel);
+        throw new Error(failure);
+      }
       switch (channel) {
         case "threads:list":
           return { rows: [], nextCursor: null };
@@ -24,11 +36,15 @@ let nextSendId = 1;
         case "sidebar:setLayout":
           return undefined;
         case "threads:get": {
-          const view = threadViews.get(`${args[0]}:${args[1]}`);
-          if (!view) throw new Error(`no fixture thread ${args[0]}:${args[1]}`);
+          const key = `${args[0]}:${args[1]}`;
+          const delay = threadDelays.get(key);
+          if (delay) await wait(delay);
+          const view = threadViews.get(key);
+          if (!view) throw new Error(`no fixture thread ${key}`);
           return { ...view, messages: view.messages.map((m) => ({ ...m })) };
         }
         case "drafts:save": {
+          if (saveDelay) await wait(saveDelay);
           const d = args[0] as ComposeDraft;
           const id = d.draftId ?? nextDraftId++;
           draftRows.set(id, { ...d, draftId: id, updatedAt: Date.now() + id, origin: "local", mirror: { state: "pending", error: null, at: null } });
@@ -352,7 +368,7 @@ test("Send replaces the inline box with the message appended to the thread; Z ta
   assert.equal(s.toast?.undo?.kind, "send");
 
   // The sync has not seen it yet: a refetch keeps the optimistic copy.
-  await useApp.getState().confirmSent();
+  await useApp.getState().refreshOpen();
   assert.equal(useApp.getState().open?.messages.at(-1)?.id, "pending:1");
 
   await useApp.getState().undo();
@@ -502,4 +518,200 @@ test("Cmd+K: the palette opens from the list, the thread, and the compose editor
   assert.equal(s.scope, "palette");
   assert.equal(s.popover, null, "the popover under it closes so T, W, D never fire behind the palette");
   useApp.getState().closePalette();
+});
+
+// ---- reliability: the reading pane, sends, autosave, drafts ------------------------------
+
+test("two quick opens: the slower first fetch never lands over the second thread, and a close drops a fetch still in flight", async () => {
+  const useApp = await freshKickoff();
+  threadDelays.set("arcforma:t-kickoff", 60);
+  const first = useApp.getState().openThreadById("arcforma", "t-kickoff");
+  const second = useApp.getState().openThreadById("arcforma", "t-agreement");
+  const [a, b] = await Promise.all([first, second]);
+  assert.equal(a, false, "the overtaken open reports it did not land");
+  assert.equal(b, true);
+  await wait(80);
+  assert.equal(useApp.getState().open?.thread.id, "t-agreement", "J then J shows the second thread, not the first arriving late");
+  assert.equal(useApp.getState().openLoading, false);
+
+  const late = useApp.getState().openThreadById("arcforma", "t-kickoff");
+  useApp.getState().closeThread();
+  assert.equal(await late, false);
+  assert.equal(useApp.getState().open, null, "Escape during the fetch stays closed");
+  threadDelays.clear();
+});
+
+test("refreshOpen: a reply that arrived while reading shows up, an unchanged thread keeps its message array, and a thread gone from the store closes the pane with a toast", async () => {
+  const useApp = await freshKickoff();
+  const before = useApp.getState().open!.messages;
+  await useApp.getState().refreshOpen();
+  assert.equal(useApp.getState().open!.messages, before, "nothing changed: the frames are not reloaded");
+
+  const arrived: ThreadView = { ...kickoff, messages: [...kickoff.messages, message("t-kickoff", "m5", { from: { email: "dana@northwind.example", name: "Dana Reyes" } })] };
+  threadViews.set("arcforma:t-kickoff", arrived);
+  await useApp.getState().refreshOpen();
+  assert.deepEqual(useApp.getState().open!.messages.map((m) => m.id), ["m1", "m2", "m3", "m4", "m5"], "the new message is in the pane without reopening");
+  threadViews.set("arcforma:t-kickoff", kickoff);
+
+  // Bodies that failed to load: the header says so, and a retry that brings them replaces the messages.
+  const noBodies: ThreadView = { ...kickoff, bodiesPending: true, bodiesError: "backend", messages: kickoff.messages.map((m) => ({ ...m, body: null })) };
+  threadViews.set("arcforma:t-kickoff", noBodies);
+  await useApp.getState().openThreadById("arcforma", "t-kickoff");
+  assert.equal(useApp.getState().open!.bodiesPending, true);
+  threadViews.set("arcforma:t-kickoff", kickoff);
+  await useApp.getState().refreshOpen();
+  assert.equal(useApp.getState().open!.bodiesPending, false);
+  assert.ok(useApp.getState().open!.messages.every((m) => m.body), "the retry brought the bodies");
+
+  threadViews.delete("arcforma:t-kickoff");
+  await useApp.getState().refreshOpen();
+  assert.equal(useApp.getState().open, null, "a thread the store no longer has is not shown as current mail");
+  assert.equal(useApp.getState().toast?.eyebrow, "THREAD GONE");
+  assert.equal(useApp.getState().scope, "list");
+  threadViews.set("arcforma:t-kickoff", kickoff);
+  useApp.getState().showToast(null);
+});
+
+test("Cmd+Enter with no recipient or nothing written is refused with a toast before the main process hears about it; the compose stays open", async () => {
+  const useApp = await freshKickoff();
+  const sendsBefore = calls.filter((c) => c.channel === "compose:send").length;
+  useApp.getState().openCompose("reply");
+  await useApp.getState().sendCompose(null);
+  let s = useApp.getState();
+  assert.equal(s.toast?.eyebrow, "NOT SENT");
+  assert.match(s.toast?.text ?? "", /Write something/);
+  assert.ok(s.compose, "still open with everything in it");
+  useApp.getState().updateCompose({ bodyHtml: "<p>Now with text.</p>", to: [] });
+  await useApp.getState().sendCompose(null);
+  s = useApp.getState();
+  assert.match(s.toast?.text ?? "", /at least one recipient/);
+  assert.ok(s.compose);
+  assert.equal(calls.filter((c) => c.channel === "compose:send").length, sendsBefore, "nothing reached compose:send, so no draft was detached");
+  // A forward with only quoted history is a real message.
+  useApp.getState().updateCompose({ mode: "forward", bodyHtml: "", to: [{ email: "sam@harbor.example", name: "" }], quotedHtml: "<div>Forwarded</div>" });
+  await useApp.getState().sendCompose(null);
+  assert.equal(calls.filter((c) => c.channel === "compose:send").length, sendsBefore + 1);
+  assert.equal(useApp.getState().compose, null);
+  useApp.getState().showToast(null);
+  draftRows.clear();
+});
+
+test("two autosaves that overlap (the main process slow) write one row, not two", async () => {
+  const useApp = await freshKickoff();
+  useApp.getState().openCompose("reply");
+  useApp.getState().updateCompose({ bodyHtml: "<p>First.</p>" });
+  saveDelay = 40;
+  const a = useApp.getState().autosaveCompose();
+  useApp.getState().updateCompose({ bodyHtml: "<p>First. Second.</p>" });
+  const b = useApp.getState().autosaveCompose();
+  await Promise.all([a, b]);
+  saveDelay = 0;
+  assert.equal(draftRows.size, 1, "the second save waited for the first's row id and updated it");
+  assert.equal([...draftRows.values()][0]?.bodyHtml, "<p>First. Second.</p>");
+  await useApp.getState().closeCompose(false);
+  assert.equal(draftRows.size, 0);
+});
+
+test("one thread, one reply draft: replying to another message while a draft is parked moves that draft there instead of starting a second one", async () => {
+  const useApp = await freshKickoff();
+  useApp.getState().openCompose("reply", { messageId: "m4" });
+  useApp.getState().updateCompose({ bodyHtml: "<p>Parked under m4.</p>" });
+  await useApp.getState().dismissCompose();
+  const parkedId = useApp.getState().compose?.draftId;
+  assert.equal(typeof parkedId, "number");
+  await useApp.getState().openThreadById("arcforma", "t-agreement");
+  await settle();
+  await useApp.getState().openThreadById("arcforma", "t-kickoff");
+  await settle();
+  assert.equal(useApp.getState().compose, null);
+  useApp.getState().openCompose("reply", { messageId: "m3" });
+  const s = useApp.getState();
+  assert.equal(s.composePlacement, "inline");
+  assert.equal(s.compose?.draftId, parkedId, "the parked draft was reopened");
+  assert.equal(s.inlineAnchor?.messageId, "m3", "and moved under the message just chosen");
+  assert.equal(s.compose?.inReplyTo, "<m3@x>");
+  assert.equal(s.compose?.bodyHtml, "<p>Parked under m4.</p>", "with its text");
+  assert.equal(draftRows.size, 1, "no second row for the thread");
+  await useApp.getState().closeCompose(false);
+  assert.equal(draftRows.size, 0);
+});
+
+test("opening a draft from the Drafts view: a reply opens its thread and docks under it; a new message gets the panel; a reply whose thread is gone gets the panel with no error", async () => {
+  const useApp = await freshKickoff();
+  useApp.getState().setView("drafts");
+  await settle();
+  assert.equal(useApp.getState().open, null);
+  const reply: DraftInfo = { draftId: 71, accountId: "arcforma", threadId: "t-kickoff", mode: "reply", to: [{ email: "dana@northwind.example", name: "Dana Reyes" }], cc: [], bcc: [], subject: "Re: Kickoff next week", bodyHtml: "<p>From the drafts list.</p>", quotedHtml: "", inReplyTo: "<m3@x>", references: null, updatedAt: 1, origin: "gmail", mirror: { state: "synced", error: null, at: 1 } };
+  useApp.getState().openDraft(reply);
+  await wait(20);
+  let s = useApp.getState();
+  assert.equal(s.open?.thread.id, "t-kickoff", "the thread opened");
+  assert.equal(s.composePlacement, "inline");
+  assert.equal(s.inlineAnchor?.messageId, "m3", "docked under the message it answers");
+  assert.equal(s.compose?.draftId, 71);
+  await useApp.getState().closeCompose(false);
+
+  const fresh: DraftInfo = { ...reply, draftId: 72, threadId: null, mode: "new", subject: "New one", inReplyTo: null };
+  useApp.getState().openDraft(fresh);
+  await wait(20);
+  s = useApp.getState();
+  assert.equal(s.composePlacement, "panel");
+  assert.equal(s.compose?.draftId, 72);
+  await useApp.getState().closeCompose(false);
+
+  useApp.setState({ error: null });
+  useApp.getState().openDraft({ ...reply, draftId: 73, threadId: "t-ancient" });
+  await wait(20);
+  s = useApp.getState();
+  assert.equal(s.composePlacement, "panel", "no thread to dock under: the panel");
+  assert.equal(s.compose?.draftId, 73);
+  assert.equal(s.error, null, "a thread older than the store is not an error banner");
+  await useApp.getState().closeCompose(false);
+  draftRows.clear();
+});
+
+test("a draft delete or a drafts read that fails says so in a toast instead of vanishing silently", async () => {
+  const useApp = await freshKickoff();
+  failNext.set("drafts:delete", "The store is locked.");
+  await useApp.getState().deleteDraft(5);
+  assert.equal(useApp.getState().toast?.eyebrow, "NOT DELETED");
+  assert.match(useApp.getState().toast?.text ?? "", /locked/);
+  useApp.setState({ drafts: [{ draftId: 9 } as DraftInfo] });
+  failNext.set("drafts:list", "Disk full.");
+  await useApp.getState().loadDrafts();
+  assert.equal(useApp.getState().drafts.length, 1, "the list on screen is kept");
+  assert.equal(useApp.getState().toast?.eyebrow, "DRAFTS");
+  useApp.getState().showToast(null);
+});
+
+test("a draft edited in Gmail while its compose is open here takes the Gmail text once the local edit is older than the minute the main process keeps; an unchanged compose is not saved again", async () => {
+  const useApp = await freshKickoff();
+  const { AUTOSAVE_MS } = await import("./store");
+  const ed = fakeEditor();
+  useApp.getState().setEditorApi(ed.api);
+  useApp.getState().openCompose("reply");
+  useApp.getState().updateCompose({ bodyHtml: "<p>Typed here.</p>" });
+  await new Promise((r) => setTimeout(r, AUTOSAVE_MS + 100));
+  const rowId = useApp.getState().autosavedDraftId!;
+  const savesBefore = calls.filter((c) => c.channel === "drafts:save").length;
+
+  // A reload that brings the same text back (the mirror ack) changes nothing and saves nothing.
+  await useApp.getState().loadDrafts();
+  assert.equal(useApp.getState().compose?.bodyHtml, "<p>Typed here.</p>");
+  await useApp.getState().autosaveCompose();
+  assert.equal(calls.filter((c) => c.channel === "drafts:save").length, savesBefore, "nothing changed since the last save, so no row churn");
+
+  // The main process replaced the row with what Gmail holds (the local edit was older than a minute there).
+  draftRows.set(rowId, { ...draftRows.get(rowId)!, bodyHtml: "<p>Finished on the phone.</p>", subject: "Re: Kickoff next week (phone)", updatedAt: Date.now() + 1000 });
+  await useApp.getState().loadDrafts();
+  const s = useApp.getState();
+  assert.equal(s.compose?.bodyHtml, "<p>Finished on the phone.</p>", "the compose took Gmail's text");
+  assert.equal(s.compose?.subject, "Re: Kickoff next week (phone)");
+  assert.deepEqual(ed.log.at(-1), "set:<p>Finished on the phone.</p>", "and the editor shows it");
+  assert.equal(s.toast?.eyebrow, "UPDATED FROM GMAIL");
+  await useApp.getState().autosaveCompose();
+  assert.equal(calls.filter((c) => c.channel === "drafts:save").length, savesBefore, "adopting Gmail's text does not write it straight back");
+  useApp.getState().showToast(null);
+  await useApp.getState().closeCompose(false);
+  draftRows.clear();
 });

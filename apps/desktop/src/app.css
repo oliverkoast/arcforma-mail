@@ -545,6 +545,9 @@ body.is-resizing { cursor: col-resize; user-select: none; }
   color: var(--af-accent);
   margin-bottom: 2px;
 }
+.eyebrow-flag button {
+  text-decoration: underline;
+}
 .nav-bottom {
   margin-top: auto;
   padding-top: 16px;

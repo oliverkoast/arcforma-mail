@@ -285,3 +285,45 @@ test("a mirrored draft deleted in Gmail is dropped here on the next history batc
   assert.equal(getDraft(db, id), null);
   assert.equal(listOutbox(db, "arcforma", "pending").length, 0, "nothing is sent back to Gmail for a draft Gmail already dropped");
 });
+
+test("one thread whose threads.get fails does not hold the watermark back: the rest of the page lands, and that thread is retried on the next poll", async () => {
+  const db = tempDb();
+  liveAccount(db, "arcforma", "you@example.com");
+  let polls = 0;
+  let t2Failures = 0;
+  const { transport, calls } = transportOf((call) => {
+    if (/\/history\?/.test(call.url)) {
+      polls += 1;
+      if (polls === 1) {
+        return { status: 200, body: { historyId: "150", history: [{ id: "120", messagesAdded: [{ message: { id: "m1", threadId: "t1", labelIds: ["INBOX"] } }, { message: { id: "m2", threadId: "t2", labelIds: ["INBOX"] } }] }] } };
+      }
+      return { status: 200, body: { historyId: String(150 + polls), history: [] } };
+    }
+    if (/batch/.test(call.url)) {
+      return batchResponse(
+        idsInBatch(call.init.body).map((id, i) => {
+          if (id === "t2" && t2Failures === 0) {
+            t2Failures += 1;
+            return { id: `item${i}`, status: 500, body: { error: { message: "backend" } } };
+          }
+          return { id: `item${i}`, status: 200, body: gmailThread(id, [{ id: id === "t1" ? "m1" : "m2", labels: ["INBOX"] }]) };
+        })
+      );
+    }
+    throw new Error(`unexpected ${call.url}`);
+  });
+  const client = new GmailClient({ accessToken: async () => "t", transport, sleep: async () => {}, maxAttempts: 1 });
+  const sync = new SyncManager(db, accountsOf({ arcforma: client }), { pollFocusedMs: 60_000 });
+  await sync.run("arcforma");
+  assert.ok(getThread(db, "arcforma", "t1"), "the thread that came back landed");
+  assert.equal(getThread(db, "arcforma", "t2"), null);
+  assert.equal(getAccount(db, "arcforma")!.history_id, "150", "the watermark moved past the page anyway");
+  assert.equal(getAccount(db, "arcforma")!.error, null, "one bad thread is not an account error");
+  assert.deepEqual(sync.pendingThreadFetches("arcforma"), ["t2"]);
+
+  await sync.run("arcforma");
+  sync.stop();
+  assert.ok(getThread(db, "arcforma", "t2"), "the second poll fetched the thread that failed, with no history mentioning it");
+  assert.deepEqual(sync.pendingThreadFetches("arcforma"), []);
+  assert.equal(calls.filter((c) => /batch/.test(c.url)).length, 2);
+});

@@ -210,3 +210,17 @@ test("the optimistic sent message stands in until the sync carries an outbound m
   assert.deepEqual(mergePending([inbound, older], [sent], at + 5_000).map((m) => m.id), ["in", "older", "pending:7"], "an older outbound message is not this one");
   assert.deepEqual(mergePending([inbound], [sent], at + 16 * 60_000).map((m) => m.id), ["in"], "a send that never confirms is dropped after fifteen minutes");
 });
+
+test("sameMessages sees a new message, a body that arrived, and an image toggle, and nothing else; bodyNotice names the reason bodies did not load", async () => {
+  const { sameMessages, bodyNotice } = await import("./compose");
+  const base = (id: string): MessageView => ({ accountId: "a", id, threadId: "t", internalDate: 1, from: { email: "x@y.z", name: "" }, replyTo: null, to: [], cc: [], messageIdHeader: null, references: null, subject: "", snippet: "", labelIds: [], direction: "in", isAuto: false, hasAttachments: false, body: { html: "<p>hi</p>", text: null, attachments: [] }, loadImages: false });
+  const a = [base("m1"), base("m2")];
+  assert.equal(sameMessages(a, [base("m1"), base("m2")]), true);
+  assert.equal(sameMessages(a, [base("m1"), base("m2"), base("m3")]), false, "a reply arrived");
+  assert.equal(sameMessages(a, [base("m1"), { ...base("m2"), body: null }]), false, "a body went missing or arrived");
+  assert.equal(sameMessages(a, [base("m1"), { ...base("m2"), loadImages: true }]), false, "Load images changed");
+  assert.equal(sameMessages(a, [base("m1"), { ...base("m2"), subject: "different" }]), true, "header text alone is not a reason to reload the frames");
+  assert.equal(bodyNotice({ bodiesPending: false }), null);
+  assert.equal(bodyNotice({ bodiesPending: true }), "Messages not loaded.");
+  assert.equal(bodyNotice({ bodiesPending: true, bodiesError: "Not signed in, so the message bodies cannot be fetched." }), "Messages not loaded. Not signed in, so the message bodies cannot be fetched.");
+});

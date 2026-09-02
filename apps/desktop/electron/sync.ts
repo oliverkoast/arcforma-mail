@@ -4,7 +4,7 @@
 // account at a time: a poke that lands while a run is in flight is remembered
 // and honoured as soon as that run ends.
 
-import { AuthExpiredError, HistoryExpiredError, LabelResolver, backfill, drainAccount, fetchThreadsMetadata, pullHistory, type DraftUpsertResult, type GmailClient, type HistoryChange } from "@arcforma/gmail";
+import { AuthExpiredError, HistoryExpiredError, LabelResolver, backfill, drainAccount, fetchThreadsMetadataPartial, pullHistory, type DraftUpsertResult, type GmailClient, type HistoryChange } from "@arcforma/gmail";
 import {
   applyHistory,
   getAccount,
@@ -31,6 +31,8 @@ import type { AccountsStatus } from "../shared/types.js";
 
 export const POLL_FOCUSED_MS = 45_000;
 export const POLL_HIDDEN_MS = 180_000;
+/** A thread whose threads.get keeps failing is retried on this many polls, then dropped with a log line. */
+export const THREAD_FETCH_ATTEMPTS = 5;
 
 /** What the sync loop needs from the account registry. */
 export interface SyncAccounts {
@@ -51,6 +53,8 @@ export class SyncManager {
   /** Delay requested by a poke that arrived while the account was mid-run. */
   private pokes = new Map<string, number>();
   private resolvers = new Map<string, LabelResolver>();
+  /** Threads a poll could not fetch, with how many times they were tried, per account. Retried at the front of the next poll. */
+  private readonly retryFetch = new Map<string, Map<string, number>>();
   private focused = true;
   private stopped = false;
   private readonly pollFocusedMs: number;
@@ -215,16 +219,19 @@ export class SyncManager {
     const id = account.id;
     const { changes, historyId } = await pullHistory({ client, startHistoryId: account.history_id! });
     let changed = false;
-    if (changes.length > 0) {
-      const result = applyHistory(this.db, id, changes);
+    // Threads an earlier poll could not fetch come first; a failure there is not this page's problem.
+    const retry = Array.from(this.retryFetch.get(id)?.keys() ?? []);
+    if (changes.length > 0 || retry.length > 0) {
+      const result = changes.length > 0 ? applyHistory(this.db, id, changes) : { threadsToFetch: [], touched: [], masked: 0, lastHistoryId: null };
       changed = result.touched.length > 0;
-      if (result.threadsToFetch.length > 0) {
-        changed = (await this.fetchThreads(id, client, result.threadsToFetch)) > 0 || changed;
+      const wanted = Array.from(new Set([...retry, ...result.threadsToFetch]));
+      if (wanted.length > 0) {
+        changed = (await this.fetchThreads(id, client, wanted)) > 0 || changed;
       }
-      log("sync", `${id} history ${account.history_id} -> ${historyId}: ${changes.length} changes, ${result.threadsToFetch.length} fetched, ${result.masked} masked`);
-      if (draftsNeedReconcile(this.db, id, changes as HistoryChange[])) await this.reconcileDrafts(id, client);
+      if (changes.length > 0) log("sync", `${id} history ${account.history_id} -> ${historyId}: ${changes.length} changes, ${result.threadsToFetch.length} fetched, ${result.masked} masked`);
+      if (changes.length > 0 && draftsNeedReconcile(this.db, id, changes as HistoryChange[])) await this.reconcileDrafts(id, client);
     }
-    // The watermark moves only after every page has been applied and every referenced thread fetched.
+    // The watermark moves only after every page has been applied and every referenced thread fetched, or put down for a retry.
     updateAccount(this.db, id, { history_id: historyId, last_sync_at: Date.now(), error: null });
     if (changed) {
       emit("threads:changed", { accountId: id });
@@ -232,14 +239,38 @@ export class SyncManager {
     }
   }
 
-  /** Fetches thread metadata and writes it. Returns how many threads landed. */
+  /**
+   * Fetches thread metadata and writes it. Returns how many threads landed. A
+   * thread whose part failed is remembered for the next poll rather than failing
+   * the whole page: one bad thread must never hold the watermark, and with it
+   * every other change, back for good.
+   */
   private async fetchThreads(accountId: string, client: GmailClient, threadIds: string[]): Promise<number> {
-    const threads = await fetchThreadsMetadata(client, threadIds);
+    const { threads, failed } = await fetchThreadsMetadataPartial(client, threadIds);
     const owners = this.accounts.ownerAddresses(accountId);
     transaction(this.db, () => {
       for (const t of threads) upsertThreadFromGmail(this.db, accountId, t, { ownerAddresses: owners });
     });
+    const retry = this.retryFetch.get(accountId) ?? new Map<string, number>();
+    for (const t of threads) retry.delete(t.id);
+    for (const f of failed) {
+      const attempts = (retry.get(f.id) ?? 0) + 1;
+      if (attempts >= THREAD_FETCH_ATTEMPTS) {
+        retry.delete(f.id);
+        logError("sync", `${accountId} thread ${f.id} gave up after ${attempts} attempts`, f.error);
+      } else {
+        retry.set(f.id, attempts);
+        log("sync", `${accountId} thread ${f.id} not fetched (${f.error.status} ${f.error.message}); retry ${attempts} of ${THREAD_FETCH_ATTEMPTS} on the next poll`);
+      }
+    }
+    if (retry.size > 0) this.retryFetch.set(accountId, retry);
+    else this.retryFetch.delete(accountId);
     return threads.length;
+  }
+
+  /** Threads waiting for another fetch attempt, for tests and the status line. */
+  pendingThreadFetches(accountId: string): string[] {
+    return Array.from(this.retryFetch.get(accountId)?.keys() ?? []);
   }
 
   /** Brings the drafts table in line with users.drafts. A failure here waits for the next history batch that touches drafts. */

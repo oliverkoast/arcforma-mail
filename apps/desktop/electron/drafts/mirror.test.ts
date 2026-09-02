@@ -266,3 +266,42 @@ test("the mirror host fires after the quiet time and pokes the account's drain",
   assert.equal(listOutbox(db, "arcforma", "pending").length, 1, "cancelled before it fired");
   mirror.stop();
 });
+
+test("sendDraft checks the message before it touches the draft: a refused send leaves the row and its Gmail tie in place; a good one detaches it and queues the send", async () => {
+  const { getSend } = await import("@arcforma/store");
+  const { sendDraft } = await import("./mirror.js");
+  const db = tempDb();
+  const id = localDraft(db);
+  applyDraftUpsertAck(db, "arcforma", { draftId: id, gmailDraftId: "dKeep", gmailMessageId: "gmKeep", gone: false });
+  const row = getDraft(db, id)!;
+  const draft = { draftId: id, accountId: "arcforma", threadId: "t1", mode: "reply" as const, to: [], cc: [], bcc: [], subject: row.subject, bodyHtml: row.body_html, quotedHtml: row.quoted_html, inReplyTo: row.in_reply_to, references: row.references_header };
+  const cancelled: number[] = [];
+  await assert.rejects(sendDraft(db, draft, { cancelMirror: (d) => cancelled.push(d) }), /at least one recipient/);
+  assert.ok(getDraft(db, id), "the draft is still there after the refusal");
+  assert.equal(getDraft(db, id)!.gmail_draft_id, "dKeep", "still tied to its Gmail draft");
+  assert.equal(cancelled.length, 0, "the mirror was not cancelled");
+  await assert.rejects(sendDraft(db, { ...draft, to: [{ email: "dana@northwind.example", name: "" }], bodyHtml: "<p> </p>", quotedHtml: "" }), /Write something/);
+  assert.ok(getDraft(db, id));
+
+  const r = await sendDraft(db, { ...draft, to: [{ email: "dana@northwind.example", name: "" }] }, { cancelMirror: (d) => cancelled.push(d) });
+  assert.equal(getDraft(db, id), null, "a good send detaches the row");
+  assert.deepEqual(cancelled, [id]);
+  assert.equal(JSON.parse(getSend(db, r.id)!.meta_json).gmailDraftId, "dKeep", "the send carries the Gmail draft id for deletion after the send, or return on undo");
+});
+
+test("recover on start queues drafts left pending with nothing behind them, and leaves the ones already queued alone", async () => {
+  const db = tempDb();
+  const stranded = localDraft(db);
+  const queued = localDraft(db, { subject: "Already queued" });
+  await mirrorDraft(db, queued);
+  const synced = localDraft(db, { subject: "In Gmail" });
+  applyDraftUpsertAck(db, "arcforma", { draftId: synced, gmailDraftId: "dS", gmailMessageId: "gmS", gone: false });
+  const poked: string[] = [];
+  const mirror = new DraftMirror(db, { poke: (a) => poked.push(a) }, { quietMs: 10 });
+  assert.equal(mirror.recover(), 1, "only the stranded draft needed queuing");
+  await mirror.flush();
+  mirror.stop();
+  const pending = listOutbox(db, "arcforma", "pending").filter((r) => r.op === "draftUpsert").map((r) => payloadOf(r).draftId).sort();
+  assert.deepEqual(pending, [stranded, queued].sort(), "one row each; the stranded draft got its outbox row back");
+  assert.deepEqual(poked, ["arcforma"]);
+});

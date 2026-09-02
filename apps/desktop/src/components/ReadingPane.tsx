@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useApp } from "../state/store";
+import { bodyNotice } from "../lib/compose";
 import { bytes, eyebrowDate, fullDate, sendsAt } from "../lib/format";
 import { messageText } from "../lib/mailhtml";
 import { InstantReplies, SummaryCard } from "./AiCards";
@@ -69,6 +70,7 @@ export function ReadingPane() {
   const openCompose = useApp((s) => s.openCompose);
   const cancelScheduledSend = useApp((s) => s.cancelScheduledSend);
   const unsubscribeSelected = useApp((s) => s.unsubscribeSelected);
+  const refreshOpen = useApp((s) => s.refreshOpen);
   const messages = open?.messages;
   // Each message's predecessors as plain text, oldest first, so MessageBody can fold history pasted without quote
   // markup. Memoised on the messages array, so the iframes do not re-render on every store change.
@@ -107,8 +109,13 @@ export function ReadingPane() {
         <div className="drag" />
         <span className="af-mono">
           {account?.email ?? t.accountId} · {open.messages.length} {open.messages.length === 1 ? "message" : "messages"}
-          {open.bodiesPending ? " · bodies pending" : ""}
         </span>
+        {open.bodiesPending ? (
+          <span className="af-mono eyebrow-flag">
+            {bodyNotice(open)}{" "}
+            <button data-tip="Asks Gmail for the message bodies again." onClick={() => void refreshOpen()}>Fetch the messages again</button>
+          </span>
+        ) : null}
         {t.noReplyBy ? <span className="af-mono eyebrow-flag">No reply by {eyebrowDate(t.noReplyBy)}</span> : null}
         {t.wakeAt ? <span className="af-mono eyebrow-flag">Snoozed · back {eyebrowDate(t.wakeAt, true)}</span> : null}
         {t.unsubscribeState === "sent" ? <span className="af-mono eyebrow-flag">Unsubscribed</span> : null}
@@ -157,7 +164,7 @@ export function ReadingPane() {
                 )}
               </div>
             </div>
-            <MessageBody message={m} priorTexts={priorTexts[i] ?? NO_PRIORS} />
+            <MessageBody message={m} priorTexts={priorTexts[i] ?? NO_PRIORS} pending={open.bodiesPending} />
             {m.body && m.body.attachments.filter((a) => !a.inline).length > 0 ? (
               <div className="attachments">
                 {m.body.attachments
