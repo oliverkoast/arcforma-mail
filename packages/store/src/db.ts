@@ -7,7 +7,7 @@ import { reindexAllMessages } from "./queries/messages.js";
 
 export type Db = DatabaseSync;
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
@@ -97,6 +97,31 @@ CREATE TABLE IF NOT EXISTS saved_searches (
 );
 `;
 
+// Version 7: drafts mirror to Gmail. gmail_draft_id and gmail_message_id tie
+// a local row to users.drafts; mirror_state says whether the last local edit
+// has reached Gmail; origin records whether the draft was written here or
+// found in Gmail; local_edited_at is the last edit made in this app, which is
+// what decides a conflict with an edit made in Gmail.
+const MIGRATION_7_COLUMNS: Array<[string, string]> = [
+  ["gmail_draft_id", "TEXT"],
+  ["gmail_message_id", "TEXT"],
+  ["mirror_state", "TEXT NOT NULL DEFAULT 'pending'"],
+  ["mirror_error", "TEXT"],
+  ["mirrored_at", "INTEGER"],
+  ["origin", "TEXT NOT NULL DEFAULT 'local'"],
+  ["local_edited_at", "INTEGER"],
+];
+
+/** ALTER TABLE ADD COLUMN has no IF NOT EXISTS, so each column is checked first; the step can then rerun like the others. */
+function migrateDraftsMirror(db: Db): void {
+  const have = new Set((db.prepare("PRAGMA table_info(drafts)").all() as Array<{ name: string }>).map((c) => c.name));
+  for (const [name, type] of MIGRATION_7_COLUMNS) {
+    if (!have.has(name)) db.exec(`ALTER TABLE drafts ADD COLUMN ${name} ${type}`);
+  }
+  db.exec("UPDATE drafts SET local_edited_at = updated_at WHERE local_edited_at IS NULL");
+  db.exec("CREATE INDEX IF NOT EXISTS drafts_gmail ON drafts(account_id, gmail_draft_id)");
+}
+
 /** Opens (or creates) the store, applies pragmas, and migrates to the current schema. */
 export function openStore(file: string): Db {
   if (file !== ":memory:") fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -131,6 +156,7 @@ export function migrate(db: Db): void {
     { version: 4, sql: () => "SELECT 1", after: (d) => repairSnippets(d) },
     { version: 5, sql: () => MIGRATION_5 },
     { version: 6, sql: () => MIGRATION_6 },
+    { version: 7, sql: () => "SELECT 1", after: (d) => migrateDraftsMirror(d) },
   ];
   for (const step of steps) {
     if (step.version <= current) continue;

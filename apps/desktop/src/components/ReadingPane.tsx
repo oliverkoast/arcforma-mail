@@ -1,10 +1,14 @@
+import { useMemo } from "react";
 import { useApp } from "../state/store";
 import { bytes, eyebrowDate, fullDate, sendsAt } from "../lib/format";
+import { messageText } from "../lib/mailhtml";
 import { InstantReplies, SummaryCard } from "./AiCards";
 import { InlineReply } from "./InlineReply";
 import { IconButton, ReplyIcons } from "./IconButton";
 import { MessageBody } from "./MessageBody";
 import type { RefileTarget, ThreadSummary } from "../../shared/types";
+
+const NO_PRIORS: string[] = [];
 
 const BUILTIN: Array<{ id: string; label: string }> = [
   { id: "newsletters", label: "Newsletters" },
@@ -64,6 +68,18 @@ export function ReadingPane() {
   const toggleQueue = useApp((s) => s.toggleQueue);
   const openCompose = useApp((s) => s.openCompose);
   const cancelScheduledSend = useApp((s) => s.cancelScheduledSend);
+  const messages = open?.messages;
+  // Each message's predecessors as plain text, oldest first, so MessageBody can fold history pasted without quote
+  // markup. Memoised on the messages array, so the iframes do not re-render on every store change.
+  const priorTexts = useMemo(() => {
+    const texts: string[] = [];
+    return (messages ?? []).map((m) => {
+      const before = texts.slice();
+      const t = messageText(m.body);
+      if (t) texts.push(t);
+      return before;
+    });
+  }, [messages]);
 
   if (!open) {
     return (
@@ -137,7 +153,7 @@ export function ReadingPane() {
                 )}
               </div>
             </div>
-            <MessageBody message={m} />
+            <MessageBody message={m} priorTexts={priorTexts[i] ?? NO_PRIORS} />
             {m.body && m.body.attachments.filter((a) => !a.inline).length > 0 ? (
               <div className="attachments">
                 {m.body.attachments

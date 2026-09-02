@@ -151,7 +151,7 @@
             "INBOX",
             "UNREAD"
           ],
-          "html": "<p>Oliver, your call. Let us know today so Priya can block the time.</p>"
+          "html": "<div dir=\"ltr\"><table cellpadding=\"0\" cellspacing=\"0\" style=\"border-left:4px solid rgb(217,48,37);padding:6px 10px;margin-bottom:12px\"><tbody><tr><td><span style=\"color:rgb(217,48,37)\">Caution:</span> This email originated from outside your organization. Do not click links or open attachments unless you recognize the sender and know the content is safe.</td></tr></tbody></table><div>Oliver, your call. Let us know today so Priya can block the time.</div><div><br></div><div>Dana</div></div><br><div class=\"gmail_quote gmail_quote_container\"><div dir=\"ltr\" class=\"gmail_attr\">On Wed, Sep 2, 2026 at 9:18 AM Priya Natarajan &lt;priya@northwind-coaching.example&gt; wrote:<br></div><blockquote class=\"gmail_quote\" style=\"margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex\"><div dir=\"ltr\">Happy either way. I would rather join early if the plan covers prioritisation.</div><br><div class=\"gmail_quote\"><div dir=\"ltr\" class=\"gmail_attr\">On Tue, Sep 1, 2026 at 7:40 PM Dana Reyes &lt;dana@northwind-coaching.example&gt; wrote:<br></div><blockquote class=\"gmail_quote\" style=\"margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex\"><div dir=\"ltr\">Adding Priya, who runs the product team. Should she join the first session or wait for week two?</div></blockquote></div></blockquote></div>"
         }
       ]
     },

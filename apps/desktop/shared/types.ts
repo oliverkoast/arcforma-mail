@@ -221,9 +221,20 @@ export interface ComposeDraft {
   references?: string | null;
 }
 
+export type DraftMirrorState = "pending" | "synced" | "failed";
+
 export interface DraftInfo extends ComposeDraft {
   draftId: number;
   updatedAt: number;
+  /** Written here, or found in Gmail and imported. Both edit and mirror the same way. */
+  origin: "local" | "gmail";
+  /** Whether the last edit has reached Gmail: the Drafts row reads In Gmail, Saving, or Not in Gmail with the error. */
+  mirror: { state: DraftMirrorState; error: string | null; at: number | null };
+}
+
+export interface SaveDraftOptions {
+  /** Esc, park, discard of a previous box: mirror now rather than after the typing pause. */
+  flush?: boolean;
 }
 
 export interface SendResult {
@@ -377,6 +388,8 @@ export interface ArcmailEvents {
   "toast": ToastEvent;
   "categories:changed": CategoryInfo[];
   "calendar:changed": { accountId: string | null };
+  /** A draft reached Gmail, failed to, arrived from Gmail, or went away there. The Drafts view reloads. */
+  "drafts:changed": { accountId: string | null };
 }
 
 /** Request channels the renderer can invoke. */
@@ -414,7 +427,7 @@ export interface ArcmailInvoke {
   "app:info": () => AppInfo;
   "compose:send": (draft: ComposeDraft, sendAt?: number | null) => SendResult;
   "compose:signature": (accountId: string) => string;
-  "drafts:save": (draft: ComposeDraft) => number;
+  "drafts:save": (draft: ComposeDraft, opts?: SaveDraftOptions) => number;
   "drafts:list": (accountIds?: string[]) => DraftInfo[];
   "drafts:delete": (id: number) => void;
   "snippets:list": () => SnippetInfo[];
@@ -444,4 +457,4 @@ export interface ArcmailInvoke {
 export type InvokeChannel = keyof ArcmailInvoke;
 export type EventChannel = keyof ArcmailEvents;
 
-export const EVENT_CHANNELS: EventChannel[] = ["accounts:changed", "threads:changed", "sync:progress", "toast", "categories:changed", "calendar:changed"];
+export const EVENT_CHANNELS: EventChannel[] = ["accounts:changed", "threads:changed", "sync:progress", "toast", "categories:changed", "calendar:changed", "drafts:changed"];

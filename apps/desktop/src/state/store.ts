@@ -116,6 +116,12 @@ export interface AppState {
   aiStatus: AiStatus | null;
 
   compose: ComposeDraft | null;
+  /**
+   * The drafts row the open compose autosaves into, kept off `compose` so the
+   * editor (keyed on compose.draftId) does not remount mid-sentence when the
+   * first autosave lands. Close, collapse, and send fold it back in.
+   */
+  autosavedDraftId: number | null;
   composePlacement: ComposePlacement;
   /** An inline reply collapsed to its one-line strip. Always false for the panel. */
   inlineCollapsed: boolean;
@@ -180,6 +186,8 @@ export interface AppState {
 
   openCompose: (mode: ComposeMode, opts?: OpenComposeOptions) => void;
   updateCompose: (patch: Partial<ComposeDraft>) => void;
+  /** Saves the open compose to the drafts table (and so to Gmail) two seconds after the last edit. */
+  autosaveCompose: () => Promise<void>;
   closeCompose: (keepDraft?: boolean) => Promise<void>;
   /** Esc: the panel closes and keeps the draft; an inline reply collapses to its strip, or closes when nothing was written. */
   dismissCompose: () => Promise<void>;
@@ -222,6 +230,18 @@ function writeStoredBool(key: string, value: boolean): void {
 const EMPTY_STATUS: AccountsStatus = { accounts: [], configPath: "", configError: null };
 const DEFAULT_SETTINGS: SettingsInfo = { undoWindowSec: 10, autoDraft: false, remoteImages: "always" };
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
+/** Autosave runs this long after the last keystroke; the main process mirrors to Gmail on the same cadence. */
+export const AUTOSAVE_MS = 2000;
+let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+/** The autosave in flight, so a close or send waits for its row id instead of racing it. */
+let autosaveInflight: Promise<void> | null = null;
+/** Bumped whenever a compose opens or closes; an autosave that resolves for an older session drops its result. */
+let composeSession = 0;
+
+function cancelAutosave(): void {
+  if (autosaveTimer) clearTimeout(autosaveTimer);
+  autosaveTimer = null;
+}
 /** init runs twice under StrictMode; the tracker is installed once. */
 let activityUninstall: (() => void) | null = null;
 
@@ -298,6 +318,7 @@ export const useApp = create<AppState>((set, get) => ({
   aiStatus: null,
 
   compose: null,
+  autosavedDraftId: null,
   composePlacement: "panel",
   inlineCollapsed: false,
   inlineAnchor: null,
@@ -341,6 +362,7 @@ export const useApp = create<AppState>((set, get) => ({
     on("sync:progress", (p) => set((s) => ({ progress: { ...s.progress, [p.accountId]: p } })));
     on("toast", (t) => get().showToast(t));
     on("categories:changed", (categories) => set({ categories }));
+    on("drafts:changed", () => void get().loadDrafts());
   },
 
   async refreshStatus() {
@@ -357,7 +379,8 @@ export const useApp = create<AppState>((set, get) => ({
     const accountIds = selectedAccountIds(s);
     set({ loading: true });
     try {
-      const page = await invoke("threads:list", { view: s.view, split: s.split, category: s.category, accountIds, cursor: reset ? null : s.nextCursor, limit: 60 });
+      // Drafts is one list of drafts, local and Gmail alike (loadDrafts); the threads they sit in are not rows here.
+      const page = s.view === "drafts" ? { rows: [], nextCursor: null } : await invoke("threads:list", { view: s.view, split: s.split, category: s.category, accountIds, cursor: reset ? null : s.nextCursor, limit: 60 });
       const counts = await invoke("sidebar:counts", accountIds);
       set((cur) => {
         const rows = reset ? page.rows : [...cur.rows, ...page.rows];
@@ -782,8 +805,10 @@ export const useApp = create<AppState>((set, get) => ({
       const placement: ComposePlacement = opts.placement ?? (anchorMessage ? "inline" : "panel");
       if (placement === "inline" && (!view || !anchorMessage)) return;
       if (s.compose && !docked) void s.closeCompose(true);
+      composeSession += 1;
       set({
         compose: d,
+        autosavedDraftId: null,
         composePlacement: placement,
         inlineCollapsed: false,
         inlineAnchor: placement === "inline" && view ? { accountId: view.thread.accountId, threadId: view.thread.id, messageId: anchorMessage! } : null,
@@ -868,8 +893,10 @@ export const useApp = create<AppState>((set, get) => ({
       return;
     }
     if (placement === "inline" && !get().readingPane) get().setReadingPane(true);
+    composeSession += 1;
     set({
       compose: draft,
+      autosavedDraftId: null,
       composePlacement: placement,
       inlineCollapsed: false,
       inlineAnchor: placement === "inline" && view && targetId ? { accountId: view.thread.accountId, threadId: view.thread.id, messageId: targetId } : null,
@@ -893,25 +920,56 @@ export const useApp = create<AppState>((set, get) => ({
 
   updateCompose(patch) {
     set((cur) => (cur.compose ? { compose: { ...cur.compose, ...patch } } : {}));
+    cancelAutosave();
+    autosaveTimer = setTimeout(() => {
+      autosaveTimer = null;
+      void get().autosaveCompose();
+    }, AUTOSAVE_MS);
+  },
+
+  async autosaveCompose() {
+    const s = get();
+    const d = s.compose;
+    if (!d || s.inlineCollapsed) return;
+    // Recipients alone are not a draft; the same bar Esc uses.
+    if (!(s.composePlacement === "inline" ? hasBody(d) : hasContent(d))) return;
+    const session = composeSession;
+    const run = (async () => {
+      try {
+        const id = await invoke("drafts:save", { ...d, draftId: d.draftId ?? s.autosavedDraftId });
+        if (composeSession === session && get().compose) set({ autosavedDraftId: id });
+        void get().loadDrafts();
+      } catch {
+        // The next keystroke tries again; Esc still saves.
+      }
+    })();
+    autosaveInflight = run;
+    await run;
+    if (autosaveInflight === run) autosaveInflight = null;
   },
 
   async closeCompose(keepDraft = true) {
     const d = get().compose;
     if (!d) return;
     const inline = get().composePlacement === "inline";
-    set({ compose: null, composePlacement: "panel", inlineCollapsed: false, inlineAnchor: null, composeGhost: null, sendLaterOpen: false, snippetPickerOpen: false, editorApi: null });
+    cancelAutosave();
+    // An autosave that has left but not landed owns the row id; wait for it so the delete or save hits that row.
+    if (autosaveInflight) await autosaveInflight;
+    const draftId = d.draftId ?? get().autosavedDraftId ?? null;
+    composeSession += 1;
+    set({ compose: null, autosavedDraftId: null, composePlacement: "panel", inlineCollapsed: false, inlineAnchor: null, composeGhost: null, sendLaterOpen: false, snippetPickerOpen: false, editorApi: null });
     get().syncScope();
     // An untouched inline reply has recipients but nothing written; that is not a draft worth keeping.
     if (keepDraft && (inline ? hasBody(d) : hasContent(d))) {
       try {
-        await invoke("drafts:save", d);
+        await invoke("drafts:save", { ...d, draftId }, { flush: true });
         get().showToast({ eyebrow: "DRAFT KEPT", text: d.subject || "(no subject)" });
         void get().loadDrafts();
       } catch (err) {
         set({ error: (err as Error).message });
       }
-    } else if (d.draftId) {
-      await invoke("drafts:delete", d.draftId).catch(() => undefined);
+    } else if (draftId) {
+      await invoke("drafts:delete", draftId).catch(() => undefined);
       void get().loadDrafts();
     }
   },
@@ -928,12 +986,14 @@ export const useApp = create<AppState>((set, get) => ({
       await s.closeCompose(false);
       return;
     }
+    cancelAutosave();
+    if (autosaveInflight) await autosaveInflight;
     set({ inlineCollapsed: true, sendLaterOpen: false, snippetPickerOpen: false, editorApi: null });
     get().syncScope();
-    // The strip shows from memory at once; the draft also lands in the drafts table so it survives a restart.
+    // The strip shows from memory at once; the draft also lands in the drafts table (and Gmail) so it survives a restart.
     try {
-      const draftId = await invoke("drafts:save", d);
-      set((cur) => (cur.compose && cur.compose.threadId === d.threadId && cur.compose.mode === d.mode ? { compose: { ...cur.compose, draftId } } : {}));
+      const draftId = await invoke("drafts:save", { ...d, draftId: d.draftId ?? get().autosavedDraftId }, { flush: true });
+      set((cur) => (cur.compose && cur.compose.threadId === d.threadId && cur.compose.mode === d.mode ? { compose: { ...cur.compose, draftId }, autosavedDraftId: null } : {}));
       void get().loadDrafts();
     } catch (err) {
       set({ error: (err as Error).message });
@@ -965,9 +1025,12 @@ export const useApp = create<AppState>((set, get) => ({
     const d = get().compose;
     if (!d) return;
     const inline = get().composePlacement === "inline";
+    cancelAutosave();
+    if (autosaveInflight) await autosaveInflight;
     try {
-      const r = await invoke("compose:send", d, sendAt);
-      set({ compose: null, composePlacement: "panel", inlineCollapsed: false, inlineAnchor: null, composeGhost: null, sendLaterOpen: false, snippetPickerOpen: false, editorApi: null });
+      const r = await invoke("compose:send", { ...d, draftId: d.draftId ?? get().autosavedDraftId ?? null }, sendAt);
+      composeSession += 1;
+      set({ compose: null, autosavedDraftId: null, composePlacement: "panel", inlineCollapsed: false, inlineAnchor: null, composeGhost: null, sendLaterOpen: false, snippetPickerOpen: false, editorApi: null });
       get().syncScope();
       void get().loadDrafts();
       // An inline reply shows up in the thread right away; the sync replaces it with the real message.

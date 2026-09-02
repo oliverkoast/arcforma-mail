@@ -5,7 +5,7 @@
 import type { GmailClient } from "./client.js";
 import { GmailApiError, AuthExpiredError } from "./errors.js";
 
-export type OutboxOp = "modifyLabels" | "trash" | "untrash" | "send";
+export type OutboxOp = "modifyLabels" | "trash" | "untrash" | "send" | "draftUpsert" | "draftDelete";
 
 export interface OutboxJob {
   id: number;
@@ -25,6 +25,25 @@ export interface ModifyLabelsPayload {
 export interface SendPayload {
   raw: string;
   threadId?: string | null;
+}
+
+export interface DraftUpsertPayload {
+  draftId: number;
+  raw: string;
+  threadId?: string | null;
+  gmailDraftId?: string | null;
+}
+
+export interface DraftDeletePayload {
+  gmailDraftId: string;
+}
+
+/** What drafts.create and drafts.update hand back. `gone` means the draft to update no longer exists in Gmail. */
+export interface DraftUpsertResult {
+  draftId: number;
+  gmailDraftId: string | null;
+  gmailMessageId: string | null;
+  gone: boolean;
 }
 
 export type OutboxOutcome =
@@ -97,6 +116,40 @@ export async function executeOutboxOp(client: GmailClient, labels: LabelResolver
         if (p.threadId) body["threadId"] = p.threadId;
         const result = await client.request("messages/send", { method: "POST", body, cost: 100 });
         return { ok: true, result };
+      }
+      case "draftUpsert": {
+        const p = job.payload as DraftUpsertPayload;
+        const message: Record<string, string> = { raw: p.raw };
+        if (p.threadId) message["threadId"] = p.threadId;
+        type Wire = { id: string; message?: { id?: string; threadId?: string } };
+        if (p.gmailDraftId) {
+          try {
+            const updated = await client.request<Wire>(`drafts/${encodeURIComponent(p.gmailDraftId)}`, { method: "PUT", body: { id: p.gmailDraftId, message }, cost: 15 });
+            const result: DraftUpsertResult = { draftId: p.draftId, gmailDraftId: updated.id, gmailMessageId: updated.message?.id ?? null, gone: false };
+            return { ok: true, result };
+          } catch (err) {
+            // The Gmail draft went away between the edit and the drain (deleted or sent over there).
+            // Deleting in either place deletes in the other, so the local row goes rather than a copy coming back.
+            if (err instanceof GmailApiError && err.status === 404) {
+              const result: DraftUpsertResult = { draftId: p.draftId, gmailDraftId: p.gmailDraftId, gmailMessageId: null, gone: true };
+              return { ok: true, result };
+            }
+            throw err;
+          }
+        }
+        const created = await client.request<Wire>("drafts", { method: "POST", body: { message }, cost: 10 });
+        const result: DraftUpsertResult = { draftId: p.draftId, gmailDraftId: created.id, gmailMessageId: created.message?.id ?? null, gone: false };
+        return { ok: true, result };
+      }
+      case "draftDelete": {
+        const p = job.payload as DraftDeletePayload;
+        try {
+          await client.request(`drafts/${encodeURIComponent(p.gmailDraftId)}`, { method: "DELETE", cost: 10 });
+        } catch (err) {
+          // Already gone is the outcome that was wanted.
+          if (!(err instanceof GmailApiError && err.status === 404)) throw err;
+        }
+        return { ok: true, result: null };
       }
     }
   } catch (err) {

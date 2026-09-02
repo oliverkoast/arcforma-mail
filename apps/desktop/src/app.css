@@ -1541,3 +1541,39 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .reply-row.icon-row {
   gap: 2px;
 }
+
+/* ---- reading aids: the quoted-history fold and signature dimming on the plain-text path (the HTML path carries the same classes inside its iframe) ---- */
+.message-text-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.message-text.sig {
+  color: var(--af-text-soft);
+}
+.quote-fold {
+  margin-top: 10px;
+}
+.quote-fold > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-block;
+  padding: 2px 0;
+}
+.quote-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.quote-fold > summary .qf-hide {
+  display: none;
+}
+.quote-fold[open] > summary .qf-show {
+  display: none;
+}
+.quote-fold[open] > summary .qf-hide {
+  display: inline;
+}
+.message-text-quoted {
+  margin-top: 8px;
+  padding-left: 12px;
+  border-left: 2px solid var(--af-rule);
+  color: var(--af-text-soft);
+}

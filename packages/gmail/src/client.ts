@@ -26,6 +26,10 @@ export const QUOTA: Record<string, number> = {
   "threads.untrash": 10,
   "drafts.list": 5,
   "drafts.get": 5,
+  "drafts.create": 10,
+  "drafts.update": 15,
+  "drafts.delete": 10,
+  "drafts.send": 100,
   "settings.sendAs.list": 1,
 };
 

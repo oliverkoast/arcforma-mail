@@ -9,5 +9,6 @@ export * from "./sync.js";
 export * from "./history.js";
 export * from "./outbox.js";
 export * from "./send.js";
+export * from "./drafts.js";
 export * from "./calendar.js";
 export * from "./people.js";

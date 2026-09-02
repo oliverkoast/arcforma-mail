@@ -13,6 +13,22 @@ export interface QueueOptions {
   now?: number;
   /** Overrides the account's stored signature (tests). */
   signatureHtml?: string | null;
+  /** The Gmail draft this message was mirrored as. Deleted once the send succeeds; handed back on undo or failure. */
+  gmailDraftId?: string | null;
+}
+
+/** What a send_queue row remembers about the draft it came from. */
+export interface SendMeta {
+  draft?: ComposeDraft;
+  gmailDraftId?: string | null;
+}
+
+export function sendMeta(row: { meta_json: string }): SendMeta {
+  try {
+    return JSON.parse(row.meta_json) as SendMeta;
+  } catch {
+    return {};
+  }
 }
 
 export function senderFor(db: Db, accountId: string): Address {
@@ -67,21 +83,17 @@ export async function queueSend(db: Db, draft: ComposeDraft, opts: QueueOptions 
     rawMime: built.mime,
     sendAt,
     undoUntil,
-    meta: { draft: { ...draft, draftId: null } },
+    meta: { draft: { ...draft, draftId: null }, gmailDraftId: opts.gmailDraftId ?? null } satisfies SendMeta,
   });
   return { id: row.id, sendAt: row.send_at, undoUntil: row.undo_until };
 }
 
-/** Cancels a queued send and returns the draft it carried, so the compose can reopen. */
-export function undoSend(db: Db, id: number): UndoSendResult {
+/** Cancels a queued send and returns the draft it carried, plus the Gmail draft it was mirrored as, so the compose can reopen. */
+export function undoSend(db: Db, id: number): UndoSendResult & { gmailDraftId: string | null } {
   const row = getSend(db, id);
-  if (!row) return { cancelled: false, draft: null };
+  if (!row) return { cancelled: false, draft: null, gmailDraftId: null };
   const cancelled = cancelSend(db, id);
-  if (!cancelled) return { cancelled: false, draft: null };
-  try {
-    const meta = JSON.parse(row.meta_json) as { draft?: ComposeDraft };
-    return { cancelled: true, draft: meta.draft ?? null };
-  } catch {
-    return { cancelled: true, draft: null };
-  }
+  if (!cancelled) return { cancelled: false, draft: null, gmailDraftId: null };
+  const meta = sendMeta(row);
+  return { cancelled: true, draft: meta.draft ?? null, gmailDraftId: meta.gmailDraftId ?? null };
 }

@@ -1,12 +1,14 @@
 import { ipcMain } from "electron";
-import { deleteDraft, deleteSnippet, getSettings, listDrafts, listSnippets, saveDraft, setSetting, updateSnippet, upsertSnippet, type Db, type DraftRow } from "@arcforma/store";
+import { deleteSnippet, getSettings, listDrafts, listSnippets, saveDraft, setSetting, updateSnippet, upsertSnippet, type Db, type DraftRow } from "@arcforma/store";
 import { queueSend, signatureFor, undoSend } from "../compose/queue.js";
+import { detachDraftForSend, discardDraft, restoreDraft, type DraftMirror } from "../drafts/mirror.js";
 import { emit } from "../events.js";
 import { log } from "../log.js";
 import type { Scheduler } from "../scheduler.js";
-import type { Address, ComposeDraft, DraftInfo, SettingsInfo, SnippetInfo } from "../../shared/types.js";
+import type { SyncManager } from "../sync.js";
+import type { Address, ComposeDraft, DraftInfo, SaveDraftOptions, SettingsInfo, SnippetInfo, UndoSendResult } from "../../shared/types.js";
 
-function toDraftInfo(row: DraftRow): DraftInfo {
+export function toDraftInfo(row: DraftRow): DraftInfo {
   return {
     draftId: row.id,
     accountId: row.account_id,
@@ -21,6 +23,8 @@ function toDraftInfo(row: DraftRow): DraftInfo {
     inReplyTo: row.in_reply_to,
     references: row.references_header,
     updatedAt: row.updated_at,
+    origin: row.origin,
+    mirror: { state: row.mirror_state, error: row.mirror_error, at: row.mirrored_at },
   };
 }
 
@@ -28,19 +32,32 @@ function snippets(db: Db): SnippetInfo[] {
   return listSnippets(db).map((s) => ({ id: s.id, trigger: s.trigger, name: s.name, bodyHtml: s.body_html, bodyText: s.body_text }));
 }
 
-export function registerComposeIpc(db: Db, scheduler: Scheduler): void {
+export function registerComposeIpc(db: Db, scheduler: Scheduler, mirror: DraftMirror, sync: Pick<SyncManager, "poke">): void {
   ipcMain.handle("compose:send", async (_e, draft: ComposeDraft, sendAt?: number | null) => {
-    const result = await queueSend(db, draft, { sendAt: sendAt ?? null });
-    if (draft.draftId) deleteDraft(db, draft.draftId);
+    // The local row leaves Drafts now; its Gmail draft goes once the send has succeeded.
+    let gmailDraftId: string | null = null;
+    if (draft.draftId) {
+      mirror.cancel(draft.draftId);
+      gmailDraftId = detachDraftForSend(db, draft.draftId);
+    }
+    const result = await queueSend(db, draft, { sendAt: sendAt ?? null, gmailDraftId });
     log("compose", `queued send ${result.id} for ${new Date(result.sendAt).toISOString()}`);
     scheduler.wakeSoon(result.sendAt);
     return result;
   });
   ipcMain.handle("compose:signature", (_e, accountId: string) => signatureFor(db, accountId));
-  ipcMain.handle("send:undo", (_e, id: number) => undoSend(db, id));
+  ipcMain.handle("send:undo", async (_e, id: number): Promise<UndoSendResult> => {
+    const r = undoSend(db, id);
+    if (!r.cancelled || !r.draft) return { cancelled: r.cancelled, draft: r.draft };
+    // Back under Drafts, still the same Gmail draft, mirrored again with whatever comes next.
+    const draftId = await restoreDraft(db, r.draft, r.gmailDraftId);
+    sync.poke(r.draft.accountId);
+    emit("drafts:changed", { accountId: r.draft.accountId });
+    return { cancelled: true, draft: { ...r.draft, draftId } };
+  });
 
-  ipcMain.handle("drafts:save", (_e, draft: ComposeDraft) =>
-    saveDraft(db, {
+  ipcMain.handle("drafts:save", (_e, draft: ComposeDraft, opts?: SaveDraftOptions) => {
+    const id = saveDraft(db, {
       id: draft.draftId ?? null,
       accountId: draft.accountId,
       threadId: draft.threadId ?? null,
@@ -53,10 +70,16 @@ export function registerComposeIpc(db: Db, scheduler: Scheduler): void {
       quotedHtml: draft.quotedHtml,
       inReplyTo: draft.inReplyTo ?? null,
       references: draft.references ?? null,
-    })
-  );
+    });
+    mirror.touch(id, draft.accountId, Boolean(opts?.flush));
+    return id;
+  });
   ipcMain.handle("drafts:list", (_e, accountIds?: string[]) => listDrafts(db, accountIds).map(toDraftInfo));
-  ipcMain.handle("drafts:delete", (_e, id: number) => deleteDraft(db, id));
+  ipcMain.handle("drafts:delete", (_e, id: number) => {
+    mirror.cancel(id);
+    const r = discardDraft(db, id);
+    if (r?.queued) sync.poke(r.accountId);
+  });
 
   ipcMain.handle("snippets:list", () => snippets(db));
   ipcMain.handle("snippets:save", (_e, s: { id?: number | null; trigger: string; name: string; bodyHtml: string; bodyText: string }) => {

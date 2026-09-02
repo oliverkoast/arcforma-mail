@@ -8,6 +8,7 @@ import { AiClient } from "./ai/client.js";
 import { CalendarSync } from "./calendar.js";
 import { Classifier } from "./classify/pipeline.js";
 import { Contacts } from "./contacts.js";
+import { DraftMirror } from "./drafts/mirror.js";
 import { emit } from "./events.js";
 import { applyLoginItem, registerAccountIpc } from "./ipc/accounts.js";
 import { registerAiIpc } from "./ipc/ai.js";
@@ -78,6 +79,7 @@ let db: Db | null = null;
 let accounts: AccountRegistry | null = null;
 let sync: SyncManager | null = null;
 let scheduler: Scheduler | null = null;
+let mirror: DraftMirror | null = null;
 let classifier: Classifier | null = null;
 let calendar: CalendarSync | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -187,6 +189,7 @@ async function boot(): Promise<void> {
   if (accounts.configError) log("app", accounts.configError);
   sync = new SyncManager(db, accounts);
   scheduler = new Scheduler(db, accounts, sync);
+  mirror = new DraftMirror(db, sync);
   const ai = new AiClient();
   if (!ai.reload()) log("ai", "daemon config missing; AI features report daemon_down until packages/ai-daemon/install.sh runs");
   const registry = accounts;
@@ -215,7 +218,7 @@ async function boot(): Promise<void> {
   registerSearchIpc(db);
   registerSidebarIpc(db);
   registerSchedulerIpc(db, scheduler, sync);
-  registerComposeIpc(db, scheduler);
+  registerComposeIpc(db, scheduler, mirror, sync);
   registerAiIpc(db, ai, SMOKE_DIR ? null : classifier, sync);
   registerCalendarIpc(db, SMOKE_DIR ? null : calendar);
   registerContactIpc(contacts);
@@ -255,6 +258,9 @@ async function boot(): Promise<void> {
     if (process.platform !== "darwin") app.quit();
   });
   app.on("before-quit", () => {
+    // A draft edited in the last two seconds is queued now; the outbox row survives the quit and drains on the next start.
+    void mirror?.flush();
+    mirror?.stop();
     sync?.stop();
     scheduler?.stop();
     classifier?.stop();
@@ -280,8 +286,12 @@ const SMOKE_STEPS: Array<{ name: string; script: string | null; main?: (ctx: Smo
   { name: "thread", script: "window.__arcmail.select(0); await window.__arcmail.openSelected();", waitMs: 4000 },
   // The bottom of the "Kickoff next week" thread: the reply row under the last message, no draft anywhere.
   { name: "thread-reply-row", script: "document.querySelector('.messages').scrollTop = 1e6;", waitMs: 600 },
+  // The last message carries a gateway banner and quotes Priya's mail under a Gmail attribution: the banner is gone and the history sits behind Show quoted text.
+  { name: "quote-folded", script: "document.querySelector('.message.is-last').scrollIntoView({ block: 'start' });", waitMs: 600 },
+  // Show quoted text: the details opens inside the sandboxed frame and the frame grows to fit.
+  { name: "quote-expanded", script: "document.querySelector('.message.is-last iframe').contentDocument.querySelector('details.quote-fold').open = true; await new Promise((r) => setTimeout(r, 400)); document.querySelector('.message.is-last').scrollIntoView({ block: 'start' });", waitMs: 800 },
   // R: the inline reply docked under the last message, with a few words typed so the strip has something to show.
-  { name: "inline-reply", script: "window.__arcmail.openCompose('reply'); await new Promise((r) => setTimeout(r, 500)); window.__arcmail.editorApi.setHtml('<p>Priya should join the first session. The plan goes out tonight.</p>');", waitMs: 1200 },
+  { name: "inline-reply", script: "document.querySelector('.message.is-last iframe').contentDocument.querySelector('details.quote-fold').open = false; window.__arcmail.openCompose('reply'); await new Promise((r) => setTimeout(r, 500)); window.__arcmail.editorApi.setHtml('<p>Priya should join the first session. The plan goes out tonight.</p>');", waitMs: 1200 },
   // Esc: the box collapses to its one-line strip and the keys go back to the thread.
   { name: "inline-strip", script: "await window.__arcmail.dismissCompose();", waitMs: 800 },
   // Reply from a message in the middle of the thread: the box moves under it, recipients come from that message, the typed text comes along.

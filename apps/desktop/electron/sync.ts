@@ -4,10 +4,11 @@
 // account at a time: a poke that lands while a run is in flight is remembered
 // and honoured as soon as that run ends.
 
-import { AuthExpiredError, HistoryExpiredError, LabelResolver, backfill, drainAccount, fetchThreadsMetadata, pullHistory, type GmailClient } from "@arcforma/gmail";
+import { AuthExpiredError, HistoryExpiredError, LabelResolver, backfill, drainAccount, fetchThreadsMetadata, pullHistory, type DraftUpsertResult, type GmailClient, type HistoryChange } from "@arcforma/gmail";
 import {
   applyHistory,
   getAccount,
+  getDraft,
   hasPendingMask,
   listAccounts,
   markOutboxDone,
@@ -21,7 +22,9 @@ import {
   upsertThreadFromGmail,
   type AccountRow,
   type Db,
+  type DraftUpsertPayload,
 } from "@arcforma/store";
+import { applyDraftUpsertAck, applyDraftUpsertFail, draftsNeedReconcile, reconcileGmailDrafts, reconcileSummary } from "./drafts/mirror.js";
 import { emit } from "./events.js";
 import { log, logError } from "./log.js";
 import type { AccountsStatus } from "../shared/types.js";
@@ -200,6 +203,8 @@ export class SyncManager {
       }
     );
     await this.refreshLabels(id, client);
+    // The drafts Gmail already holds join the local list once the threads they belong to are in.
+    await this.reconcileDrafts(id, client);
     updateAccount(this.db, id, { sync_state: "live", backfill_cursor: null, last_sync_at: Date.now(), error: null });
     log("sync", `${id} backfill done`);
     emit("sync:progress", { accountId: id, state: "live", done: 0, total: null, finished: true });
@@ -217,6 +222,7 @@ export class SyncManager {
         changed = (await this.fetchThreads(id, client, result.threadsToFetch)) > 0 || changed;
       }
       log("sync", `${id} history ${account.history_id} -> ${historyId}: ${changes.length} changes, ${result.threadsToFetch.length} fetched, ${result.masked} masked`);
+      if (draftsNeedReconcile(this.db, id, changes as HistoryChange[])) await this.reconcileDrafts(id, client);
     }
     // The watermark moves only after every page has been applied and every referenced thread fetched.
     updateAccount(this.db, id, { history_id: historyId, last_sync_at: Date.now(), error: null });
@@ -234,6 +240,20 @@ export class SyncManager {
       for (const t of threads) upsertThreadFromGmail(this.db, accountId, t, { ownerAddresses: owners });
     });
     return threads.length;
+  }
+
+  /** Brings the drafts table in line with users.drafts. A failure here waits for the next history batch that touches drafts. */
+  private async reconcileDrafts(accountId: string, client: GmailClient): Promise<void> {
+    try {
+      const r = await reconcileGmailDrafts(this.db, accountId, client, { ownerAddresses: this.accounts.ownerAddresses(accountId) });
+      if (r.imported || r.updated || r.dropped || r.pushed) {
+        log("drafts", `${accountId} reconciled: ${reconcileSummary(r)}`);
+        emit("drafts:changed", { accountId });
+      }
+    } catch (err) {
+      if (err instanceof AuthExpiredError) throw err;
+      logError("drafts", `${accountId} reconcile`, err);
+    }
   }
 
   private async refreshLabels(accountId: string, client: GmailClient): Promise<void> {
@@ -257,27 +277,55 @@ export class SyncManager {
   private async drain(accountId: string, client: GmailClient): Promise<void> {
     let authExpired = false;
     const acked = new Set<string>();
+    let draftsChanged = false;
     const result = await drainAccount(client, this.resolver(accountId, client), {
       next: () => {
-        const row = nextOutbox(this.db, accountId);
-        return row ? { id: row.id, op: row.op, payload: JSON.parse(row.payload_json) as unknown, attempts: row.attempts } : null;
+        for (;;) {
+          const row = nextOutbox(this.db, accountId);
+          if (!row) return null;
+          const payload = JSON.parse(row.payload_json) as unknown;
+          if (row.op === "draftUpsert") {
+            // The row was queued before an earlier create for the same draft landed: reuse that id.
+            // A draft that was sent or discarded meanwhile has nothing left to mirror.
+            const p = payload as DraftUpsertPayload;
+            const draft = getDraft(this.db, p.draftId);
+            if (!draft) {
+              markOutboxDone(this.db, row.id);
+              continue;
+            }
+            p.gmailDraftId = draft.gmail_draft_id;
+          }
+          return { id: row.id, op: row.op, payload, attempts: row.attempts };
+        }
       },
       markInflight: (id) => markOutboxInflight(this.db, id),
-      ack: (id) => {
+      ack: (id, result) => {
         const row = this.db.prepare("SELECT op, payload_json FROM outbox WHERE id = ?").get(id) as { op: string; payload_json: string } | undefined;
         markOutboxDone(this.db, id);
-        if (row && row.op !== "send") {
-          const threadId = (JSON.parse(row.payload_json) as { threadId?: string }).threadId;
-          if (threadId) acked.add(threadId);
+        if (!row) return;
+        if (row.op === "draftUpsert") {
+          draftsChanged = applyDraftUpsertAck(this.db, accountId, result as DraftUpsertResult).changed || draftsChanged;
+          return;
         }
+        if (row.op === "draftDelete" || row.op === "send") return;
+        const threadId = (JSON.parse(row.payload_json) as { threadId?: string }).threadId;
+        if (threadId) acked.add(threadId);
       },
       fail: (id, error, retryAt, expired) => {
         markOutboxFailed(this.db, id, error, retryAt);
         if (expired) authExpired = true;
         log("outbox", `${accountId} #${id} failed: ${error}${retryAt ? ", retrying" : ""}`);
+        const row = this.db.prepare("SELECT op, payload_json FROM outbox WHERE id = ?").get(id) as { op: string; payload_json: string } | undefined;
+        if (row?.op === "draftUpsert") {
+          applyDraftUpsertFail(this.db, JSON.parse(row.payload_json) as DraftUpsertPayload, error, retryAt === null && !expired);
+          draftsChanged = true;
+          if (retryAt === null && !expired) emit("toast", { eyebrow: "NOT IN GMAIL", text: `A draft did not reach Gmail: ${error}` });
+          return;
+        }
         if (retryAt === null && !expired) emit("toast", { eyebrow: "NOT SYNCED", text: `A change did not reach Gmail: ${error}` });
       },
     });
+    if (draftsChanged) emit("drafts:changed", { accountId });
     if (result.done > 0) {
       log("outbox", `${accountId} drained ${result.done}`);
       emit("threads:changed", { accountId });

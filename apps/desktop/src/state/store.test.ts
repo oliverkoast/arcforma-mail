@@ -31,7 +31,7 @@ let nextSendId = 1;
         case "drafts:save": {
           const d = args[0] as ComposeDraft;
           const id = d.draftId ?? nextDraftId++;
-          draftRows.set(id, { ...d, draftId: id, updatedAt: Date.now() + id });
+          draftRows.set(id, { ...d, draftId: id, updatedAt: Date.now() + id, origin: "local", mirror: { state: "pending", error: null, at: null } });
           return id;
         }
         case "drafts:list":
@@ -364,4 +364,77 @@ test("Send replaces the inline box with the message appended to the thread; Z ta
   await useApp.getState().sendCompose(Date.now() + 3_600_000);
   assert.equal(useApp.getState().open?.messages.length, 4);
   useApp.getState().showToast(null);
+});
+
+// ---- autosave and the Gmail mirror -----------------------------------------------------
+
+test("typing autosaves two seconds after the last edit without touching the compose's draftId; close and send fold the row id back in", async () => {
+  const useApp = await freshKickoff();
+  const { AUTOSAVE_MS } = await import("./store");
+  const savesBefore = calls.filter((c) => c.channel === "drafts:save").length;
+  useApp.getState().openCompose("reply");
+  useApp.getState().updateCompose({ bodyHtml: "<p>Yes,</p>" });
+  await new Promise((r) => setTimeout(r, AUTOSAVE_MS - 600));
+  useApp.getState().updateCompose({ bodyHtml: "<p>Yes, 9:00 works.</p>" });
+  await new Promise((r) => setTimeout(r, AUTOSAVE_MS - 600));
+  assert.equal(calls.filter((c) => c.channel === "drafts:save").length, savesBefore, "still typing: nothing saved yet");
+  await new Promise((r) => setTimeout(r, 700));
+  let saves = calls.filter((c) => c.channel === "drafts:save");
+  assert.equal(saves.length, savesBefore + 1, "one save, two seconds after the last keystroke");
+  const saved = saves.at(-1)!.args[0] as ComposeDraft;
+  assert.equal(saved.bodyHtml, "<p>Yes, 9:00 works.</p>");
+  assert.equal(saved.draftId, null, "a new row");
+  assert.equal(saves.at(-1)!.args[1], undefined, "an autosave is not a flush");
+  let s = useApp.getState();
+  assert.equal(typeof s.autosavedDraftId, "number");
+  assert.equal(s.compose?.draftId, null, "the compose the editor is keyed on did not change");
+  assert.equal(s.drafts.some((d) => d.draftId === s.autosavedDraftId), true, "and it counts under Drafts");
+  const rowId = s.autosavedDraftId!;
+
+  // The next autosave updates the same row.
+  useApp.getState().updateCompose({ bodyHtml: "<p>Yes, 9:00 works. See you then.</p>" });
+  await new Promise((r) => setTimeout(r, AUTOSAVE_MS + 100));
+  saves = calls.filter((c) => c.channel === "drafts:save");
+  assert.equal((saves.at(-1)!.args[0] as ComposeDraft).draftId, rowId);
+  assert.equal(draftRows.size, 1);
+
+  // Esc collapses inline: a flush on the same row, and the compose now carries the id.
+  await useApp.getState().dismissCompose();
+  saves = calls.filter((c) => c.channel === "drafts:save");
+  assert.equal((saves.at(-1)!.args[0] as ComposeDraft).draftId, rowId);
+  assert.deepEqual(saves.at(-1)!.args[1], { flush: true });
+  s = useApp.getState();
+  assert.equal(s.compose?.draftId, rowId);
+  assert.equal(s.autosavedDraftId, null);
+
+  // Discarding deletes that row, not a fresh one.
+  await useApp.getState().closeCompose(false);
+  assert.equal(draftRows.size, 0);
+  assert.deepEqual(calls.filter((c) => c.channel === "drafts:delete").at(-1)?.args, [rowId]);
+
+  // Send after an autosave hands the row id to the main process so its Gmail draft follows the send.
+  useApp.getState().openCompose("reply");
+  useApp.getState().updateCompose({ bodyHtml: "<p>Sending after a pause.</p>" });
+  await new Promise((r) => setTimeout(r, AUTOSAVE_MS + 100));
+  const autosaved = useApp.getState().autosavedDraftId;
+  assert.equal(typeof autosaved, "number");
+  lastSent = useApp.getState().compose;
+  await useApp.getState().sendCompose(null);
+  const sent = calls.filter((c) => c.channel === "compose:send").at(-1)!.args[0] as ComposeDraft;
+  assert.equal(sent.draftId, autosaved);
+  assert.equal(useApp.getState().autosavedDraftId, null);
+  useApp.getState().showToast(null);
+  draftRows.clear();
+});
+
+test("closing right after a keystroke cancels the pending autosave, so nothing is written for a discarded compose", async () => {
+  const useApp = await freshKickoff();
+  const { AUTOSAVE_MS } = await import("./store");
+  const savesBefore = calls.filter((c) => c.channel === "drafts:save").length;
+  useApp.getState().openCompose("reply");
+  useApp.getState().updateCompose({ bodyHtml: "<p>Never mind.</p>" });
+  await useApp.getState().closeCompose(false);
+  await new Promise((r) => setTimeout(r, AUTOSAVE_MS + 100));
+  assert.equal(calls.filter((c) => c.channel === "drafts:save").length, savesBefore);
+  assert.equal(draftRows.size, 0);
 });

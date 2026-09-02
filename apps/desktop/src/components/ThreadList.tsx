@@ -71,7 +71,14 @@ function Row({ row, selected, owners, onClick, onHover, accountLabel }: { row: T
   );
 }
 
-function DraftRows({ drafts }: { drafts: DraftInfo[] }) {
+/** The mirror eyebrow: where the draft stands with Gmail. Renders uppercase through af-mono. */
+export function mirrorLabel(d: Pick<DraftInfo, "mirror">): string {
+  if (d.mirror.state === "synced") return "In Gmail";
+  if (d.mirror.state === "pending") return "Saving";
+  return d.mirror.error ? `Not in Gmail · ${d.mirror.error}` : "Not in Gmail";
+}
+
+function DraftRows({ drafts, accountLabels, showAccount }: { drafts: DraftInfo[]; accountLabels: Map<string, string>; showAccount: boolean }) {
   const openDraft = useApp((s) => s.openDraft);
   const deleteDraft = useApp((s) => s.deleteDraft);
   if (drafts.length === 0) return null;
@@ -80,11 +87,15 @@ function DraftRows({ drafts }: { drafts: DraftInfo[] }) {
       {drafts.map((d) => (
         <div className="draft-row" key={d.draftId}>
           <button className="draft-open" onClick={() => openDraft(d)}>
-            <span className="af-mono">Local draft · {listDate(d.updatedAt)}</span>
+            <span className="af-mono row-eyebrow">{mirrorLabel(d)}</span>
+            <span className="af-mono">
+              {listDate(d.updatedAt)}
+              {showAccount ? ` · ${accountLabels.get(d.accountId) ?? d.accountId}` : ""}
+            </span>
             <span className="row-subject">{d.subject || "(no subject)"}</span>
             <span className="row-snippet">{d.to.map((a) => a.name || a.email).join(", ") || "No recipient yet"}</span>
           </button>
-          <button className="draft-delete" onClick={() => void deleteDraft(d.draftId)}>
+          <button className="draft-delete" onClick={() => void deleteDraft(d.draftId)} title="Deletes the draft here and in Gmail">
             Delete
           </button>
         </div>
@@ -178,15 +189,18 @@ export function ThreadList() {
           </div>
         ) : null}
       </div>
-      {view === "drafts" ? <DraftRows drafts={drafts} /> : null}
+      {view === "drafts" ? <DraftRows drafts={drafts} accountLabels={accountLabels} showAccount={!filter} /> : null}
       <div className="rows" ref={parentRef} role="listbox" onScroll={(e) => {
         const el = e.currentTarget;
         if (el.scrollTop + el.clientHeight >= el.scrollHeight - 300) void loadMore();
       }}>
         {rows.length === 0 ? (
           <div className="empty">
-            {view === "drafts" && drafts.length > 0 ? (
-              <div className="af-mono">Local drafts above. Gmail drafts sync separately.</div>
+            {view === "drafts" && drafts.length > 0 ? null : view === "drafts" ? (
+              <>
+                <div className="af-h3">No drafts</div>
+                <div>Esc in a message keeps a draft here and in Gmail. Drafts written in Gmail show up here too.</div>
+              </>
             ) : searchHits ? (
               <>
                 <div className="af-h3">No results for “{searchQuery}”</div>

@@ -65,7 +65,7 @@ test("once the worker picks a row up, undo is gone", async () => {
   const now = 1_800_000_000_000;
   const r = await queueSend(store, draft, { now });
   assert.equal(markSending(store, r.id), true);
-  assert.deepEqual(undoSend(store, r.id), { cancelled: false, draft: null });
+  assert.deepEqual(undoSend(store, r.id), { cancelled: false, draft: null, gmailDraftId: null });
 });
 
 test("send later keeps the chosen time and stays undoable until then", async () => {

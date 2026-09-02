@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { AuthExpiredError, GmailApiError, GmailClient, type Transport } from "@arcforma/gmail";
-import { createReminder, enqueueSend, getQueue, getQueueItem, getSend, getSetting, listDrafts, markSending, openStore, queueCounts, setQueue, setSetting, upsertAccount, upsertClassification, upsertThreadFromGmail, type Db } from "@arcforma/store";
+import { createReminder, enqueueSend, getQueue, getQueueItem, getSend, getSetting, listDrafts, listOutbox, markSending, openStore, queueCounts, setQueue, setSetting, upsertAccount, upsertClassification, upsertThreadFromGmail, type Db } from "@arcforma/store";
 import { rolloverToast } from "./rollover.js";
 import { Scheduler, isTerminalSendError } from "./scheduler.js";
 
@@ -183,4 +183,36 @@ test("a reminder that fires puts its thread in Daily 0", async () => {
   await scheduler.tick();
   assert.equal(getQueue(db, "arcforma", "waiting"), "daily");
   assert.equal(getQueueItem(db, "arcforma", "waiting")?.source, "reminder");
+});
+
+// ---- Gmail draft mirror through the send queue -----------------------------------
+
+test("a successful send queues the deletion of the Gmail draft the message was mirrored as", async () => {
+  const db = tempDb();
+  const row = enqueueSend(db, { accountId: "arcforma", rawMime: "RAW", sendAt: T0, undoUntil: T0, meta: { draft, gmailDraftId: "dMirror" } });
+  const api = clientWith(() => ({ status: 200, body: { id: "sent1", threadId: "t1" } }));
+  const pokes: string[] = [];
+  const scheduler = new Scheduler(db, { client: () => api.client }, { poke: (a) => pokes.push(a) }, { now: () => T0 + 1, notify: () => {} });
+  await scheduler.tick();
+  assert.equal(getSend(db, row.id)!.status, "sent");
+  const deletes = listOutbox(db, "arcforma", "pending").filter((r) => r.op === "draftDelete");
+  assert.deepEqual(deletes.map((r) => JSON.parse(r.payload_json)), [{ gmailDraftId: "dMirror" }]);
+  assert.deepEqual(pokes, ["arcforma"], "the drain is poked so the delete goes out with the send");
+  assert.equal(listDrafts(db).length, 0, "nothing came back under Drafts");
+});
+
+test("a send that fails for good restores the draft on its Gmail draft and mirrors it again", async () => {
+  const db = tempDb();
+  enqueueSend(db, { accountId: "arcforma", rawMime: "RAW", sendAt: T0, undoUntil: T0, meta: { draft, gmailDraftId: "dMirror" } });
+  const api = clientWith(() => ({ status: 400, body: { error: { message: "Invalid To header", errors: [{ reason: "invalidArgument" }] } } }));
+  const scheduler = new Scheduler(db, { client: () => api.client }, { poke: () => {} }, { now: () => T0 + 1, notify: () => {} });
+  await scheduler.tick();
+  const drafts = listDrafts(db);
+  assert.equal(drafts.length, 1);
+  assert.equal(drafts[0]!.gmail_draft_id, "dMirror", "still the same Gmail draft");
+  assert.equal(drafts[0]!.mirror_state, "pending");
+  const ups = listOutbox(db, "arcforma", "pending").filter((r) => r.op === "draftUpsert");
+  assert.equal(ups.length, 1);
+  assert.equal((JSON.parse(ups[0]!.payload_json) as { gmailDraftId: string | null }).gmailDraftId, "dMirror");
+  assert.equal(listOutbox(db, "arcforma", "pending").filter((r) => r.op === "draftDelete").length, 0, "the Gmail draft stays");
 });

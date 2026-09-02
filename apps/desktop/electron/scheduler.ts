@@ -12,6 +12,7 @@ import { sendRaw, AuthExpiredError, GmailApiError, isRateLimit } from "@arcforma
 import {
   dueReminders,
   dueSnoozes,
+  enqueueOutbox,
   failInterruptedSends,
   getThread,
   hasNewerInbound,
@@ -22,7 +23,6 @@ import {
   markSent,
   releasableSends,
   resolveReminder,
-  saveDraft,
   setQueue,
   wakeSnooze,
   listSends,
@@ -30,11 +30,13 @@ import {
   type Db,
   type SendQueueRow,
 } from "@arcforma/store";
+import { sendMeta } from "./compose/queue.js";
+import { restoreDraft } from "./drafts/mirror.js";
 import { emit } from "./events.js";
 import { log, logError } from "./log.js";
 import { applyActivity, rolloverToast, type ActivityOutcome } from "./rollover.js";
 import type { SyncManager } from "./sync.js";
-import type { ComposeDraft, SchedulerStatus } from "../shared/types.js";
+import type { SchedulerStatus } from "../shared/types.js";
 import type { GmailClient } from "@arcforma/gmail";
 
 export const TICK_MS = 10_000;
@@ -105,7 +107,7 @@ export class Scheduler {
     const rows = failInterruptedSends(this.db, this.now());
     for (const row of rows) {
       log("scheduler", `send ${row.id} was interrupted; failed without resending`);
-      this.restoreDraft(row);
+      void this.restoreDraft(row);
     }
     return rows;
   }
@@ -232,8 +234,11 @@ export class Scheduler {
         const raw = Buffer.from(row.raw_mime, "utf8").toString("base64url");
         const sent = await sendRaw(client, raw, row.thread_id);
         markSent(this.db, row.id, sent.id);
+        // The message is out; the Gmail draft it was mirrored as is no longer a draft.
+        const gmailDraftId = sendMeta(row).gmailDraftId;
+        if (gmailDraftId) enqueueOutbox(this.db, { accountId: row.account_id, op: "draftDelete", payload: { gmailDraftId } });
         emit("toast", { text: "Sent." });
-        log("scheduler", `send ${row.id} delivered as ${sent.id}`);
+        log("scheduler", `send ${row.id} delivered as ${sent.id}${gmailDraftId ? `, Gmail draft ${gmailDraftId} queued for deletion` : ""}`);
         this.sync.poke(row.account_id);
       } catch (err) {
         const terminal = isTerminalSendError(err);
@@ -241,7 +246,7 @@ export class Scheduler {
         if (terminal) {
           // The message will never go out as queued: fail the row and put the draft back where it can be fixed.
           markSendFailed(this.db, row.id, message, null);
-          const restored = this.restoreDraft(row);
+          const restored = await this.restoreDraft(row);
           emit("toast", { eyebrow: "NOT SENT", text: `${message}${restored ? " The draft is back under Drafts." : ""}` });
         } else {
           markSendFailed(this.db, row.id, message, now + 60_000 * Math.min(SEND_RETRY_MAX_MIN, row.attempts + 1));
@@ -252,25 +257,13 @@ export class Scheduler {
     }
   }
 
-  /** Saves the draft a failed send carried so it shows under Drafts. Returns true when a draft was written. */
-  private restoreDraft(row: SendQueueRow): boolean {
+  /** Saves the draft a failed send carried so it shows under Drafts, still tied to its Gmail draft, and mirrors it. Returns true when a draft was written. */
+  private async restoreDraft(row: SendQueueRow): Promise<boolean> {
     try {
-      const meta = JSON.parse(row.meta_json) as { draft?: ComposeDraft };
-      const d = meta.draft;
-      if (!d) return false;
-      saveDraft(this.db, {
-        accountId: d.accountId,
-        threadId: d.threadId ?? null,
-        mode: d.mode,
-        to: d.to,
-        cc: d.cc,
-        bcc: d.bcc,
-        subject: d.subject,
-        bodyHtml: d.bodyHtml,
-        quotedHtml: d.quotedHtml,
-        inReplyTo: d.inReplyTo ?? null,
-        references: d.references ?? null,
-      });
+      const meta = sendMeta(row);
+      if (!meta.draft) return false;
+      await restoreDraft(this.db, meta.draft, meta.gmailDraftId ?? null);
+      this.sync.poke(row.account_id);
       return true;
     } catch (err) {
       logError("scheduler", `restore draft for send ${row.id}`, err);

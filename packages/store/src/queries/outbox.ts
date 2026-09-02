@@ -1,7 +1,7 @@
 import type { Db } from "../db.js";
 import { transaction } from "../db.js";
 import { clearPendingMask } from "./labels.js";
-import type { OutboxOp, OutboxRow } from "../types.js";
+import type { DraftUpsertPayload, OutboxOp, OutboxRow } from "../types.js";
 
 export interface EnqueueInput {
   accountId: string;
@@ -72,6 +72,47 @@ export function markOutboxFailed(db: Db, id: number, error: string, retryAt: num
 export function resetInflightOutbox(db: Db): number {
   const res = db.prepare("UPDATE outbox SET status = 'pending', updated_at = ? WHERE status = 'inflight'").run(Date.now());
   return Number(res.changes);
+}
+
+// ---- draft mirror rows ------------------------------------------------------
+
+/**
+ * Queues a draft mirror. A pending (not yet inflight) upsert for the same
+ * draft is replaced rather than joined by a second row, so a burst of edits
+ * made offline drains as one call carrying the latest text.
+ */
+export function enqueueDraftUpsert(db: Db, accountId: string, payload: DraftUpsertPayload): number {
+  return transaction(db, () => {
+    const pending = pendingDraftUpsert(db, payload.draftId);
+    if (pending) {
+      db.prepare("UPDATE outbox SET payload_json = ?, updated_at = ? WHERE id = ?").run(JSON.stringify(payload), Date.now(), pending.id);
+      return pending.id;
+    }
+    return enqueueOutbox(db, { accountId, op: "draftUpsert", payload });
+  });
+}
+
+/** The pending (not inflight) upsert row for a local draft, if any. */
+export function pendingDraftUpsert(db: Db, draftId: number): OutboxRow | null {
+  const rows = db.prepare("SELECT * FROM outbox WHERE op = 'draftUpsert' AND status = 'pending' ORDER BY id").all() as unknown as OutboxRow[];
+  return rows.find((r) => (JSON.parse(r.payload_json) as DraftUpsertPayload).draftId === draftId) ?? null;
+}
+
+/** True while any upsert for the draft is still waiting or in flight, so the row reads Saving rather than In Gmail. */
+export function hasOpenDraftUpsert(db: Db, draftId: number): boolean {
+  const rows = db.prepare("SELECT payload_json FROM outbox WHERE op = 'draftUpsert' AND status IN ('pending', 'inflight')").all() as Array<{ payload_json: string }>;
+  return rows.some((r) => (JSON.parse(r.payload_json) as DraftUpsertPayload).draftId === draftId);
+}
+
+/** Drops queued upserts for a draft that no longer needs mirroring (sent or discarded). Returns how many went. */
+export function dropPendingDraftUpserts(db: Db, draftId: number): number {
+  let n = 0;
+  for (;;) {
+    const row = pendingDraftUpsert(db, draftId);
+    if (!row) return n;
+    db.prepare("DELETE FROM outbox WHERE id = ?").run(row.id);
+    n += 1;
+  }
 }
 
 export function pendingOutboxCount(db: Db, accountId?: string): number {

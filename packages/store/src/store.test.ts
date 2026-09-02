@@ -35,6 +35,21 @@ import {
   createReminder,
   dueReminders,
   hasNewerInbound,
+  saveDraft,
+  getDraft,
+  listDrafts,
+  setDraftMirror,
+  findDraftByGmailId,
+  findDraftByGmailMessageId,
+  knownGmailMessageIds,
+  upsertGmailDraft,
+  listMirroredDrafts,
+  enqueueDraftUpsert,
+  pendingDraftUpsert,
+  hasOpenDraftUpsert,
+  dropPendingDraftUpserts,
+  markOutboxInflight,
+  queuedGmailDraftIds,
   type GmailThreadInput,
 } from "./index.js";
 
@@ -90,9 +105,9 @@ function seed(db: ReturnType<typeof openStore>) {
 
 test("migrate is idempotent and records the schema version", () => {
   const { db } = tempDb();
-  assert.equal(schemaVersion(db), 6);
+  assert.equal(schemaVersion(db), 7);
   migrate(db);
-  assert.equal(schemaVersion(db), 6);
+  assert.equal(schemaVersion(db), 7);
   const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table') ORDER BY name").all() as Array<{ name: string }>).map((r) => r.name);
   for (const t of ["accounts", "threads", "messages", "message_bodies", "labels", "thread_labels", "thread_labels_pending", "categories", "classifications", "corrections", "snoozes", "reminders", "send_queue", "snippets", "summaries", "outbox", "contacts", "calendar_events", "messages_fts", "drafts", "settings", "reply_options", "saved_searches"]) {
     assert.ok(tables.includes(t), `missing table ${t}`);
@@ -295,7 +310,7 @@ test("a schema 2 store gains fts_id and a rebuilt index on the way to schema 3",
   db.exec("DELETE FROM schema_version WHERE version >= 3");
   assert.equal(schemaVersion(db), 2);
   migrate(db);
-  assert.equal(schemaVersion(db), 6);
+  assert.equal(schemaVersion(db), 7);
   const rows = db.prepare("SELECT id, rowid, fts_id FROM messages").all() as Array<{ id: string; rowid: number; fts_id: number }>;
   assert.ok(rows.length > 0);
   for (const r of rows) assert.equal(r.fts_id, r.rowid, "existing rows keep the rowid the index already used");
@@ -426,4 +441,76 @@ test("a thread refetch while a local change is still pending keeps the local cha
 test("decodeEntities turns Gmail's escaped snippets back into text", async () => {
   const { decodeEntities } = await import("./mail-headers.js");
   assert.equal(decodeEntities("you&#39;ve &amp; me &lt;3 &quot;hi&quot; &#x2014; &nbsp;x &unknown;"), "you've & me <3 \"hi\" —  x &unknown;");
+});
+
+test("a schema 6 drafts table gains the Gmail mirror columns on the way to schema 7, with old rows counting as edited when they were saved", () => {
+  const { db } = tempDb();
+  // Roll drafts back to the version 2 shape and forget version 7 was applied.
+  db.exec(`DROP TABLE drafts;
+    CREATE TABLE drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, account_id TEXT NOT NULL, thread_id TEXT, mode TEXT NOT NULL DEFAULT 'new',
+      to_json TEXT NOT NULL DEFAULT '[]', cc_json TEXT NOT NULL DEFAULT '[]', bcc_json TEXT NOT NULL DEFAULT '[]',
+      subject TEXT NOT NULL DEFAULT '', body_html TEXT NOT NULL DEFAULT '', quoted_html TEXT NOT NULL DEFAULT '',
+      in_reply_to TEXT, references_header TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+    INSERT INTO drafts (account_id, subject, body_html, created_at, updated_at) VALUES ('arcforma', 'Old draft', '<p>kept</p>', 100, 200);
+    DELETE FROM schema_version WHERE version >= 7;`);
+  assert.equal(schemaVersion(db), 6);
+  migrate(db);
+  assert.equal(schemaVersion(db), 7);
+  const cols = (db.prepare("PRAGMA table_info(drafts)").all() as Array<{ name: string }>).map((c) => c.name);
+  for (const c of ["gmail_draft_id", "gmail_message_id", "mirror_state", "mirror_error", "mirrored_at", "origin", "local_edited_at"]) assert.ok(cols.includes(c), `missing ${c}`);
+  const row = listDrafts(db)[0]!;
+  assert.equal(row.subject, "Old draft");
+  assert.equal(row.mirror_state, "pending", "an existing draft has not been mirrored yet");
+  assert.equal(row.origin, "local");
+  assert.equal(row.gmail_draft_id, null);
+  assert.equal(row.local_edited_at, 200, "its last save counts as its last local edit");
+  migrate(db);
+  assert.equal(schemaVersion(db), 7, "idempotent");
+});
+
+test("draft rows carry their mirror state: a save marks pending, an import from Gmail is synced, ids are found both ways", () => {
+  const { db } = tempDb();
+  upsertAccount(db, { id: "arcforma", email: "you@example.com" });
+  const id = saveDraft(db, { accountId: "arcforma", to: [], subject: "Mine", bodyHtml: "<p>x</p>" }, 1000);
+  let row = getDraft(db, id)!;
+  assert.equal(row.mirror_state, "pending");
+  assert.equal(row.local_edited_at, 1000);
+  assert.equal(setDraftMirror(db, id, { gmailDraftId: "d1", gmailMessageId: "m1", state: "synced", at: 1500 }), true);
+  row = getDraft(db, id)!;
+  assert.equal(row.mirrored_at, 1500);
+  assert.equal(findDraftByGmailId(db, "arcforma", "d1")?.id, id);
+  assert.equal(findDraftByGmailMessageId(db, "arcforma", "m1")?.id, id);
+  assert.deepEqual([...knownGmailMessageIds(db, "arcforma")], ["m1"]);
+  saveDraft(db, { id, accountId: "arcforma", to: [], subject: "Mine again", bodyHtml: "<p>y</p>" }, 2000);
+  row = getDraft(db, id)!;
+  assert.equal(row.mirror_state, "pending", "an edit needs mirroring again");
+  assert.equal(row.gmail_draft_id, "d1", "and keeps its Gmail draft");
+  assert.equal(setDraftMirror(db, 999, { state: "synced" }), false);
+
+  const imported = upsertGmailDraft(db, { accountId: "arcforma", gmailDraftId: "d2", gmailMessageId: "m2", threadId: null, mode: "new", to: [], cc: [], bcc: [], subject: "Theirs", bodyHtml: "<p>z</p>", quotedHtml: "", inReplyTo: null, references: null }, 3000);
+  row = getDraft(db, imported)!;
+  assert.equal(row.origin, "gmail");
+  assert.equal(row.mirror_state, "synced");
+  assert.equal(row.local_edited_at, null);
+  const again = upsertGmailDraft(db, { accountId: "arcforma", gmailDraftId: "d2", gmailMessageId: "m3", threadId: null, mode: "new", to: [], cc: [], bcc: [], subject: "Theirs, edited", bodyHtml: "<p>zz</p>", quotedHtml: "", inReplyTo: null, references: null }, 4000);
+  assert.equal(again, imported, "the same Gmail draft updates its row in place");
+  assert.equal(getDraft(db, imported)!.gmail_message_id, "m3");
+  assert.deepEqual(listMirroredDrafts(db, "arcforma").map((d) => d.gmail_draft_id), ["d1", "d2"]);
+
+  // Outbox coalescing for draft upserts.
+  const a = enqueueDraftUpsert(db, "arcforma", { draftId: id, raw: "v1" });
+  const b = enqueueDraftUpsert(db, "arcforma", { draftId: id, raw: "v2" });
+  assert.equal(a, b, "a pending upsert for the same draft is replaced");
+  assert.equal(JSON.parse(pendingDraftUpsert(db, id)!.payload_json).raw, "v2");
+  assert.equal(hasOpenDraftUpsert(db, id), true);
+  markOutboxInflight(db, a);
+  const c = enqueueDraftUpsert(db, "arcforma", { draftId: id, raw: "v3" });
+  assert.notEqual(c, a, "an inflight row is not touched; the edit waits behind it");
+  assert.equal(dropPendingDraftUpserts(db, id), 1);
+  assert.equal(hasOpenDraftUpsert(db, id), true, "the inflight one is still open");
+  markOutboxDone(db, a);
+  assert.equal(hasOpenDraftUpsert(db, id), false);
+  enqueueSend(db, { accountId: "arcforma", rawMime: "RAW", sendAt: 1, undoUntil: 1, meta: { gmailDraftId: "dQ" } });
+  assert.deepEqual([...queuedGmailDraftIds(db, "arcforma")], ["dQ"]);
 });

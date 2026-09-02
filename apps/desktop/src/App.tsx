@@ -1,3 +1,4 @@
+import { useHoverScope } from "./keys/useHoverScope";
 import { PaneSplitter } from "./components/PaneSplitter";
 import { useEffect } from "react";
 import { AddRowPopover } from "./components/AddRowPopover";
@@ -26,6 +27,7 @@ export function App() {
     void init();
   }, [init]);
   useKeyboard();
+  useHoverScope();
 
   const signedIn = accounts.some((a) => a.authState !== "signed_out");
   const backfilling = accounts.some((a) => a.authState === "ok" && (a.syncState === "backfill" || a.syncState === "new"));

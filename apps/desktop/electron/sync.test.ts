@@ -4,7 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { GmailClient, type Transport, type TransportInit } from "@arcforma/gmail";
-import { archive, createSnooze, getAccount, getThread, listOutbox, listThreadMessages, openStore, saveDraft, listDrafts, updateAccount, upsertAccount, upsertThreadFromGmail, type Db } from "@arcforma/store";
+import { archive, createSnooze, getAccount, getDraft, getThread, listOutbox, listThreadMessages, openStore, saveDraft, listDrafts, updateAccount, upsertAccount, upsertThreadFromGmail, type Db } from "@arcforma/store";
+import { applyDraftUpsertAck, mirrorDraft } from "./drafts/mirror.js";
 import { SyncManager, type SyncAccounts } from "./sync.js";
 
 interface Canned {
@@ -203,4 +204,84 @@ test("an error on one account never stalls the others", async () => {
   assert.equal(getAccount(db, "arcforma")!.history_id, "10", "the failing account kept its watermark for the next try");
   assert.match(getAccount(db, "arcforma")!.error ?? "", /backend/);
   assert.equal(getAccount(db, "arcforma")!.auth_state, "ok", "a server error is not an auth problem");
+});
+
+// ---- Gmail drafts through the sync loop ------------------------------------------
+
+const b64 = (s: string) => Buffer.from(s, "utf8").toString("base64url");
+
+test("a draft written in Gmail arrives through history and lands under Drafts; a draft written here drains as create, then update by id", async () => {
+  const db = tempDb();
+  liveAccount(db, "arcforma", "you@example.com");
+  updateAccount(db, "arcforma", { signature_html: "<div>Oliver</div>" });
+  // Two local edits queued before any drain: the first row is replaced, so one create goes out.
+  const local = saveDraft(db, { accountId: "arcforma", to: [{ email: "dana@northwind.example", name: "" }], subject: "Written here", bodyHtml: "<p>v1</p>" });
+  await mirrorDraft(db, local);
+  saveDraft(db, { id: local, accountId: "arcforma", to: [{ email: "dana@northwind.example", name: "" }], subject: "Written here", bodyHtml: "<p>v2</p>" });
+  await mirrorDraft(db, local);
+  let gmailDrafts = 0;
+  const { transport, calls } = transportOf((call) => {
+    if (/\/history\?/.test(call.url)) {
+      // Gmail web saved a new draft: a DRAFT-labelled message this app never wrote.
+      return { status: 200, body: { historyId: "150", history: [{ id: "120", messagesAdded: [{ message: { id: "gmWeb", threadId: "tWeb", labelIds: ["DRAFT"] } }] }] } };
+    }
+    if (/batch/.test(call.url)) return batchResponse(idsInBatch(call.init.body).map((id, i) => ({ id: `item${i}`, status: 200, body: gmailThread(id, [{ id: "gmWeb", labels: ["DRAFT"], from: "Oliver Korzen <you@example.com>" }]) })));
+    if (/\/drafts\?/.test(call.url)) return { status: 200, body: { drafts: [{ id: "dWeb", message: { id: "gmWeb", threadId: "tWeb" } }] } };
+    if (/\/drafts\/dWeb\?/.test(call.url)) {
+      return { status: 200, body: { id: "dWeb", message: { id: "gmWeb", threadId: "tWeb", labelIds: ["DRAFT"], payload: { mimeType: "text/html", headers: [{ name: "To", value: "sam@harbor.example" }, { name: "Subject", value: "From the web" }], body: { data: b64("<div>Typed in Gmail</div>") } } } } };
+    }
+    if (/\/drafts$/.test(call.url) && call.init.method === "POST") {
+      gmailDrafts += 1;
+      return { status: 200, body: { id: "dLocal", message: { id: `gmLocal${gmailDrafts}`, threadId: "tLocal" } } };
+    }
+    if (/\/drafts\/dLocal$/.test(call.url) && call.init.method === "PUT") return { status: 200, body: { id: "dLocal", message: { id: "gmLocalUpdated", threadId: "tLocal" } } };
+    throw new Error(`unexpected ${call.init.method ?? "GET"} ${call.url}`);
+  });
+  const client = new GmailClient({ accessToken: async () => "t", transport, sleep: async () => {} });
+  const sync = new SyncManager(db, accountsOf({ arcforma: client }), { pollFocusedMs: 60_000 });
+  await sync.run("arcforma");
+
+  const web = listDrafts(db).find((d) => d.gmail_draft_id === "dWeb")!;
+  assert.ok(web, "the Gmail draft is a local draft now");
+  assert.equal(web.origin, "gmail");
+  assert.equal(web.subject, "From the web");
+  assert.equal(web.body_html, "<div>Typed in Gmail</div>");
+  assert.deepEqual(JSON.parse(web.to_json), [{ email: "sam@harbor.example", name: "" }]);
+  assert.equal(web.mirror_state, "synced");
+
+  const mine = getDraft(db, local)!;
+  assert.equal(gmailDrafts, 1, "one create for two edits");
+  assert.equal(mine.gmail_draft_id, "dLocal");
+  assert.equal(mine.gmail_message_id, "gmLocal1");
+  assert.equal(mine.mirror_state, "synced");
+  const sentRaw = (JSON.parse(calls.find((c) => /\/drafts$/.test(c.url) && c.init.method === "POST")!.init.body!) as { message: { raw: string } }).message.raw;
+  assert.match(Buffer.from(sentRaw, "base64url").toString("utf8"), /v2/, "the create carried the latest text");
+
+  // A third edit: queued while nothing is in flight, the drain fills in the id and updates rather than creating again.
+  saveDraft(db, { id: local, accountId: "arcforma", to: [{ email: "dana@northwind.example", name: "" }], subject: "Written here", bodyHtml: "<p>v3</p>" });
+  await mirrorDraft(db, local);
+  await sync.run("arcforma");
+  sync.stop();
+  assert.equal(gmailDrafts, 1, "no second create");
+  assert.equal(getDraft(db, local)!.gmail_message_id, "gmLocalUpdated");
+  assert.equal(calls.filter((c) => /\/drafts\/dLocal$/.test(c.url) && c.init.method === "PUT").length, 1);
+  assert.equal(calls.filter((c) => /\/drafts\?/.test(c.url)).length, 1, "the second run's history had no draft news, so no second drafts.list");
+});
+
+test("a mirrored draft deleted in Gmail is dropped here on the next history batch", async () => {
+  const db = tempDb();
+  liveAccount(db, "arcforma", "you@example.com");
+  const id = saveDraft(db, { accountId: "arcforma", to: [], subject: "Mirrored", bodyHtml: "<p>x</p>" });
+  applyDraftUpsertAck(db, "arcforma", { draftId: id, gmailDraftId: "dMine", gmailMessageId: "gmMine", gone: false });
+  const { transport } = transportOf((call) => {
+    if (/\/history\?/.test(call.url)) return { status: 200, body: { historyId: "160", history: [{ id: "130", messagesDeleted: [{ message: { id: "gmMine", threadId: "tMine" } }] }] } };
+    if (/\/drafts\?/.test(call.url)) return { status: 200, body: {} };
+    throw new Error(`unexpected ${call.url}`);
+  });
+  const client = new GmailClient({ accessToken: async () => "t", transport, sleep: async () => {} });
+  const sync = new SyncManager(db, accountsOf({ arcforma: client }), { pollFocusedMs: 60_000 });
+  await sync.run("arcforma");
+  sync.stop();
+  assert.equal(getDraft(db, id), null);
+  assert.equal(listOutbox(db, "arcforma", "pending").length, 0, "nothing is sent back to Gmail for a draft Gmail already dropped");
 });

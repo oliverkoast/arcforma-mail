@@ -150,6 +150,25 @@ export function failInterruptedSends(db: Db, now = Date.now()): SendQueueRow[] {
   });
 }
 
+/**
+ * Gmail draft ids carried by sends that have not gone out yet. Their Gmail
+ * drafts still exist (they are deleted once the send succeeds) and must not be
+ * imported as new drafts in the meantime.
+ */
+export function queuedGmailDraftIds(db: Db, accountId: string): Set<string> {
+  const rows = db.prepare("SELECT meta_json FROM send_queue WHERE account_id = ? AND status IN ('queued', 'sending')").all(accountId) as Array<{ meta_json: string }>;
+  const out = new Set<string>();
+  for (const r of rows) {
+    try {
+      const id = (JSON.parse(r.meta_json) as { gmailDraftId?: string | null }).gmailDraftId;
+      if (id) out.add(id);
+    } catch {
+      // Meta that does not parse carries no draft id.
+    }
+  }
+  return out;
+}
+
 export function getSend(db: Db, id: number): SendQueueRow | null {
   return (db.prepare("SELECT * FROM send_queue WHERE id = ?").get(id) as unknown as SendQueueRow | undefined) ?? null;
 }

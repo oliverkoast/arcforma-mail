@@ -113,7 +113,7 @@ export interface OutboxRow {
   updated_at: number;
 }
 
-export type OutboxOp = "modifyLabels" | "trash" | "untrash" | "send";
+export type OutboxOp = "modifyLabels" | "trash" | "untrash" | "send" | "draftUpsert" | "draftDelete";
 
 export interface ModifyLabelsPayload {
   threadId: string;
@@ -123,6 +123,24 @@ export interface ModifyLabelsPayload {
   addLabelNames?: string[];
   removeLabelNames?: string[];
 }
+
+/** Mirrors a local draft to Gmail: drafts.create when gmailDraftId is null, drafts.update otherwise. */
+export interface DraftUpsertPayload {
+  /** The local drafts.id the result is written back to. */
+  draftId: number;
+  /** base64url RFC 822, the same build the send path uses. */
+  raw: string;
+  threadId?: string | null;
+  /** Filled in at drain time from the local row, so a create that landed earlier is reused. */
+  gmailDraftId?: string | null;
+}
+
+export interface DraftDeletePayload {
+  gmailDraftId: string;
+}
+
+export type DraftMirrorState = "pending" | "synced" | "failed";
+export type DraftOrigin = "local" | "gmail";
 
 export interface SnoozeRow {
   id: number;
@@ -160,6 +178,17 @@ export interface DraftRow {
   references_header: string | null;
   created_at: number;
   updated_at: number;
+  /** Gmail's draft id once the mirror landed, null until then. */
+  gmail_draft_id: string | null;
+  /** The message id behind the Gmail draft. Changes on every update on either side. */
+  gmail_message_id: string | null;
+  mirror_state: DraftMirrorState;
+  mirror_error: string | null;
+  mirrored_at: number | null;
+  /** Where the draft started: written here, or found in Gmail. */
+  origin: DraftOrigin;
+  /** Last edit made in this app; imports from Gmail leave it alone. Decides who wins a conflict. */
+  local_edited_at: number | null;
 }
 
 export interface CorrectionRow {
