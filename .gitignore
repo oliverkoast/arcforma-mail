@@ -1,0 +1,15 @@
+node_modules/
+dist/
+out/
+*.log
+apps/desktop/public/brand/
+packages/text-tools/.build/
+packages/text-tools/build/
+packages/ai-daemon/bin/
+.DS_Store
+*.gguf
+apps/desktop/dist-electron/
+apps/desktop/release/
+apps/desktop/build/icon-1024.png
+packages/*/dist/
+*.tsbuildinfo

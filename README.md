@@ -1,0 +1,45 @@
+# Arcforma Mail
+
+Oliver's own mail client and text tools. Three parts, one AI backend, Arcforma brand throughout.
+
+| Part | What | Where |
+|---|---|---|
+| Arcforma Mail | Electron desktop mail client for three Gmail accounts: split inbox, keyboard flow, snooze, send later, snippets, AI sorting, Ask AI, calendar and contact rail | `apps/desktop`, `packages/gmail`, `packages/store` |
+| Arcforma Text | Swift menu-bar app: Cmd+J fixes the selected text anywhere, Cmd+Shift+J edits it from an instruction, a floating toolbar on selection adds Bold, Italic, Bullets, Numbered | `packages/text-tools` |
+| AI daemon | Loopback HTTP service both apps call. Claude through the Claude Code login (`claude -p`, no API key) for on-demand work, a local llama.cpp model for background classification | `packages/ai-daemon`, `packages/ai-core` |
+
+Plan of record: `~/.claude/plans/create-me-a-custom-cosmic-owl.md`. Brand source: `~/Projects/arcforma-brand` (copied in by `pnpm sync-brand`, never edited here). Findings this app raises against the brand system live in `qa/FINDINGS.md`.
+
+## Run it
+
+```bash
+source ~/.nvm/nvm.sh && nvm use 24
+pnpm install
+pnpm sync-brand
+pnpm -r test                       # store (schema, FTS across VACUUM), gmail (sync, OAuth loopback with a fake Google), ai-core, ai-daemon, desktop (rules, golden set, compose, send queue, calendar sync, navigation guard)
+pnpm typecheck && pnpm brand-check
+pnpm --filter desktop smoke [outDir]   # seeds scripts/fixtures/threads.json into a throwaway store, walks inbox, thread, snooze, compose, Ask; fails on any console error
+pnpm --filter desktop dev          # mail app, dev mode
+packages/ai-daemon/install.sh      # AI daemon as a LaunchAgent
+packages/text-tools/build.sh       # Arcforma Text .app bundle
+```
+
+## Before first use
+
+1. `claude auth login` in a terminal. Check from a fresh terminal that `claude auth status` says `"loggedIn": true`.
+2. Google Cloud OAuth clients: follow `docs/google-cloud-setup.md`, then sign in to each account from the app's onboarding screen.
+3. Grant Accessibility to Arcforma Text when it asks.
+
+## What the mail app does today
+
+Compose (C, R, A, F) in a TipTap editor with `;trigger` snippets (Space or Tab expands, Cmd+; picks), Cmd+Enter sends through the undo window (Settings, default 10 s; Z undoes and reopens the draft), Cmd+Shift+Enter sends later (T tomorrow 9:00, W next Monday 9:00, D pick). Esc keeps a local draft. The account's Gmail signature is appended at send time. Snooze and remind-if-no-reply resurface with a notification and a NO REPLY BY eyebrow. Classification runs in the background: header rules first (`electron/classify/rules.ts`), then the local model through the AI daemon with the eight nearest corrections as few-shot; re-filing a thread teaches it and mirrors the label to Gmail. Custom categories live in Settings. Daily 0 holds every important thread with new mail since the last time Oliver was on mail the night before, plus anything added with D and every snooze or reminder that woke today; E clears it and advances. Weekly 0 takes W and whatever was left when the day rolled over; a day starts on the first activity after a five hour gap across a date or after 4:00, a week on the first activity after Monday 4:00, and Weekly 0 threads older than a week drop to Later. Thread summaries, instant replies (1, 2, 3), auto-draft (Tab accepts), and Ask AI (Cmd+Shift+A) go through Claude and degrade to a SIGN IN TO CLAUDE CODE eyebrow when Claude is signed out.
+
+## Rules that are product, not preference
+
+- No emojis, no em dashes, buttons say what happens. Applies to UI strings, prompts, logs, and comments.
+- Brand tokens come from the copied `styles.css` only. No new hex values, no shadows, no dark mode. Conflicts go to `qa/FINDINGS.md`, not into the code.
+- Claude is never called from the sync path. Background classification uses the local model only.
+- Message HTML renders in a sandboxed iframe with remote images off by default. No frame may leave the app:// origin; http(s) links go to the default browser, everything else is dropped (`electron/navigation.ts`).
+- Calendar events come from a 30-days-back, 14-days-ahead window per account. Google pins that window to the sync token, so the token lives 24 hours and then a full window is fetched again; stale rows are dropped only inside the window.
+- Replacing selected text fails closed: the selection is re-read and compared before anything is pasted.
+- Never launch the apps as children of a shell. Use `open -a`, `launchctl`, or the install scripts.

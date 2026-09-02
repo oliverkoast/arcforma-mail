@@ -1,0 +1,191 @@
+{
+  "note": "Synthetic labelled messages for the classifier. No real people or companies beyond well-known service domains. expect.rules is what the header rules alone should return: a split and type, or null when the rules are meant to pass the message to the local model.",
+  "context": {
+    "repliedDomains": ["northwind-coaching.example", "harbor-legal.example", "lumen-studio.example"],
+    "ownerAddresses": ["you@example.com", "you@example.net", "you@gmail.com"]
+  },
+  "messages": [
+    {
+      "id": "g01",
+      "from": "digest@weekly-notes.example",
+      "subject": "This week in AI tooling",
+      "headers": { "List-Unsubscribe": "<mailto:unsub@weekly-notes.example>", "List-Id": "weekly-notes.example" },
+      "body": "Five things worth reading this week.",
+      "label": { "split": "other", "type": "newsletters" },
+      "expect": { "rules": { "split": "other", "type": "newsletters" } }
+    },
+    {
+      "id": "g02",
+      "from": "notifications@github.com",
+      "subject": "[arcforma/portal] PR #12 merged",
+      "headers": { "List-Unsubscribe": "<mailto:unsub@github.com>" },
+      "body": "Merged by a teammate.",
+      "label": { "split": "other", "type": "notifications" },
+      "expect": { "rules": { "split": "other", "type": "notifications" } }
+    },
+    {
+      "id": "g03",
+      "from": "receipts@stripe.com",
+      "subject": "Your receipt from Example Co",
+      "headers": {},
+      "body": "Amount paid 149.00 USD.",
+      "label": { "split": "other", "type": "receipts" },
+      "expect": { "rules": { "split": "other", "type": "receipts" } }
+    },
+    {
+      "id": "g04",
+      "from": "dana@northwind-coaching.example",
+      "subject": "Invitation: Kickoff",
+      "headers": {},
+      "hasCalendarPart": true,
+      "body": "You have been invited to Kickoff on Tuesday.",
+      "label": { "split": "other", "type": "calendar" },
+      "expect": { "rules": { "split": "other", "type": "calendar" } }
+    },
+    {
+      "id": "g05",
+      "from": "dana@northwind-coaching.example",
+      "subject": "Re: Session notes",
+      "headers": {},
+      "body": "Thanks for the notes. Two questions before Thursday.",
+      "label": { "split": "important", "type": null },
+      "expect": { "rules": { "split": "important", "type": null } }
+    },
+    {
+      "id": "g06",
+      "from": "sam@harbor-legal.example",
+      "subject": "Draft agreement attached",
+      "headers": {},
+      "body": "Redlines are in the attachment. Call me if anything is unclear.",
+      "label": { "split": "important", "type": null },
+      "expect": { "rules": { "split": "important", "type": null } }
+    },
+    {
+      "id": "g07",
+      "from": "noreply@render.com",
+      "subject": "Deploy succeeded for arcforma-portal",
+      "headers": { "Precedence": "bulk" },
+      "body": "Your service is live.",
+      "label": { "split": "other", "type": "notifications" },
+      "expect": { "rules": { "split": "other", "type": "notifications" } }
+    },
+    {
+      "id": "g08",
+      "from": "billing@mercury.com",
+      "subject": "Your statement is ready",
+      "headers": {},
+      "body": "The August statement is available.",
+      "label": { "split": "other", "type": "receipts" },
+      "expect": { "rules": { "split": "other", "type": "receipts" } }
+    },
+    {
+      "id": "g09",
+      "from": "mailer-daemon@mail.example",
+      "subject": "Delivery Status Notification (Failure)",
+      "headers": { "Auto-Submitted": "auto-replied" },
+      "body": "Address not found.",
+      "label": { "split": "other", "type": null },
+      "expect": { "rules": { "split": "other", "type": null } }
+    },
+    {
+      "id": "g10",
+      "from": "hello@bright-outreach.example",
+      "subject": "Quick question about your coaching practice",
+      "headers": {},
+      "body": "We help founders book more calls. Open to a chat?",
+      "label": { "split": "important", "type": null },
+      "expect": { "rules": null }
+    },
+    {
+      "id": "g11",
+      "from": "priya@lumen-studio.example",
+      "subject": "Logo files v3",
+      "headers": {},
+      "body": "Final files attached. Let me know if the cobalt reads right on screen.",
+      "label": { "split": "important", "type": null },
+      "expect": { "rules": { "split": "important", "type": null } }
+    },
+    {
+      "id": "g12",
+      "from": "team@figma.com",
+      "subject": "Someone commented on Brand board",
+      "headers": { "List-Unsubscribe": "<mailto:unsub@figma.com>" },
+      "body": "A new comment was left.",
+      "label": { "split": "other", "type": "notifications" },
+      "expect": { "rules": { "split": "other", "type": "notifications" } }
+    },
+    {
+      "id": "g13",
+      "from": "editor@long-reads.example",
+      "subject": "Issue 41: the slow web",
+      "headers": { "List-Id": "long-reads.example" },
+      "body": "An essay on patience.",
+      "label": { "split": "other", "type": "newsletters" },
+      "expect": { "rules": { "split": "other", "type": "newsletters" } }
+    },
+    {
+      "id": "g14",
+      "from": "orders@shopify.com",
+      "subject": "Order confirmation #4821",
+      "headers": {},
+      "body": "Thanks for your order.",
+      "label": { "split": "other", "type": "receipts" },
+      "expect": { "rules": { "split": "other", "type": "receipts" } }
+    },
+    {
+      "id": "g15",
+      "from": "jordan@first-contact.example",
+      "subject": "Intro from a mutual friend",
+      "headers": {},
+      "body": "Alex suggested we talk about your AI coaching work.",
+      "label": { "split": "important", "type": null },
+      "expect": { "rules": null }
+    },
+    {
+      "id": "g16",
+      "from": "calendar-notification@google.com",
+      "subject": "Updated invitation: Weekly sync",
+      "headers": {},
+      "hasCalendarPart": true,
+      "body": "This event has been changed.",
+      "label": { "split": "other", "type": "calendar" },
+      "expect": { "rules": { "split": "other", "type": "calendar" } }
+    },
+    {
+      "id": "g17",
+      "from": "casey@someone.example",
+      "subject": "Following up on my last email",
+      "headers": {},
+      "body": "Did you get a chance to look at the proposal?",
+      "label": { "split": "important", "type": null },
+      "expect": { "rules": null }
+    },
+    {
+      "id": "g18",
+      "from": "no-reply@accounts.example",
+      "subject": "Your password was changed",
+      "headers": { "Auto-Submitted": "auto-generated" },
+      "body": "If this was not you, reset it now.",
+      "label": { "split": "other", "type": null },
+      "expect": { "rules": { "split": "other", "type": null } }
+    },
+    {
+      "id": "g19",
+      "from": "riley@gmail.com",
+      "subject": "Dinner Saturday?",
+      "headers": {},
+      "body": "Are you around this weekend?",
+      "label": { "split": "important", "type": null },
+      "expect": { "rules": null }
+    },
+    {
+      "id": "g20",
+      "from": "news@product-updates.example",
+      "subject": "What is new in September",
+      "headers": { "Precedence": "bulk" },
+      "body": "New features and fixes.",
+      "label": { "split": "other", "type": "notifications" },
+      "expect": { "rules": { "split": "other", "type": "notifications" } }
+    }
+  ]
+}

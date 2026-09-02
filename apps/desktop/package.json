@@ -1,0 +1,51 @@
+{
+  "name": "desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "predev": "node ../../scripts/sync-brand.mjs && pnpm --filter \"desktop^...\" build",
+    "dev": "concurrently -k -n vite,electron -c auto \"vite --strictPort --port 5173\" \"node scripts/dev.mjs\"",
+    "prebuild": "node ../../scripts/sync-brand.mjs && pnpm --filter \"desktop^...\" build",
+    "build": "vite build && node scripts/build-electron.mjs && tsc -p electron/tsconfig.json --noEmit",
+    "build:electron": "node scripts/build-electron.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit && tsc -p electron/tsconfig.json --noEmit",
+    "brand-check": "node ../../scripts/brand-check.mjs",
+    "icon": "node scripts/make-icon.mjs",
+    "pack": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --config electron-builder.json",
+    "smoke": "node scripts/smoke.mjs",
+    "pretypecheck": "pnpm --filter \"desktop^...\" build",
+    "test": "node --disable-warning=ExperimentalWarning --import tsx --test \"electron/**/*.test.ts\" \"src/**/*.test.ts\"",
+    "pretest": "pnpm --filter \"desktop^...\" build",
+    "dist": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --config electron-builder.json"
+  },
+  "dependencies": {
+    "@arcforma/gmail": "workspace:*",
+    "@arcforma/store": "workspace:*",
+    "@tanstack/react-virtual": "^3.14.10",
+    "@tiptap/core": "3.31.0",
+    "@tiptap/extension-link": "3.31.0",
+    "@tiptap/extension-placeholder": "3.31.0",
+    "@tiptap/pm": "3.31.0",
+    "@tiptap/react": "3.31.0",
+    "@tiptap/starter-kit": "3.31.0",
+    "dompurify": "^3.4.14",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
+    "electron": "^41.10.7",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.2",
+    "tsx": "^4.23.13"
+  }
+}

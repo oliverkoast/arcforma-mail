@@ -1,0 +1,19 @@
+{
+  "name": "arcforma-mail",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@11.18.0",
+  "scripts": {
+    "sync-brand": "node scripts/sync-brand.mjs",
+    "brand-check": "node scripts/brand-check.mjs",
+    "dev": "pnpm --filter desktop dev",
+    "build": "pnpm -r --if-present build",
+    "pack": "pnpm --filter desktop run pack",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "dist": "pnpm --filter desktop run pack"
+  }
+}

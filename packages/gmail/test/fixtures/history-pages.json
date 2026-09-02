@@ -1,0 +1,46 @@
+{
+  "seed": {
+    "id": "t1",
+    "historyId": "500",
+    "messages": [
+      {
+        "id": "m1",
+        "threadId": "t1",
+        "labelIds": ["INBOX", "UNREAD"],
+        "snippet": "First",
+        "internalDate": "1756555200000",
+        "historyId": "500",
+        "payload": {
+          "mimeType": "text/plain",
+          "headers": [
+            { "name": "From", "value": "Maya Glenn <maya@arcforma.ai>" },
+            { "name": "To", "value": "you@example.com" },
+            { "name": "Subject", "value": "Kickoff" }
+          ]
+        }
+      }
+    ]
+  },
+  "pages": [
+    {
+      "historyId": "520",
+      "nextPageToken": "page2",
+      "history": [
+        { "id": "501", "labelsRemoved": [{ "message": { "id": "m1", "threadId": "t1" }, "labelIds": ["UNREAD"] }] },
+        { "id": "505", "labelsAdded": [{ "message": { "id": "m1", "threadId": "t1" }, "labelIds": ["STARRED"] }] },
+        { "id": "510", "messagesAdded": [{ "message": { "id": "m2", "threadId": "t2", "labelIds": ["INBOX", "UNREAD"] } }] }
+      ]
+    },
+    {
+      "historyId": "530",
+      "history": [
+        { "id": "521", "labelsRemoved": [{ "message": { "id": "m1", "threadId": "t1" }, "labelIds": ["INBOX"] }] },
+        { "id": "525", "labelsAdded": [{ "message": { "id": "m1", "threadId": "t1" }, "labelIds": ["INBOX"] }] },
+        { "id": "530", "messagesDeleted": [{ "message": { "id": "m1", "threadId": "t1" } }] }
+      ]
+    }
+  ],
+  "expired": {
+    "error": { "code": 404, "message": "Requested entity was not found.", "errors": [{ "reason": "notFound" }] }
+  }
+}

@@ -1,0 +1,776 @@
+{
+  "note": "Synthetic smoke fixture. Every person and company is invented; service domains are real only so the header rules have something to match. Dates are offsets in hours before the seed time, so the list always looks fresh.",
+  "accounts": [
+    {
+      "id": "arcforma",
+      "email": "you@example.com",
+      "displayName": "Oliver Korzen",
+      "signatureHtml": "<div>Oliver Korzen<br>President, Arcforma AI Inc.</div>"
+    },
+    {
+      "id": "formai",
+      "email": "you@example.net",
+      "displayName": "Oliver Korzen",
+      "signatureHtml": ""
+    },
+    {
+      "id": "personal",
+      "email": "you@gmail.com",
+      "displayName": "Oliver",
+      "signatureHtml": ""
+    }
+  ],
+  "snippets": [
+    {
+      "trigger": "thanks",
+      "name": "Thanks and next step",
+      "bodyHtml": "<p>Thanks for this. I will come back to you by end of day with the next step.</p>",
+      "bodyText": "Thanks for this. I will come back to you by end of day with the next step."
+    },
+    {
+      "trigger": "book",
+      "name": "Booking link",
+      "bodyHtml": "<p>Pick any slot that suits you: https://cal.example/arcforma</p>",
+      "bodyText": "Pick any slot that suits you: https://cal.example/arcforma"
+    }
+  ],
+  "categories": [
+    {
+      "id": "clients",
+      "name": "Clients",
+      "prompt": "Mail from paying coaching or engineering clients about their engagement."
+    }
+  ],
+  "savedSearches": [
+    {
+      "name": "Northwind",
+      "query": "northwind"
+    }
+  ],
+  "scheduledSends": [
+    {
+      "accountId": "arcforma",
+      "to": "Dana Reyes <dana@northwind-coaching.example>",
+      "subject": "Session plan for Tuesday",
+      "bodyHtml": "<p>Hi Dana,</p><p>The plan for the first block is below. Invoice follows separately.</p><p>Oliver</p>",
+      "sendInHours": 15
+    }
+  ],
+  "queueState": {
+    "dayStartHoursAgo": 30,
+    "weekStartHoursAgo": 60
+  },
+  "threads": [
+    {
+      "accountId": "arcforma",
+      "id": "t-kickoff",
+      "classification": {
+        "split": "important",
+        "categoryId": "clients",
+        "source": "local",
+        "confidence": 0.91
+      },
+      "summary": "Dana at Northwind is ready to start the coaching block on Tuesday and wants the session plan and the invoice before then. Oliver agreed to send both today. Two open questions from Dana: whether sessions can move to 9:00 and who else from her team should join the first one.",
+      "messages": [
+        {
+          "id": "m-k1",
+          "from": "Dana Reyes <dana@northwind-coaching.example>",
+          "to": "you@example.com",
+          "subject": "Kickoff next week",
+          "hoursAgo": 70,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>Hi Oliver,</p><p>We are set for Tuesday. Could you send the session plan and the first invoice before then?</p><p>Dana</p>"
+        },
+        {
+          "id": "m-k2",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "dana@northwind-coaching.example",
+          "subject": "Re: Kickoff next week",
+          "hoursAgo": 66,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>Yes. Plan and invoice go out today.</p>"
+        },
+        {
+          "id": "m-k3",
+          "from": "Dana Reyes <dana@northwind-coaching.example>",
+          "to": "you@example.com",
+          "subject": "Re: Kickoff next week",
+          "hoursAgo": 50,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>Thanks. One more thing: can the sessions move to 9:00? Our stand-up is at 8:30.</p>"
+        },
+        {
+          "id": "m-k4",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "dana@northwind-coaching.example",
+          "subject": "Re: Kickoff next week",
+          "hoursAgo": 48,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>9:00 works. I will update the invites.</p>"
+        },
+        {
+          "id": "m-k5",
+          "from": "Dana Reyes <dana@northwind-coaching.example>",
+          "to": "you@example.com",
+          "cc": "Priya Natarajan <priya@northwind-coaching.example>",
+          "subject": "Re: Kickoff next week",
+          "hoursAgo": 20,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>Adding Priya, who runs the product team. Should she join the first session or wait for week two?</p>"
+        },
+        {
+          "id": "m-k6",
+          "from": "Priya Natarajan <priya@northwind-coaching.example>",
+          "to": "you@example.com",
+          "cc": "dana@northwind-coaching.example",
+          "subject": "Re: Kickoff next week",
+          "hoursAgo": 6,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>Happy either way. I would rather join early if the plan covers prioritisation.</p>"
+        },
+        {
+          "id": "m-k7",
+          "from": "Dana Reyes <dana@northwind-coaching.example>",
+          "to": "you@example.com",
+          "cc": "priya@northwind-coaching.example",
+          "subject": "Re: Kickoff next week",
+          "hoursAgo": 1,
+          "labels": [
+            "INBOX",
+            "UNREAD"
+          ],
+          "html": "<p>Oliver, your call. Let us know today so Priya can block the time.</p>"
+        }
+      ]
+    },
+    {
+      "accountId": "arcforma",
+      "id": "t-agreement",
+      "classification": {
+        "split": "important",
+        "source": "rule",
+        "confidence": 1
+      },
+      "messages": [
+        {
+          "id": "m-a1",
+          "from": "Sam Okafor <sam@harbor-legal.example>",
+          "to": "you@example.com",
+          "subject": "Draft services agreement",
+          "hoursAgo": 3,
+          "labels": [
+            "INBOX",
+            "UNREAD"
+          ],
+          "html": "<p>Redlines attached. The only open point is the termination notice period. Call me if anything reads wrong.</p>"
+        }
+      ]
+    },
+    {
+      "accountId": "arcforma",
+      "id": "t-logo",
+      "reminder": {
+        "firedHoursAgo": 2,
+        "dueHoursAgo": 2
+      },
+      "classification": {
+        "split": "important",
+        "source": "rule",
+        "confidence": 1
+      },
+      "messages": [
+        {
+          "id": "m-l1",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "mika@lumen-studio.example",
+          "subject": "Wordmark files for the app",
+          "hoursAgo": 75,
+          "labels": [
+            "SENT",
+            "INBOX"
+          ],
+          "html": "<p>Hi Mika, could you export the wordmark as a clean SVG at 120 px? The app sidebar needs it this week.</p>"
+        }
+      ]
+    },
+    {
+      "accountId": "arcforma",
+      "id": "t-invite",
+      "classification": {
+        "split": "other",
+        "type": "calendar",
+        "source": "rule",
+        "confidence": 1
+      },
+      "messages": [
+        {
+          "id": "m-i1",
+          "from": "Dana Reyes <dana@northwind-coaching.example>",
+          "to": "you@example.com",
+          "subject": "Invitation: Coaching session 1 @ Tue 9:00",
+          "hoursAgo": 5,
+          "labels": [
+            "INBOX"
+          ],
+          "headers": {
+            "Content-Type": "multipart/mixed"
+          },
+          "calendar": true,
+          "html": "<p>You have been invited to Coaching session 1.</p>"
+        }
+      ]
+    },
+    {
+      "accountId": "arcforma",
+      "id": "t-github",
+      "classification": {
+        "split": "other",
+        "type": "notifications",
+        "source": "rule",
+        "confidence": 1
+      },
+      "messages": [
+        {
+          "id": "m-g1",
+          "from": "GitHub <notifications@github.com>",
+          "to": "you@example.com",
+          "subject": "[arcforma/portal] Clerk import gated on PR #737",
+          "hoursAgo": 8,
+          "labels": [
+            "INBOX"
+          ],
+          "headers": {
+            "List-Unsubscribe": "<mailto:unsub@github.com>"
+          },
+          "html": "<p>A review was requested on PR #737.</p>"
+        }
+      ]
+    },
+    {
+      "accountId": "arcforma",
+      "id": "t-render",
+      "classification": {
+        "split": "other",
+        "type": "receipts",
+        "source": "rule",
+        "confidence": 1
+      },
+      "messages": [
+        {
+          "id": "m-r1",
+          "from": "Render <billing@render.com>",
+          "to": "you@example.com",
+          "subject": "Your receipt for September",
+          "hoursAgo": 30,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>Payment received: 19.00 USD for the Starter plan.</p>"
+        }
+      ],
+      "queue": {
+        "queue": "weekly",
+        "source": "user",
+        "addedHoursAgo": 20
+      }
+    },
+    {
+      "accountId": "arcforma",
+      "id": "t-snoozed",
+      "snooze": {
+        "wakeInHours": 20
+      },
+      "classification": {
+        "split": "important",
+        "source": "local",
+        "confidence": 0.7
+      },
+      "messages": [
+        {
+          "id": "m-s1",
+          "from": "Jordan Blake <jordan@first-contact.example>",
+          "to": "you@example.com",
+          "subject": "Intro from a mutual friend",
+          "hoursAgo": 40,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>Alex suggested we talk about your AI coaching work. Free for twenty minutes next week?</p>"
+        }
+      ]
+    },
+    {
+      "accountId": "formai",
+      "id": "t-mercury",
+      "classification": {
+        "split": "other",
+        "type": "receipts",
+        "source": "rule",
+        "confidence": 1
+      },
+      "messages": [
+        {
+          "id": "m-m1",
+          "from": "Mercury <billing@mercury.com>",
+          "to": "you@example.net",
+          "subject": "Your August statement is ready",
+          "hoursAgo": 12,
+          "labels": [
+            "INBOX",
+            "UNREAD"
+          ],
+          "html": "<p>The statement for Form AI LLC is available in your dashboard.</p>"
+        }
+      ]
+    },
+    {
+      "accountId": "formai",
+      "id": "t-hiring",
+      "classification": {
+        "split": "important",
+        "source": "local",
+        "confidence": 0.82
+      },
+      "messages": [
+        {
+          "id": "m-h1",
+          "from": "Casey Lin <casey@applicant.example>",
+          "to": "you@example.net",
+          "subject": "Following up on the engineer role",
+          "hoursAgo": 26,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>Did you get a chance to look at my take-home? Happy to walk through it on a call.</p>"
+        },
+        {
+          "id": "m-h2",
+          "from": "Oliver Korzen <you@example.net>",
+          "to": "casey@applicant.example",
+          "subject": "Re: Following up on the engineer role",
+          "hoursAgo": 24,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>Yes, reviewing it this week. Thanks for the patience.</p>"
+        }
+      ]
+    },
+    {
+      "accountId": "formai",
+      "id": "t-domain",
+      "classification": {
+        "split": "other",
+        "type": "notifications",
+        "source": "rule",
+        "confidence": 1
+      },
+      "messages": [
+        {
+          "id": "m-d1",
+          "from": "Domains <no-reply@registrar.example>",
+          "to": "you@example.net",
+          "subject": "formai.build renews in 30 days",
+          "hoursAgo": 55,
+          "labels": [
+            "INBOX"
+          ],
+          "headers": {
+            "Precedence": "bulk"
+          },
+          "html": "<p>Auto-renew is on. No action needed.</p>"
+        }
+      ],
+      "queue": {
+        "queue": "later",
+        "source": "rollover",
+        "addedHoursAgo": 50
+      }
+    },
+    {
+      "accountId": "formai",
+      "id": "t-vendor",
+      "classification": {
+        "split": "other",
+        "type": "newsletters",
+        "source": "rule",
+        "confidence": 1
+      },
+      "messages": [
+        {
+          "id": "m-v1",
+          "from": "Product Weekly <digest@product-weekly.example>",
+          "to": "you@example.net",
+          "subject": "What shipped this week",
+          "hoursAgo": 33,
+          "labels": [
+            "INBOX"
+          ],
+          "headers": {
+            "List-Unsubscribe": "<mailto:unsub@product-weekly.example>",
+            "List-Id": "product-weekly.example"
+          },
+          "html": "<p>Five releases worth a look.</p>"
+        }
+      ],
+      "queue": {
+        "queue": "weekly",
+        "source": "rollover",
+        "addedHoursAgo": 28
+      }
+    },
+    {
+      "accountId": "personal",
+      "id": "t-dinner",
+      "classification": {
+        "split": "important",
+        "source": "local",
+        "confidence": 0.77
+      },
+      "messages": [
+        {
+          "id": "m-p1",
+          "from": "Riley Moss <riley.moss@gmail.com>",
+          "to": "you@gmail.com",
+          "subject": "Dinner Saturday?",
+          "hoursAgo": 9,
+          "labels": [
+            "INBOX",
+            "UNREAD",
+            "STARRED"
+          ],
+          "html": "<p>Are you around this weekend? There is a new place near the park.</p>"
+        }
+      ]
+    },
+    {
+      "accountId": "personal",
+      "id": "t-order",
+      "classification": {
+        "split": "other",
+        "type": "receipts",
+        "source": "rule",
+        "confidence": 1
+      },
+      "messages": [
+        {
+          "id": "m-o1",
+          "from": "Shop <orders@shopify.com>",
+          "to": "you@gmail.com",
+          "subject": "Order confirmation #4821",
+          "hoursAgo": 44,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>Thanks for your order. It ships in two days.</p>"
+        }
+      ]
+    },
+    {
+      "accountId": "personal",
+      "id": "t-reads",
+      "classification": {
+        "split": "other",
+        "type": "newsletters",
+        "source": "rule",
+        "confidence": 1
+      },
+      "messages": [
+        {
+          "id": "m-n1",
+          "from": "Long Reads <editor@long-reads.example>",
+          "to": "you@gmail.com",
+          "subject": "Issue 41: the slow web",
+          "hoursAgo": 60,
+          "labels": [
+            "INBOX"
+          ],
+          "headers": {
+            "List-Id": "long-reads.example"
+          },
+          "html": "<p>An essay on patience, and three links.</p>"
+        }
+      ]
+    },
+    {
+      "accountId": "personal",
+      "id": "t-password",
+      "classification": {
+        "split": "other",
+        "source": "rule",
+        "confidence": 1
+      },
+      "messages": [
+        {
+          "id": "m-w1",
+          "from": "Accounts <no-reply@accounts.example>",
+          "to": "you@gmail.com",
+          "subject": "Your password was changed",
+          "hoursAgo": 80,
+          "labels": [
+            "INBOX"
+          ],
+          "headers": {
+            "Auto-Submitted": "auto-generated"
+          },
+          "html": "<p>If this was not you, reset it now.</p>"
+        }
+      ]
+    },
+    {
+      "accountId": "arcforma",
+      "id": "t-plan",
+      "classification": {
+        "split": "important",
+        "categoryId": "clients",
+        "source": "local",
+        "confidence": 0.88
+      },
+      "messages": [
+        {
+          "id": "m-pl1",
+          "from": "Dana Reyes <dana@northwind-coaching.example>",
+          "to": "you@example.com",
+          "subject": "Session plan draft",
+          "hoursAgo": 190,
+          "labels": [],
+          "html": "<p>Here is the draft plan for the first six weeks. Comments welcome.</p>"
+        },
+        {
+          "id": "m-pl2",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "dana@northwind-coaching.example",
+          "subject": "Re: Session plan draft",
+          "hoursAgo": 180,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>Looks right. I moved prioritisation to week two.</p>"
+        }
+      ]
+    },
+    {
+      "accountId": "arcforma",
+      "id": "t-invoice",
+      "classification": {
+        "split": "important",
+        "categoryId": "clients",
+        "source": "local",
+        "confidence": 0.9
+      },
+      "messages": [
+        {
+          "id": "m-in1",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "dana@northwind-coaching.example",
+          "subject": "First invoice",
+          "hoursAgo": 300,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>Invoice 0041 attached. Net 15 as agreed.</p>"
+        },
+        {
+          "id": "m-in2",
+          "from": "Dana Reyes <dana@northwind-coaching.example>",
+          "to": "you@example.com",
+          "subject": "Re: First invoice",
+          "hoursAgo": 280,
+          "labels": [],
+          "html": "<p>Received, thanks. Finance will pay it this week.</p>"
+        }
+      ]
+    }
+  ],
+  "calendar": [
+    {
+      "accountId": "arcforma",
+      "id": "ev-standup",
+      "summary": "Arcforma standup",
+      "day": 0,
+      "hour": 9,
+      "minute": 30,
+      "durationMinutes": 30,
+      "hangoutLink": "https://meet.google.com/arc-form-a01",
+      "organizerEmail": "you@example.com",
+      "attendees": [
+        {
+          "email": "you@example.com",
+          "self": true
+        },
+        {
+          "email": "jules@arcforma.ai",
+          "displayName": "Jules Park"
+        }
+      ]
+    },
+    {
+      "accountId": "arcforma",
+      "id": "ev-harbor",
+      "summary": "Harbor Legal: agreement redlines",
+      "day": 0,
+      "hour": 14,
+      "minute": 0,
+      "durationMinutes": 45,
+      "attendees": [
+        {
+          "email": "you@example.com",
+          "self": true
+        },
+        {
+          "email": "sam@harbor-legal.example",
+          "displayName": "Sam Okafor"
+        }
+      ]
+    },
+    {
+      "accountId": "arcforma",
+      "id": "ev-kickoff",
+      "summary": "Northwind kickoff, session 1",
+      "day": 1,
+      "hour": 9,
+      "minute": 0,
+      "durationMinutes": 60,
+      "hangoutLink": "https://meet.google.com/nwd-kick-off1",
+      "organizerEmail": "dana@northwind-coaching.example",
+      "attendees": [
+        {
+          "email": "you@example.com",
+          "self": true
+        },
+        {
+          "email": "dana@northwind-coaching.example",
+          "displayName": "Dana Reyes"
+        },
+        {
+          "email": "priya@northwind-coaching.example",
+          "displayName": "Priya Natarajan"
+        }
+      ]
+    },
+    {
+      "accountId": "arcforma",
+      "id": "ev-focus",
+      "summary": "Focus block",
+      "day": 2,
+      "hour": 8,
+      "minute": 0,
+      "durationMinutes": 120
+    },
+    {
+      "accountId": "arcforma",
+      "id": "ev-travel",
+      "summary": "Travel day",
+      "day": 4,
+      "hour": 0,
+      "allDay": true,
+      "busy": false
+    },
+    {
+      "accountId": "formai",
+      "id": "ev-casey",
+      "summary": "Casey Lin: engineer interview",
+      "day": 1,
+      "hour": 9,
+      "minute": 30,
+      "durationMinutes": 45,
+      "hangoutLink": "https://meet.google.com/frm-hire-cl2",
+      "attendees": [
+        {
+          "email": "you@example.net",
+          "self": true
+        },
+        {
+          "email": "casey@applicant.example",
+          "displayName": "Casey Lin"
+        }
+      ]
+    },
+    {
+      "accountId": "formai",
+      "id": "ev-mercury",
+      "summary": "Mercury: wind-down call",
+      "day": 3,
+      "hour": 11,
+      "minute": 0,
+      "durationMinutes": 30,
+      "attendees": [
+        {
+          "email": "you@example.net",
+          "self": true
+        }
+      ]
+    },
+    {
+      "accountId": "formai",
+      "id": "ev-declined",
+      "summary": "Vendor webinar",
+      "day": 2,
+      "hour": 13,
+      "minute": 0,
+      "durationMinutes": 60,
+      "responseStatus": "declined"
+    },
+    {
+      "accountId": "personal",
+      "id": "ev-dinner",
+      "summary": "Dinner with Riley",
+      "day": 5,
+      "hour": 19,
+      "minute": 0,
+      "durationMinutes": 120,
+      "attendees": [
+        {
+          "email": "you@gmail.com",
+          "self": true
+        },
+        {
+          "email": "riley.moss@gmail.com",
+          "displayName": "Riley Moss"
+        }
+      ]
+    },
+    {
+      "accountId": "personal",
+      "id": "ev-gym",
+      "summary": "Gym",
+      "day": 1,
+      "hour": 7,
+      "minute": 0,
+      "durationMinutes": 60
+    },
+    {
+      "accountId": "arcforma",
+      "id": "ev-northwind-past",
+      "summary": "Northwind: scoping call",
+      "day": -4,
+      "hour": 10,
+      "minute": 0,
+      "durationMinutes": 45,
+      "hangoutLink": "https://meet.google.com/nwd-scope-001",
+      "organizerEmail": "you@example.com",
+      "attendees": [
+        {
+          "email": "you@example.com",
+          "self": true
+        },
+        {
+          "email": "dana@northwind-coaching.example",
+          "displayName": "Dana Reyes"
+        }
+      ]
+    }
+  ]
+}

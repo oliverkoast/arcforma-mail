@@ -1,0 +1,35 @@
+{
+  "name": "@arcforma/gmail",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "pretypecheck": "pnpm --filter @arcforma/store build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "pnpm --filter @arcforma/store build",
+    "test": "node --disable-warning=ExperimentalWarning --import tsx --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "google-auth-library": "^11.0.2",
+    "nodemailer": "^9.1.1"
+  },
+  "devDependencies": {
+    "@arcforma/store": "workspace:*",
+    "@types/node": "^24.13.3",
+    "@types/nodemailer": "^8.0.1",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
+  }
+}

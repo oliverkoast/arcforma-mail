@@ -1,0 +1,27 @@
+{
+  "nextSyncToken": "sync-2",
+  "items": [
+    {
+      "id": "ev1",
+      "status": "confirmed",
+      "summary": "James Perse kickoff",
+      "start": { "dateTime": "2026-09-02T10:00:00-07:00" },
+      "end": { "dateTime": "2026-09-02T10:30:00-07:00" },
+      "hangoutLink": "https://meet.google.com/abc-defg-hij",
+      "organizer": { "email": "you@example.com" },
+      "attendees": [
+        { "email": "you@example.com", "self": true, "responseStatus": "accepted" },
+        { "email": "kim@jamesperse.com", "displayName": "Kim", "responseStatus": "needsAction" }
+      ]
+    },
+    { "id": "ev2", "status": "cancelled" },
+    {
+      "id": "ev3",
+      "status": "confirmed",
+      "summary": "Focus block",
+      "transparency": "transparent",
+      "start": { "date": "2026-09-03" },
+      "end": { "date": "2026-09-04" }
+    }
+  ]
+}

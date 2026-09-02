@@ -1,0 +1,30 @@
+--batch_abc123
+Content-Type: application/http
+Content-ID: <response-item0>
+
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=UTF-8
+Vary: Origin
+
+{"id":"t1","historyId":"900","messages":[{"id":"m1","threadId":"t1","labelIds":["INBOX"]}]}
+
+--batch_abc123
+Content-Type: application/http
+Content-ID: <response-item1>
+
+HTTP/1.1 404 Not Found
+Content-Type: application/json; charset=UTF-8
+
+{"error":{"code":404,"message":"Requested entity was not found.","errors":[{"reason":"notFound"}]}}
+
+--batch_abc123
+Content-Type: application/http
+Content-ID: <response-item2>
+
+HTTP/1.1 429 Too Many Requests
+Content-Type: application/json; charset=UTF-8
+Retry-After: 3
+
+{"error":{"code":429,"message":"Rate limit","errors":[{"reason":"rateLimitExceeded"}]}}
+
+--batch_abc123--

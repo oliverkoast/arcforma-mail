@@ -1,0 +1,100 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { ClaudeRunner, parseResult } from "../src/claude.mjs";
+
+const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "fake-claude.sh");
+const runner = (mode, opts = {}) => new ClaudeRunner({ bin: FAKE, env: { FAKE_CLAUDE_MODE: mode }, ...opts });
+
+test("parseResult handles success, error kinds, and stdout warnings", () => {
+  assert.equal(parseResult('{"result":"hi","is_error":false,"modelUsage":{"m":{}}}', "", 0).text, "hi");
+  assert.equal(parseResult('{"result":"Not logged in · Please run /login","is_error":true}', "", 0).code, "not_logged_in");
+  assert.equal(parseResult('{"result":"x does not support this model","is_error":true}', "", 0).code, "model_unsupported");
+  assert.equal(parseResult('Warning: junk\n{"result":"ok"}', "", 0).text, "ok");
+  assert.equal(parseResult("", "boom", 1).code, "no_output");
+});
+
+test("completes with the fake CLI and reports the model", async () => {
+  const r = await runner("ok").complete({ system: "s", user: "hello" });
+  assert.equal(r.ok, true);
+  assert.match(r.text, /^fixed:hello/);
+  assert.equal(r.model, "claude-fable-5-1");
+  assert.ok(r.latencyMs >= 0);
+});
+
+test("auth status is parsed and cached", async () => {
+  const c = runner("ok");
+  const a = await c.authStatus();
+  assert.equal(a.loggedIn, true);
+  assert.equal(a.email, "test@example.com");
+  assert.ok(c.authOkUntil > Date.now());
+});
+
+test("not logged in surfaces as a typed code", async () => {
+  const r = await runner("loggedout").complete({ system: "s", user: "u" });
+  assert.equal(r.ok, false);
+  assert.equal(r.code, "not_logged_in");
+});
+
+test("model chain steps down on an unsupported model", async () => {
+  const c = runner("unsupported");
+  const r = await c.complete({ system: "s", user: "u" });
+  assert.equal(r.ok, true);
+  assert.equal(r.model, "opus");
+  assert.equal(c.model, "opus", "runner remembers the working model");
+});
+
+test("timeout kills the child and reports timeout", async () => {
+  const r = await runner("slow").complete({ system: "s", user: "u", timeoutMs: 300 });
+  assert.equal(r.code, "timeout");
+});
+
+test("cancel by requestId", async () => {
+  const c = runner("slow");
+  const p = c.complete({ system: "s", user: "u", requestId: "r1" });
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(c.cancel("r1"), true);
+  const r = await p;
+  assert.equal(r.code, "cancelled");
+});
+
+test("concurrency gate queues extra requests", async () => {
+  const c = runner("ok", { concurrency: 1 });
+  const ps = [1, 2, 3].map((i) => c.complete({ system: "s", user: `u${i}` }));
+  assert.ok(c.queue.length >= 1, "second and third wait in the queue");
+  const rs = await Promise.all(ps);
+  assert.ok(rs.every((r) => r.ok));
+});
+
+test("falls back to the credentials file token when the keychain login is stale", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const file = path.join(os.tmpdir(), `creds-${process.pid}.json`);
+  fs.writeFileSync(file, JSON.stringify({ claudeAiOauth: { accessToken: "tok123", refreshToken: "r", expiresAt: Date.now() + 3600_000 } }));
+  const c = new ClaudeRunner({ bin: FAKE, env: { FAKE_CLAUDE_MODE: "keychainstale" }, credentialsFile: file });
+  const a = await c.authStatus();
+  assert.equal(a.loggedIn, true);
+  assert.equal(c.authSource, "file_token");
+  const r = await c.complete({ system: "s", user: "u" });
+  assert.equal(r.ok, true);
+  assert.match(r.text, /token-ok/);
+  fs.unlinkSync(file);
+});
+
+test("an expired credentials file is ignored", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const file = path.join(os.tmpdir(), `creds-exp-${process.pid}.json`);
+  fs.writeFileSync(file, JSON.stringify({ claudeAiOauth: { accessToken: "old", expiresAt: Date.now() - 1000 } }));
+  const c = new ClaudeRunner({ bin: FAKE, env: { FAKE_CLAUDE_MODE: "keychainstale" }, credentialsFile: file });
+  assert.equal((await c.authStatus()).loggedIn, false);
+  assert.equal(c.authSource, "keychain");
+  fs.unlinkSync(file);
+});
+
+test("a configured long-lived token wins", async () => {
+  const c = new ClaudeRunner({ bin: FAKE, env: { FAKE_CLAUDE_MODE: "keychainstale" }, oauthToken: "long" });
+  assert.equal((await c.authStatus()).loggedIn, true);
+  assert.equal(c.authSource, "config_token");
+});

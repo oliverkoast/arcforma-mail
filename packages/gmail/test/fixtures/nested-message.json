@@ -1,0 +1,70 @@
+{
+  "id": "m100",
+  "threadId": "t100",
+  "labelIds": ["INBOX", "UNREAD"],
+  "snippet": "Here is the deck",
+  "internalDate": "1756555200000",
+  "payload": {
+    "partId": "",
+    "mimeType": "multipart/mixed",
+    "headers": [
+      { "name": "From", "value": "Maya Glenn <maya@arcforma.ai>" },
+      { "name": "To", "value": "Oliver Korzen <you@example.com>" },
+      { "name": "Subject", "value": "Deck for Tuesday" },
+      { "name": "Message-ID", "value": "<deck-1@arcforma.ai>" },
+      { "name": "Content-Type", "value": "multipart/mixed; boundary=\"outer\"" }
+    ],
+    "body": { "size": 0 },
+    "parts": [
+      {
+        "partId": "0",
+        "mimeType": "multipart/related",
+        "headers": [{ "name": "Content-Type", "value": "multipart/related; boundary=\"related\"" }],
+        "body": { "size": 0 },
+        "parts": [
+          {
+            "partId": "0.0",
+            "mimeType": "multipart/alternative",
+            "headers": [{ "name": "Content-Type", "value": "multipart/alternative; boundary=\"alt\"" }],
+            "body": { "size": 0 },
+            "parts": [
+              {
+                "partId": "0.0.0",
+                "mimeType": "text/plain",
+                "headers": [{ "name": "Content-Type", "value": "text/plain; charset=\"ISO-8859-1\"" }],
+                "body": { "size": 21, "data": "SGVyZSBpcyB0aGUgZGVjay4gQ2Fm6Q" }
+              },
+              {
+                "partId": "0.0.1",
+                "mimeType": "text/html",
+                "headers": [{ "name": "Content-Type", "value": "text/html; charset=\"UTF-8\"" }],
+                "body": { "size": 60, "data": "PGRpdj5IZXJlIGlzIHRoZSA8Yj5kZWNrPC9iPi4gPGltZyBzcmM9ImNpZDpsb2dvIj48L2Rpdj4" }
+              }
+            ]
+          },
+          {
+            "partId": "0.1",
+            "mimeType": "image/png",
+            "filename": "logo.png",
+            "headers": [
+              { "name": "Content-Type", "value": "image/png; name=\"logo.png\"" },
+              { "name": "Content-Disposition", "value": "inline; filename=\"logo.png\"" },
+              { "name": "Content-ID", "value": "<logo>" }
+            ],
+            "body": { "attachmentId": "ANGjdJ_logo", "size": 1200 }
+          }
+        ]
+      },
+      {
+        "partId": "1",
+        "mimeType": "application/pdf",
+        "filename": "deck.pdf",
+        "headers": [
+          { "name": "Content-Type", "value": "application/pdf; name=\"deck.pdf\"" },
+          { "name": "Content-Disposition", "value": "attachment; filename=\"deck.pdf\"" }
+        ],
+        "body": { "attachmentId": "ANGjdJ_deck", "size": 48213 }
+      }
+    ]
+  }
+}
