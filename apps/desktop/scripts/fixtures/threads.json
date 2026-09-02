@@ -382,7 +382,7 @@
           "id": "m-d1",
           "from": "Domains <no-reply@registrar.example>",
           "to": "you@example.net",
-          "subject": "formai.build renews in 30 days",
+          "subject": "example.net renews in 30 days",
           "hoursAgo": 55,
           "labels": [
             "INBOX"
@@ -731,7 +731,7 @@
           "self": true
         },
         {
-          "email": "jules@arcforma.ai",
+          "email": "jules@example.com",
           "displayName": "Jules Park"
         }
       ]

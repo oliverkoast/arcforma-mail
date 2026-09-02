@@ -2,7 +2,7 @@
 // oauth-clients.json, stored refresh tokens, and one GmailClient per account.
 
 import { shell } from "electron";
-import { GmailClient, createTokenSource, getOwners, loadOAuthClients, runLoopbackFlow, type OAuthClientConfig } from "@arcforma/gmail";
+import { GmailClient, createTokenSource, getOwners, loadOAuthClients, runLoopbackFlow, type OAuthClientConfig, loadAccountIdentities } from "@arcforma/gmail";
 import { getAccount, listAccounts, updateAccount, upsertAccount, type AccountRow, type Db } from "@arcforma/store";
 import { clearAccountOnSignOut, markAccountExpired } from "./auth-state.js";
 import { emit } from "./events.js";
@@ -12,11 +12,9 @@ import { deleteRefreshToken, hasRefreshToken, loadRefreshToken, saveRefreshToken
 import type { AccountInfo, AccountsStatus } from "../shared/types.js";
 
 /** The accounts Arcforma Mail is built for. oauth-clients.json supplies the client ids. */
-export const KNOWN_ACCOUNTS: Array<{ id: string; email: string; consent: "internal" | "external" }> = [
-  { id: "arcforma", email: "you@example.com", consent: "internal" },
-  { id: "formai", email: "you@example.net", consent: "internal" },
-  { id: "personal", email: "you@gmail.com", consent: "external" },
-];
+// Accounts are whatever oauth-clients.json names. Nothing about whose mailbox this is belongs in
+// the source: see docs/google-cloud-setup.md for the file, and README for why each account needs
+// its own OAuth client.
 
 export class AccountRegistry {
   private configs = new Map<string, OAuthClientConfig>();
@@ -38,7 +36,7 @@ export class AccountRegistry {
       this.configs = new Map();
       this.configError = (err as Error).message;
     }
-    for (const k of KNOWN_ACCOUNTS) upsertAccount(this.db, k);
+    for (const k of loadAccountIdentities(oauthClientsPath())) upsertAccount(this.db, { id: k.id, email: k.email, consent: k.consent });
     for (const c of this.configs.values()) upsertAccount(this.db, { id: c.id, email: c.email, consent: c.consent });
     // A token that no longer decrypts or a config that vanished means signed out.
     for (const row of listAccounts(this.db)) {

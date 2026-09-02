@@ -121,6 +121,9 @@ export function ReadingPane() {
             <button data-tip="Asks Gmail for the message bodies again." onClick={() => void refreshOpen()}>Fetch the messages again</button>
           </span>
         ) : null}
+        {t.band === "needs_you" && t.attentionReason ? (
+          <span className="af-mono eyebrow-flag" data-tip="Why this thread is in Needs you. Re-file it if the app has this wrong; that teaches the score.">{t.attentionReason}</span>
+        ) : null}
         {t.noReplyBy ? <span className="af-mono eyebrow-flag">No reply by {eyebrowDate(t.noReplyBy)}</span> : null}
         {t.wakeAt ? <span className="af-mono eyebrow-flag">Snoozed · back {eyebrowDate(t.wakeAt, true)}</span> : null}
         {t.unsubscribeState === "sent" ? <span className="af-mono eyebrow-flag">Unsubscribed</span> : null}

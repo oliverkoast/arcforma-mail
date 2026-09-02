@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import net from "node:net";
 import { AuthExpiredError } from "./errors.js";
-import { SCOPES, createTokenSource, runLoopbackFlow, type TokenTransporter, loadOAuthClients } from "./oauth.js";
+import { SCOPES, createTokenSource, runLoopbackFlow, type TokenTransporter, loadOAuthClients, loadAccountIdentities } from "./oauth.js";
 
 interface Seen {
   url: string;
@@ -197,5 +197,24 @@ test("loadOAuthClients treats blank credentials as template rows, not errors", a
   assert.equal(loaded[0].consent, "external");
   fs.writeFileSync(file, JSON.stringify({ accounts: [{ id: "a", clientId: "x", clientSecret: "y" }] }));
   assert.throws(() => loadOAuthClients(file), /missing "email"/);
+  fs.unlinkSync(file);
+});
+
+test("loadAccountIdentities lists every named account, configured or not, and tolerates a missing file", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const file = path.join(os.tmpdir(), `ids-${process.pid}.json`);
+  fs.writeFileSync(file, JSON.stringify({ accounts: [
+    { id: "work", email: "Person@Example.com", clientId: "id", clientSecret: "s", consent: "internal" },
+    { id: "waiting", email: "other@example.com", clientId: "", clientSecret: "", consent: "external" },
+    { id: "", email: "nameless@example.com" },
+  ] }));
+  const ids = loadAccountIdentities(file);
+  assert.deepEqual(ids.map((a) => [a.id, a.email, a.configured, a.consent]), [
+    ["work", "person@example.com", true, "internal"],
+    ["waiting", "other@example.com", false, "external"],
+  ]);
+  assert.deepEqual(loadAccountIdentities(path.join(os.tmpdir(), "no-such-file.json")), [], "a missing file is not an error");
   fs.unlinkSync(file);
 });

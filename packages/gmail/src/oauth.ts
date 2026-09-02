@@ -48,6 +48,38 @@ export function defaultOAuthClientsPath(): string {
 }
 
 /** Reads oauth-clients.json: {"accounts":[{id,email,clientId,clientSecret,consent}]}. */
+/** Who the app knows about, credentials or not. A template row with a blank id still gets a sidebar row. */
+export interface AccountIdentity {
+  id: string;
+  email: string;
+  consent: "internal" | "external";
+  configured: boolean;
+}
+
+/**
+ * Every account named in the clients file. Unlike loadOAuthClients this keeps entries whose
+ * credentials are still blank, so the app can list an account that is waiting for its client id
+ * rather than pretending it does not exist. Returns an empty list when the file is missing.
+ */
+export function loadAccountIdentities(file = defaultOAuthClientsPath()): AccountIdentity[] {
+  let parsed: unknown;
+  try { parsed = JSON.parse(fs.readFileSync(file, "utf8")); } catch { return []; }
+  const accounts = (parsed as { accounts?: unknown[] })?.accounts;
+  if (!Array.isArray(accounts)) return [];
+  const out: AccountIdentity[] = [];
+  for (const raw of accounts) {
+    const a = raw as Partial<OAuthClientConfig>;
+    if (typeof a.id !== "string" || !a.id || typeof a.email !== "string" || !a.email) continue;
+    out.push({
+      id: a.id,
+      email: a.email.toLowerCase(),
+      consent: a.consent === "external" ? "external" : "internal",
+      configured: Boolean(a.clientId && a.clientSecret),
+    });
+  }
+  return out;
+}
+
 export function loadOAuthClients(file = defaultOAuthClientsPath()): OAuthClientConfig[] {
   if (!fs.existsSync(file)) {
     throw new OAuthConfigError(`No OAuth clients at ${file}. Create the file with one entry per account before signing in.`);
