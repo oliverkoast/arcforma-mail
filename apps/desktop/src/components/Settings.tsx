@@ -84,7 +84,7 @@ function AccountsSection() {
                   void signIn(a.id).finally(() => setBusy(null));
                 }}
               >
-                {a.authState === "expired" ? "Sign in again" : "Sign in"}
+                {!a.configured ? "Add client id first" : a.authState === "expired" ? "Sign in again" : "Sign in"}
               </button>
             )}
           </div>

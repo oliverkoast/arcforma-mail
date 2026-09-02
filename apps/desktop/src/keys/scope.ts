@@ -5,6 +5,8 @@ export interface ScopeState {
   settingsOpen: boolean;
   ask: { open: boolean };
   compose: unknown | null;
+  /** An inline reply collapsed to its strip: the draft is kept, but nobody is typing in it. */
+  inlineCollapsed: boolean;
   snippetPickerOpen: boolean;
   sendLaterOpen: boolean;
   popover: unknown | null;
@@ -17,13 +19,15 @@ export interface ScopeState {
  * The active key scope follows whichever surface is on top, so Escape closes
  * the topmost thing first: a snooze popover, then settings, then Ask, then the
  * compose panel and its own overlays, then the reading pane back to the list.
+ * An inline reply collapsed to its strip hands the keys back to the thread:
+ * J and K move, R reopens the draft.
  */
 export function scopeFor(s: ScopeState): Scope {
   if (s.popover) return "popover";
   if (s.sidebarMenu) return "sidebar";
   if (s.settingsOpen) return "settings";
   if (s.ask.open) return "ask";
-  if (s.compose) {
+  if (s.compose && !s.inlineCollapsed) {
     if (s.snippetPickerOpen) return "snippets";
     if (s.sendLaterOpen) return "sendLater";
     return "compose";

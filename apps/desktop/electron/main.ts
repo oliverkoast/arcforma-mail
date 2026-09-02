@@ -39,6 +39,13 @@ app.setName("Arcforma Mail");
 if (!process.env["ARCMAIL_USER_DATA"]) app.setPath("userData", path.join(app.getPath("appData"), "Arcforma Mail"));
 if (process.env["ARCMAIL_USER_DATA"]) app.setPath("userData", process.env["ARCMAIL_USER_DATA"]);
 
+// The smoke window renders on whatever screen is there. A window another app covers stops presenting frames on
+// macOS, and capturePage then waits for a frame that never comes; these switches keep an occluded window painting.
+if (SMOKE_DIR) {
+  app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
+  app.commandLine.appendSwitch("disable-renderer-backgrounding");
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -271,8 +278,17 @@ function fakeBackfill(ctx: SmokeContext, done: number, total: number): void {
 const SMOKE_STEPS: Array<{ name: string; script: string | null; main?: (ctx: SmokeContext) => void; waitMs: number }> = [
   { name: "inbox", script: null, waitMs: 2500 },
   { name: "thread", script: "window.__arcmail.select(0); await window.__arcmail.openSelected();", waitMs: 4000 },
+  // The bottom of the "Kickoff next week" thread: the reply row under the last message, no draft anywhere.
+  { name: "thread-reply-row", script: "document.querySelector('.messages').scrollTop = 1e6;", waitMs: 600 },
+  // R: the inline reply docked under the last message, with a few words typed so the strip has something to show.
+  { name: "inline-reply", script: "window.__arcmail.openCompose('reply'); await new Promise((r) => setTimeout(r, 500)); window.__arcmail.editorApi.setHtml('<p>Priya should join the first session. The plan goes out tonight.</p>');", waitMs: 1200 },
+  // Esc: the box collapses to its one-line strip and the keys go back to the thread.
+  { name: "inline-strip", script: "await window.__arcmail.dismissCompose();", waitMs: 800 },
+  // Reply from a message in the middle of the thread: the box moves under it, recipients come from that message, the typed text comes along.
+  { name: "inline-reply-mid", script: "window.__arcmail.openCompose('reply', { messageId: 'm-k6' }); await new Promise((r) => setTimeout(r, 400)); document.querySelector('.inline-reply').scrollIntoView({ block: 'center' });", waitMs: 1200 },
   { name: "snooze", script: "window.__arcmail.setPopover('snooze');", waitMs: 600 },
-  { name: "compose", script: "window.__arcmail.setPopover(null); window.__arcmail.openCompose('replyAll');", waitMs: 1200 },
+  // C over an inline reply parks the reply as a draft and opens the floating panel.
+  { name: "compose", script: "window.__arcmail.setPopover(null); window.__arcmail.openCompose('new');", waitMs: 1200 },
   { name: "ask", script: "window.__arcmail.closeCompose(false); window.__arcmail.openAsk(); await window.__arcmail.runAsk('kickoff invoice');", waitMs: 3500 },
   { name: "calendar", script: "window.__arcmail.closeAsk(); window.__arcmail.toggleRail('calendar');", waitMs: 1500 },
   { name: "availability", script: "window.__arcmailCalendar.showAvailability(true); await new Promise((r) => setTimeout(r, 400)); window.__arcmailCalendar.pickDemo();", waitMs: 1200 },
@@ -285,6 +301,24 @@ const SMOKE_STEPS: Array<{ name: string; script: string | null; main?: (ctx: Smo
   { name: "scheduled", script: "window.__arcmail.closeSidebarMenu(); window.__arcmail.setView('scheduled'); await new Promise((r) => setTimeout(r, 600)); window.__arcmail.select(0); await window.__arcmail.openSelected();", waitMs: 2000 },
   { name: "splash", script: "window.__arcmail.setView('drafts');", main: (ctx) => fakeBackfill(ctx, 40, 100), waitMs: 1800 },
 ];
+
+/**
+ * capturePage resolves with the next presented frame. When nothing presents (the window is covered, or the compositor
+ * idles after the resize nudge) it never resolves, so each attempt is bounded: bring the window forward, force a repaint,
+ * and try again before giving the step up.
+ */
+async function captureWithRetry(win: BrowserWindow, attempts = 3): Promise<Electron.NativeImage> {
+  for (let i = 1; ; i++) {
+    const timeout = new Promise<null>((r) => setTimeout(() => r(null), 8_000));
+    const image = await Promise.race([win.webContents.capturePage(), timeout]);
+    if (image) return image;
+    if (i >= attempts) throw new Error(`capturePage produced no frame in ${attempts} attempts`);
+    console.log(`SMOKE capture attempt ${i} produced no frame; repainting`);
+    win.moveTop();
+    win.webContents.invalidate();
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
 
 function runSmoke(win: BrowserWindow, dir: string, ctx: SmokeContext): void {
   fs.mkdirSync(dir, { recursive: true });
@@ -311,7 +345,7 @@ function runSmoke(win: BrowserWindow, dir: string, ctx: SmokeContext): void {
           await sleep(150);
           win.setSize(w!, h!);
           await sleep(250);
-          const image = await win.webContents.capturePage();
+          const image = await captureWithRetry(win);
           const file = path.join(dir, `${step.name}.png`);
           fs.writeFileSync(file, image.toPNG());
           const size = image.getSize();

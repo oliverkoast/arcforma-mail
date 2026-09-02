@@ -37,7 +37,7 @@ export function useKeyboard(): void {
       instantReply2: () => s().acceptInstantReply(2),
       instantReply3: () => s().acceptInstantReply(3),
       acceptDraft: () => s().acceptGhost(),
-      closeCompose: () => void s().closeCompose(true),
+      closeCompose: () => void s().dismissCompose(),
       toggleReadingPane: () => s().toggleReadingPane(),
       discardCompose: () => void s().closeCompose(false),
       send: () => void s().sendCompose(null),

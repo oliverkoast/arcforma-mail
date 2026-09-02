@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildDraft, forwardSubject, parseAddresses, quotedHtml, recipientsFor, referencesFor, replySubject, replyTarget, textToHtml } from "./compose";
+import { buildDraft, draftPreview, forwardSubject, hasBody, mergePending, parseAddresses, quotedHtml, recipientLine, recipientsFor, referencesFor, replySubject, replyTarget, sentMessage, textToHtml } from "./compose";
 import type { MessageView, ThreadSummary } from "../../shared/types";
 
 const owners = new Set(["you@example.com", "you@example.net"]);
@@ -122,4 +122,91 @@ test("forwarding a message with attachments is an explicit error, never a silent
   assert.equal(buildDraft({ mode: "reply", accountId: "arcforma", thread, messages: [withFile], owners }).mode, "reply", "a reply does not carry attachments, so it is fine");
   const unfetched = msg({ body: null, hasAttachments: true });
   assert.throws(() => buildDraft({ mode: "forward", accountId: "arcforma", thread, messages: [unfetched], owners }), /not supported yet/, "the metadata flag is enough when the body is not cached yet");
+});
+
+test("the collapsed recipient line reads To then cc, names first, addresses when there is no name", () => {
+  const dana = { email: "dana@northwind.example", name: "Dana Reyes" };
+  const priya = { email: "priya@northwind.example", name: "Priya" };
+  const sam = { email: "sam@harbor.example", name: "" };
+  assert.equal(recipientLine([dana], [priya]), "To Dana Reyes, cc Priya");
+  assert.equal(recipientLine([dana, sam], []), "To Dana Reyes, sam@harbor.example");
+  assert.equal(recipientLine([dana], [priya, sam]), "To Dana Reyes, cc Priya, sam@harbor.example");
+  assert.equal(recipientLine([], [priya]), "cc Priya");
+  assert.equal(recipientLine([], []), "No recipients yet");
+});
+
+test("the strip shows the first words of the draft; hasBody ignores recipients and empty paragraphs", () => {
+  assert.equal(draftPreview("<p>Yes, 9:00 works.</p><p>See you Tuesday.</p>"), "Yes, 9:00 works. See you Tuesday.");
+  assert.equal(draftPreview("<p></p>"), "(empty)");
+  assert.equal(draftPreview("<p>Tom &amp; Jerry&nbsp;&lt;3</p>"), "Tom & Jerry <3");
+  const long = draftPreview(`<p>${"word ".repeat(40).trim()}</p>`);
+  assert.ok(long.endsWith("..."), "a long body is cut");
+  assert.ok(long.length <= 76, `cut near the limit: ${long.length}`);
+  assert.equal(long.includes("  "), false);
+  assert.equal(hasBody({ bodyHtml: "<p></p>" }), false);
+  assert.equal(hasBody({ bodyHtml: "<p>&nbsp;</p>" }), false);
+  assert.equal(hasBody({ bodyHtml: "<p>ok</p>" }), true);
+});
+
+test("a reply to a chosen message takes its recipients, subject, Message-ID, and only its body in the quote", () => {
+  const first = msg({ id: "a", messageIdHeader: "<a@x>", subject: "Kickoff", body: { html: "<p>first mail</p>", text: null, attachments: [] } });
+  const mine = msg({ id: "b", direction: "out", from: { email: "you@example.com", name: "Oliver" }, to: [{ email: "dana@northwind.example", name: "Dana" }], messageIdHeader: "<b@x>", references: "<a@x>" });
+  const mid = msg({
+    id: "c",
+    from: { email: "priya@northwind.example", name: "Priya Natarajan" },
+    cc: [{ email: "dana@northwind.example", name: "Dana Reyes" }],
+    messageIdHeader: "<c@x>",
+    references: "<a@x> <b@x>",
+    subject: "Re: Kickoff (Priya)",
+    body: { html: "<p>middle mail</p>", text: null, attachments: [] },
+  });
+  const last = msg({ id: "d", messageIdHeader: "<d@x>", references: "<a@x> <b@x> <c@x>", body: { html: "<p>last mail</p>", text: null, attachments: [] } });
+  const messages = [first, mine, mid, last];
+
+  const reply = buildDraft({ mode: "reply", accountId: "arcforma", thread, messages, owners, targetId: "c" });
+  assert.deepEqual(reply.to, [{ email: "priya@northwind.example", name: "Priya Natarajan" }]);
+  assert.deepEqual(reply.cc, []);
+  assert.equal(reply.subject, "Re: Kickoff (Priya)", "the subject comes from the chosen message, not the thread");
+  assert.equal(reply.inReplyTo, "<c@x>");
+  assert.equal(reply.references, "<a@x> <b@x> <c@x>");
+  assert.match(reply.quotedHtml, /middle mail/);
+  assert.doesNotMatch(reply.quotedHtml, /last mail|first mail/, "only the chosen message is quoted");
+  assert.equal(reply.threadId, "t");
+
+  const all = buildDraft({ mode: "replyAll", accountId: "arcforma", thread, messages, owners, targetId: "c" });
+  assert.deepEqual(all.to.map((a) => a.email), ["priya@northwind.example"]);
+  assert.deepEqual(all.cc.map((a) => a.email), ["dana@northwind.example"]);
+
+  const fwd = buildDraft({ mode: "forward", accountId: "arcforma", thread, messages, owners, targetId: "c" });
+  assert.equal(fwd.subject, "Fwd: Re: Kickoff (Priya)");
+  assert.match(fwd.quotedHtml, /From: Priya Natarajan/);
+  assert.match(fwd.quotedHtml, /middle mail/);
+  assert.doesNotMatch(fwd.quotedHtml, /last mail/);
+
+  const own = buildDraft({ mode: "reply", accountId: "arcforma", thread, messages, owners, targetId: "b" });
+  assert.deepEqual(own.to.map((a) => a.email), ["dana@northwind.example"], "replying to your own mid-thread message goes back to its recipients");
+  assert.equal(own.inReplyTo, "<b@x>");
+
+  const unknown = buildDraft({ mode: "reply", accountId: "arcforma", thread, messages, owners, targetId: "nope" });
+  assert.equal(unknown.inReplyTo, "<d@x>", "an unknown id falls back to the last inbound message");
+  assert.equal(unknown.subject, "Re: Kickoff", "and to the thread subject");
+});
+
+test("the optimistic sent message stands in until the sync carries an outbound message at or after its time", () => {
+  const draft = buildDraft({ mode: "reply", accountId: "arcforma", thread, messages: [msg({})], owners, bodyHtml: "<p>Yes, 9:00 works.</p>" });
+  const at = Date.UTC(2026, 8, 2, 10, 0);
+  const sent = sentMessage({ draft, sendId: 7, sentAt: at, from: { email: "you@example.com", name: "Oliver Korzen" } });
+  assert.equal(sent.id, "pending:7");
+  assert.equal(sent.direction, "out");
+  assert.equal(sent.threadId, "t");
+  assert.equal(sent.body?.html, "<p>Yes, 9:00 works.</p>");
+  assert.equal(sent.snippet, "Yes, 9:00 works.");
+  assert.deepEqual(sent.to.map((a) => a.email), ["dana@northwind.example"]);
+  const inbound = msg({ id: "in", internalDate: at - 3_600_000 });
+  assert.deepEqual(mergePending([inbound], [sent], at + 5_000).map((m) => m.id), ["in", "pending:7"], "nothing outbound yet: the pending message stays");
+  const real = msg({ id: "real", direction: "out", internalDate: at + 2_000, from: { email: "you@example.com", name: "Oliver" } });
+  assert.deepEqual(mergePending([inbound, real], [sent], at + 5_000).map((m) => m.id), ["in", "real"], "the sync's copy replaces it");
+  const older = msg({ id: "older", direction: "out", internalDate: at - 600_000 });
+  assert.deepEqual(mergePending([inbound, older], [sent], at + 5_000).map((m) => m.id), ["in", "older", "pending:7"], "an older outbound message is not this one");
+  assert.deepEqual(mergePending([inbound], [sent], at + 16 * 60_000).map((m) => m.id), ["in"], "a send that never confirms is dropped after fifteen minutes");
 });

@@ -1392,3 +1392,152 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .sidebar-popover .popover-confirm { color: var(--af-text-body); font-size: 13px; padding: 2px 0 4px; }
 .sidebar-popover .compose-field { margin: 0; }
 .sidebar-popover .settings-actions { margin-top: 4px; }
+
+/* ---- inline reply: docked under the last message of the open thread ---- */
+.reply-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 18px 0 8px;
+  border-top: 1px solid var(--af-rule);
+}
+.inline-reply {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 18px;
+  padding: 14px 18px 16px;
+  background: var(--af-bg);
+  border: 1px solid var(--af-rule);
+  border-radius: var(--af-radius-card);
+}
+.inline-reply .compose-editor {
+  flex: none;
+  min-height: 120px;
+  overflow: visible;
+}
+.inline-reply .compose-body {
+  min-height: 100px;
+}
+.recipient-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--af-rule);
+  color: var(--af-text-body);
+}
+.recipient-line-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recipient-line-edit {
+  margin-left: auto;
+  color: var(--af-accent);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.draft-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 18px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--af-bg-alt);
+  color: var(--af-text-body);
+}
+.draft-strip:hover {
+  background: var(--af-mist);
+}
+.draft-strip .af-mono {
+  color: var(--af-text-soft);
+  white-space: nowrap;
+}
+.draft-strip-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Per-message reply controls: right of the date, shown on hover and always on the last message. */
+.message-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  white-space: nowrap;
+}
+.message-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+.message:hover .message-actions,
+.message.is-last .message-actions,
+.message-actions:focus-within {
+  opacity: 1;
+}
+/* The reply row and inline box sit inside the message article they answer. */
+.message .reply-row {
+  margin-top: 12px;
+  border-top: 0;
+  padding-top: 8px;
+}
+
+/* ---- icon buttons: every thread action is a 32 px glyph, no fill, ink-soft, ink on hover, cobalt when on ---- */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--af-ink-soft);
+  cursor: pointer;
+  transition: color 0.16s ease, background-color 0.16s ease;
+}
+.icon-btn:hover {
+  color: var(--af-ink);
+  background: var(--af-bg-alt);
+}
+.icon-btn.is-active {
+  color: var(--af-cobalt);
+}
+.icon-btn.is-active svg {
+  fill: currentColor;
+}
+.icon-btn:focus-visible {
+  outline: 2px solid var(--af-bright);
+  outline-offset: 2px;
+}
+.icon-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.reading-actions.icon-row {
+  gap: 2px;
+  margin-top: 4px;
+}
+.icon-sep {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  margin: 0 6px;
+  background: var(--af-rule);
+}
+.reply-row.icon-row {
+  gap: 2px;
+}

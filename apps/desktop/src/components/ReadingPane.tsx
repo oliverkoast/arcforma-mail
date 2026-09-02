@@ -1,6 +1,8 @@
 import { useApp } from "../state/store";
 import { bytes, eyebrowDate, fullDate, sendsAt } from "../lib/format";
 import { InstantReplies, SummaryCard } from "./AiCards";
+import { InlineReply } from "./InlineReply";
+import { IconButton, ReplyIcons } from "./IconButton";
 import { MessageBody } from "./MessageBody";
 import type { RefileTarget, ThreadSummary } from "../../shared/types";
 
@@ -100,23 +102,22 @@ export function ReadingPane() {
             <span className="af-mono">Cancelling reopens it as a draft.</span>
           </div>
         ) : (
-        <div className="reading-actions">
-          <button className="btn btn-nav btn-compact" onClick={() => openCompose("reply")}>Reply</button>
-          <button className="btn btn-nav btn-compact" onClick={() => openCompose("replyAll")}>Reply all</button>
-          <button className="btn btn-nav btn-compact" onClick={() => openCompose("forward")}>Forward</button>
-          <button className="btn btn-nav btn-compact" onClick={() => void archiveSelected()}>Mark done</button>
-          <button className="btn btn-nav btn-compact" onClick={() => setPopover("snooze")}>Snooze</button>
-          <button className="btn btn-nav btn-compact" onClick={() => void starSelected()}>{t.starred ? "Unstar" : "Star"}</button>
-          <button className="btn btn-nav btn-compact" onClick={() => void toggleQueue("daily")}>{t.queue === "daily" ? "Remove from Daily 0" : "Add to Daily 0"}</button>
-          <button className="btn btn-nav btn-compact" onClick={() => void toggleQueue("weekly")}>{t.queue === "weekly" ? "Remove from Weekly 0" : "Add to Weekly 0"}</button>
+        <div className="reading-actions icon-row">
+          <ReplyIcons onReply={() => openCompose("reply")} onReplyAll={() => openCompose("replyAll")} onForward={() => openCompose("forward")} />
+          <span className="icon-sep" aria-hidden="true" />
+          <IconButton glyph="done" label="Mark done" keyHint="E" onClick={() => void archiveSelected()} />
+          <IconButton glyph="snooze" label="Snooze" keyHint="H" onClick={() => setPopover("snooze")} />
+          <IconButton glyph="star" label={t.starred ? "Unstar" : "Star"} keyHint="S" active={t.starred} onClick={() => void starSelected()} />
+          <IconButton glyph="daily" label={t.queue === "daily" ? "Remove from Daily 0" : "Add to Daily 0"} keyHint="D" active={t.queue === "daily"} onClick={() => void toggleQueue("daily")} />
+          <IconButton glyph="weekly" label={t.queue === "weekly" ? "Remove from Weekly 0" : "Add to Weekly 0"} keyHint="W" active={t.queue === "weekly"} onClick={() => void toggleQueue("weekly")} />
           <RefileSelect />
         </div>
         )}
       </div>
       <div className="messages">
         <SummaryCard />
-        {open.messages.map((m) => (
-          <article className="message" key={m.id}>
+        {open.messages.map((m, i) => (
+          <article className={`message${i === open.messages.length - 1 ? " is-last" : ""}`} key={m.id}>
             <div className="message-head">
               <div>
                 <div className="message-from">
@@ -127,7 +128,14 @@ export function ReadingPane() {
                   {m.cc.length ? `, cc ${m.cc.map((a) => a.name || a.email).join(", ")}` : ""}
                 </div>
               </div>
-              <div className="message-date">{fullDate(m.internalDate)}</div>
+              <div className="message-meta">
+                <div className="message-date">{fullDate(m.internalDate)}</div>
+                {t.scheduled ? null : (
+                  <div className="message-actions">
+                    <ReplyIcons onReply={() => openCompose("reply", { messageId: m.id })} onReplyAll={() => openCompose("replyAll", { messageId: m.id })} onForward={() => openCompose("forward", { messageId: m.id })} />
+                  </div>
+                )}
+              </div>
             </div>
             <MessageBody message={m} />
             {m.body && m.body.attachments.filter((a) => !a.inline).length > 0 ? (
@@ -141,6 +149,7 @@ export function ReadingPane() {
                   ))}
               </div>
             ) : null}
+            <InlineReply messageId={m.id} isLast={i === open.messages.length - 1} />
           </article>
         ))}
         <InstantReplies />

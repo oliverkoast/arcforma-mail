@@ -31,10 +31,25 @@ import {
 import type { Scope } from "../keys/keymap";
 import { scopeFor } from "../keys/scope";
 import { installActivityTracker } from "../lib/activity";
-import { buildDraft, textToHtml } from "../lib/compose";
+import { buildDraft, hasBody, isPending, mergePending, sentMessage, textToHtml } from "../lib/compose";
 import { nextMondayAt, tomorrowAt } from "../lib/format";
 
 export type Rail = "none" | "calendar" | "contact";
+/** Where the open compose lives: docked under a message in the reading pane, or the floating panel. */
+export type ComposePlacement = "inline" | "panel";
+/** The message an inline reply is docked under. A forward has no threadId of its own, so the thread is tracked here too. */
+export interface InlineAnchor {
+  accountId: string;
+  threadId: string;
+  messageId: string;
+}
+export interface OpenComposeOptions {
+  bodyHtml?: string;
+  draft?: ComposeDraft;
+  placement?: ComposePlacement;
+  /** Reply to this message rather than the thread's latest. */
+  messageId?: string;
+}
 export type Popover = "snooze" | "snoozePick" | null;
 
 /** Where a sidebar popover anchors, in window pixels. */
@@ -101,6 +116,10 @@ export interface AppState {
   aiStatus: AiStatus | null;
 
   compose: ComposeDraft | null;
+  composePlacement: ComposePlacement;
+  /** An inline reply collapsed to its one-line strip. Always false for the panel. */
+  inlineCollapsed: boolean;
+  inlineAnchor: InlineAnchor | null;
   composeGhost: Ghost | null;
   sendLaterOpen: boolean;
   sendLaterPick: boolean;
@@ -159,9 +178,15 @@ export interface AppState {
   acceptInstantReply: (n: 1 | 2 | 3) => void;
   refile: (to: RefileTarget) => Promise<void>;
 
-  openCompose: (mode: ComposeMode, opts?: { bodyHtml?: string; draft?: ComposeDraft }) => void;
+  openCompose: (mode: ComposeMode, opts?: OpenComposeOptions) => void;
   updateCompose: (patch: Partial<ComposeDraft>) => void;
   closeCompose: (keepDraft?: boolean) => Promise<void>;
+  /** Esc: the panel closes and keeps the draft; an inline reply collapses to its strip, or closes when nothing was written. */
+  dismissCompose: () => Promise<void>;
+  /** Reopens a collapsed inline reply from its strip. */
+  expandInline: () => void;
+  /** After a sync: refetches the open thread when it shows a sent message the sync has not confirmed yet. */
+  confirmSent: () => Promise<void>;
   sendCompose: (sendAt?: number | null) => Promise<void>;
   setSendLater: (open: boolean, pick?: boolean) => void;
   setSnippetPicker: (open: boolean) => void;
@@ -212,7 +237,8 @@ export function isQueueView(view: InboxView): view is QueueName {
   return view === "daily" || view === "weekly" || view === "later";
 }
 
-const sanitize = (html: string) => DOMPurify.sanitize(html, { USE_PROFILES: { html: true }, FORBID_TAGS: ["style", "script", "iframe", "object", "embed", "form", "input", "button", "link", "meta", "base"] });
+// The renderer always has a DOM. Without one (node:test) DOMPurify cannot parse, so the quote keeps only the text.
+const sanitize = (html: string) => (DOMPurify.isSupported ? DOMPurify.sanitize(html, { USE_PROFILES: { html: true }, FORBID_TAGS: ["style", "script", "iframe", "object", "embed", "form", "input", "button", "link", "meta", "base"] }) : html.replace(/<[^>]+>/g, ""));
 
 function wordsOf(view: ThreadView): number {
   let n = 0;
@@ -272,6 +298,9 @@ export const useApp = create<AppState>((set, get) => ({
   aiStatus: null,
 
   compose: null,
+  composePlacement: "panel",
+  inlineCollapsed: false,
+  inlineAnchor: null,
   composeGhost: null,
   sendLaterOpen: false,
   sendLaterPick: false,
@@ -305,7 +334,10 @@ export const useApp = create<AppState>((set, get) => ({
       set({ status });
       void get().loadThreads(true);
     });
-    on("threads:changed", () => void get().loadThreads(true));
+    on("threads:changed", () => {
+      void get().loadThreads(true);
+      void get().confirmSent();
+    });
     on("sync:progress", (p) => set((s) => ({ progress: { ...s.progress, [p.accountId]: p } })));
     on("toast", (t) => get().showToast(t));
     on("categories:changed", (categories) => set({ categories }));
@@ -597,12 +629,12 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   toggleReadingPane() {
-    const next = !get().readingPane;
-    writeStoredBool("arcmail.readingPane", next);
-    set({ readingPane: next });
+    get().setReadingPane(!get().readingPane);
   },
   setReadingPane(open) {
     writeStoredBool("arcmail.readingPane", open);
+    // An inline reply lives in the reading pane; hiding the pane parks it as a draft.
+    if (!open && get().compose && get().composePlacement === "inline") void get().closeCompose(true);
     set({ readingPane: open });
   },
   toggleRail(rail) {
@@ -662,6 +694,9 @@ export const useApp = create<AppState>((set, get) => ({
     if (t?.undo?.kind !== "send") return;
     const r = await invoke("send:undo", t.undo.id);
     if (r.cancelled) {
+      // The message shown optimistically in the thread goes away with the send.
+      const pendingId = `pending:${t.undo.id}`;
+      set((cur) => (cur.open && cur.open.messages.some((m) => m.id === pendingId) ? { open: { ...cur.open, messages: cur.open.messages.filter((m) => m.id !== pendingId) } } : {}));
       get().showToast({ text: "Send cancelled. The draft is back." });
       if (r.draft) get().openCompose(r.draft.mode, { draft: r.draft });
     } else {
@@ -736,12 +771,31 @@ export const useApp = create<AppState>((set, get) => ({
 
   openCompose(mode, opts = {}) {
     const s = get();
+    const view = s.open;
+    const lastId = view?.messages[view.messages.length - 1]?.id ?? null;
+    const docked = s.compose && s.composePlacement === "inline" && s.inlineAnchor && view && s.inlineAnchor.threadId === view.thread.id && s.inlineAnchor.accountId === view.thread.accountId ? s.inlineAnchor : null;
+
     if (opts.draft) {
-      set({ compose: { ...opts.draft, mode: opts.draft.mode ?? mode }, composeGhost: null, sendLaterOpen: false, snippetPickerOpen: false, popover: null });
+      const d = { ...opts.draft, mode: opts.draft.mode ?? mode };
+      // A draft docks under the message it answers when that thread is open; anywhere else it gets the panel.
+      const anchorMessage = view && d.threadId === view.thread.id && d.accountId === view.thread.accountId ? view.messages.find((m) => m.messageIdHeader && m.messageIdHeader === d.inReplyTo)?.id ?? lastId : null;
+      const placement: ComposePlacement = opts.placement ?? (anchorMessage ? "inline" : "panel");
+      if (placement === "inline" && (!view || !anchorMessage)) return;
+      if (s.compose && !docked) void s.closeCompose(true);
+      set({
+        compose: d,
+        composePlacement: placement,
+        inlineCollapsed: false,
+        inlineAnchor: placement === "inline" && view ? { accountId: view.thread.accountId, threadId: view.thread.id, messageId: anchorMessage! } : null,
+        composeGhost: null,
+        sendLaterOpen: false,
+        snippetPickerOpen: false,
+        popover: null,
+      });
       get().syncScope();
       return;
     }
-    const view = s.open;
+
     const row = s.rows[s.selected];
     const accountId = view?.thread.accountId ?? row?.accountId ?? s.accountFilter ?? s.status.accounts.find((a) => a.authState !== "signed_out")?.id ?? s.status.accounts[0]?.id;
     if (!accountId) {
@@ -756,15 +810,74 @@ export const useApp = create<AppState>((set, get) => ({
       });
       return;
     }
+
+    // Reply, reply all, and forward dock under a message in the reading pane. C keeps the floating panel.
+    const placement: ComposePlacement = opts.placement ?? (mode === "new" || !view ? "panel" : "inline");
+
+    if (docked && s.compose && placement === "inline") {
+      const existing = s.compose;
+      if (opts.bodyHtml && !opts.messageId) {
+        // An instant reply prefills whatever box is docked, collapsed or open.
+        set({ compose: { ...existing, bodyHtml: opts.bodyHtml }, inlineCollapsed: false, composeGhost: null });
+        get().syncScope();
+        if (!s.inlineCollapsed) get().editorApi?.setHtml(opts.bodyHtml);
+        return;
+      }
+      if (s.inlineCollapsed && !opts.messageId) {
+        get().expandInline();
+        return;
+      }
+      const targetId = opts.messageId ?? docked.messageId;
+      if (mode === existing.mode && targetId === docked.messageId) {
+        get().editorApi?.focus();
+        return;
+      }
+      // A different message or mode moves the box there; what was typed comes along.
+      const owners = new Set(s.status.accounts.map((a) => a.email.toLowerCase()));
+      let moved: ComposeDraft;
+      try {
+        moved = buildDraft({ mode, accountId, thread: view!.thread, messages: view!.messages, owners, sanitize, bodyHtml: existing.bodyHtml, targetId });
+      } catch (err) {
+        get().showToast({ eyebrow: "NOT SUPPORTED YET", text: (err as Error).message });
+        return;
+      }
+      set({ compose: { ...moved, draftId: existing.draftId ?? null }, inlineAnchor: { ...docked, messageId: targetId }, inlineCollapsed: false, sendLaterOpen: false, snippetPickerOpen: false });
+      get().syncScope();
+      return;
+    }
+
+    // Coming back to a thread with a parked reply: R reopens that draft rather than starting over.
+    if (placement === "inline" && view && !opts.messageId && !opts.bodyHtml && (mode === "reply" || mode === "replyAll")) {
+      const saved = s.drafts.find((d) => d.threadId === view.thread.id && d.accountId === view.thread.accountId);
+      if (saved) {
+        get().openCompose(saved.mode, { draft: saved, placement: "inline" });
+        return;
+      }
+    }
+
+    // Only one compose at a time. A panel over an inline reply parks the reply as a draft; its strip stays under the thread.
+    if (s.compose) void s.closeCompose(true);
+
     const owners = new Set(s.status.accounts.map((a) => a.email.toLowerCase()));
+    const targetId = placement === "inline" ? opts.messageId ?? lastId : null;
     let draft: ComposeDraft;
     try {
-      draft = buildDraft({ mode, accountId, thread: view?.thread ?? null, messages: view?.messages ?? [], owners, sanitize, bodyHtml: opts.bodyHtml });
+      draft = buildDraft({ mode, accountId, thread: view?.thread ?? null, messages: view?.messages ?? [], owners, sanitize, bodyHtml: opts.bodyHtml, targetId });
     } catch (err) {
       get().showToast({ eyebrow: "NOT SUPPORTED YET", text: (err as Error).message });
       return;
     }
-    set({ compose: draft, composeGhost: null, sendLaterOpen: false, snippetPickerOpen: false, popover: null });
+    if (placement === "inline" && !get().readingPane) get().setReadingPane(true);
+    set({
+      compose: draft,
+      composePlacement: placement,
+      inlineCollapsed: false,
+      inlineAnchor: placement === "inline" && view && targetId ? { accountId: view.thread.accountId, threadId: view.thread.id, messageId: targetId } : null,
+      composeGhost: null,
+      sendLaterOpen: false,
+      snippetPickerOpen: false,
+      popover: null,
+    });
     get().syncScope();
     const wantsGhost = s.settings.autoDraft && (mode === "reply" || mode === "replyAll") && !opts.bodyHtml && view;
     if (wantsGhost) {
@@ -785,9 +898,11 @@ export const useApp = create<AppState>((set, get) => ({
   async closeCompose(keepDraft = true) {
     const d = get().compose;
     if (!d) return;
-    set({ compose: null, composeGhost: null, sendLaterOpen: false, snippetPickerOpen: false, editorApi: null });
+    const inline = get().composePlacement === "inline";
+    set({ compose: null, composePlacement: "panel", inlineCollapsed: false, inlineAnchor: null, composeGhost: null, sendLaterOpen: false, snippetPickerOpen: false, editorApi: null });
     get().syncScope();
-    if (keepDraft && hasContent(d)) {
+    // An untouched inline reply has recipients but nothing written; that is not a draft worth keeping.
+    if (keepDraft && (inline ? hasBody(d) : hasContent(d))) {
       try {
         await invoke("drafts:save", d);
         get().showToast({ eyebrow: "DRAFT KEPT", text: d.subject || "(no subject)" });
@@ -801,14 +916,66 @@ export const useApp = create<AppState>((set, get) => ({
     }
   },
 
+  async dismissCompose() {
+    const s = get();
+    const d = s.compose;
+    if (!d) return;
+    if (s.composePlacement !== "inline") {
+      await s.closeCompose(true);
+      return;
+    }
+    if (!hasBody(d)) {
+      await s.closeCompose(false);
+      return;
+    }
+    set({ inlineCollapsed: true, sendLaterOpen: false, snippetPickerOpen: false, editorApi: null });
+    get().syncScope();
+    // The strip shows from memory at once; the draft also lands in the drafts table so it survives a restart.
+    try {
+      const draftId = await invoke("drafts:save", d);
+      set((cur) => (cur.compose && cur.compose.threadId === d.threadId && cur.compose.mode === d.mode ? { compose: { ...cur.compose, draftId } } : {}));
+      void get().loadDrafts();
+    } catch (err) {
+      set({ error: (err as Error).message });
+    }
+  },
+
+  expandInline() {
+    if (!get().compose || get().composePlacement !== "inline") return;
+    set({ inlineCollapsed: false });
+    get().syncScope();
+  },
+
+  async confirmSent() {
+    const open = get().open;
+    if (!open || !open.messages.some(isPending)) return;
+    const { accountId, id } = open.thread;
+    try {
+      const fresh = await invoke("threads:get", accountId, id);
+      set((cur) => {
+        if (!cur.open || cur.open.thread.id !== id || cur.open.thread.accountId !== accountId) return {};
+        return { open: { ...fresh, messages: mergePending(fresh.messages, cur.open.messages.filter(isPending)) } };
+      });
+    } catch {
+      // The next change refetches.
+    }
+  },
+
   async sendCompose(sendAt = null) {
     const d = get().compose;
     if (!d) return;
+    const inline = get().composePlacement === "inline";
     try {
       const r = await invoke("compose:send", d, sendAt);
-      set({ compose: null, composeGhost: null, sendLaterOpen: false, snippetPickerOpen: false, editorApi: null });
+      set({ compose: null, composePlacement: "panel", inlineCollapsed: false, inlineAnchor: null, composeGhost: null, sendLaterOpen: false, snippetPickerOpen: false, editorApi: null });
       get().syncScope();
       void get().loadDrafts();
+      // An inline reply shows up in the thread right away; the sync replaces it with the real message.
+      if (inline && !sendAt && d.threadId) {
+        const account = get().status.accounts.find((a) => a.id === d.accountId);
+        const sent = sentMessage({ draft: d, sendId: r.id, sentAt: r.sendAt, from: { email: account?.email ?? d.accountId, name: account?.displayName ?? "" } });
+        set((cur) => (cur.open && cur.open.thread.id === d.threadId && cur.open.thread.accountId === d.accountId ? { open: { ...cur.open, messages: [...cur.open.messages, sent] } } : {}));
+      }
       if (sendAt) {
         get().showToast({ eyebrow: "SCHEDULED", text: `Sends ${new Date(r.sendAt).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}. Undo (Z)`, undo: { kind: "send", id: r.id, until: Math.min(r.undoUntil, Date.now() + 15_000) } });
       } else {
@@ -955,6 +1122,17 @@ export const useApp = create<AppState>((set, get) => ({
     void get().loadDrafts();
   },
 }));
+
+/**
+ * An inline reply is docked under one thread. Whenever the reading pane moves
+ * to another thread or closes (J and K, a click, a view change, E, snooze),
+ * the draft is kept and the box goes; the strip is back when the thread is.
+ */
+useApp.subscribe((s, prev) => {
+  if (s.open === prev.open || !s.compose || s.composePlacement !== "inline" || !s.inlineAnchor) return;
+  const same = s.open && s.open.thread.id === s.inlineAnchor.threadId && s.open.thread.accountId === s.inlineAnchor.accountId;
+  if (!same) void s.closeCompose(true);
+});
 
 /** Send-later presets: T tomorrow 9:00, W next Monday 9:00. */
 export const SEND_LATER = { tomorrow: () => tomorrowAt(9), nextMonday: () => nextMondayAt(9) };

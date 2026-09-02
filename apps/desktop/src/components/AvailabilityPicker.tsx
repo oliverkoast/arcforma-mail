@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { insertComposeText } from "./Compose";
+import { insertComposeText } from "./ComposeEditor";
 import { invoke, on } from "../bridge";
 import { useApp } from "../state/store";
 import { atHour, coalesce, formatSlots, isBusy, SLOT_MS, systemTimeZone, timeZoneLabel, type Interval } from "../../shared/availability";

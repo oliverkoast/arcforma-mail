@@ -56,7 +56,7 @@ export const KEYMAP: Binding[] = [
   { key: "2", scope: "thread", action: "instantReply2", label: "Accept instant reply 2" },
   { key: "3", scope: "thread", action: "instantReply3", label: "Accept instant reply 3" },
   { key: "Tab", scope: "compose", action: "acceptDraft", label: "Accept auto-draft" },
-  { key: "Escape", scope: "compose", action: "closeCompose", label: "Close and keep the draft" },
+  { key: "Escape", scope: "compose", action: "closeCompose", label: "Keep the draft" },
   { key: "Enter", meta: true, scope: "compose", action: "send", label: "Send" },
   { key: "Enter", meta: true, shift: true, scope: "compose", action: "sendLater", label: "Send later" },
   { key: "d", meta: true, shift: true, scope: "compose", action: "discardCompose", label: "Discard draft" },

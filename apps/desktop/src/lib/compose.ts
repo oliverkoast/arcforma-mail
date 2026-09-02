@@ -107,6 +107,8 @@ export interface BuildDraftInput {
   owners: Set<string>;
   sanitize?: (html: string) => string;
   bodyHtml?: string;
+  /** Reply to this message rather than the thread's last inbound one: its recipients, its subject, its Message-ID, only it quoted. */
+  targetId?: string | null;
 }
 
 /** True when a message carries a real (non-inline) attachment. */
@@ -121,13 +123,14 @@ export function hasFileAttachments(m: MessageView | null): boolean {
  * attachments throws rather than quietly sending the text without them.
  */
 export function buildDraft(input: BuildDraftInput): ComposeDraft {
-  const target = input.mode === "new" ? null : replyTarget(input.messages);
+  const chosen = input.targetId ? input.messages.find((m) => m.id === input.targetId) ?? null : null;
+  const target = input.mode === "new" ? null : chosen ?? replyTarget(input.messages);
   if (input.mode === "forward" && hasFileAttachments(target)) {
     throw new Error("Forwarding attachments is not supported yet. Forward this one from Gmail.");
   }
   const { to, cc } = recipientsFor(input.mode, target, input.owners);
   const refs = input.mode === "forward" ? { inReplyTo: null, references: null } : referencesFor(target);
-  const baseSubject = input.thread?.subject ?? target?.subject ?? "";
+  const baseSubject = (chosen ? chosen.subject : input.thread?.subject ?? target?.subject) ?? "";
   const subject = input.mode === "new" ? "" : input.mode === "forward" ? forwardSubject(baseSubject) : replySubject(baseSubject);
   return {
     draftId: null,
@@ -170,4 +173,100 @@ export function textToHtml(text: string): string {
     .filter(Boolean)
     .map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
     .join("");
+}
+
+/** True when the body carries any text; recipients alone do not count. An untouched reply has recipients and no body. */
+export function hasBody(d: Pick<ComposeDraft, "bodyHtml">): boolean {
+  return d.bodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim().length > 0;
+}
+
+function displayName(a: Address): string {
+  return a.name || a.email;
+}
+
+/** The collapsed recipient line on an inline reply: "To Dana Reyes, Sam, cc Priya". */
+export function recipientLine(to: Address[], cc: Address[]): string {
+  if (to.length === 0 && cc.length === 0) return "No recipients yet";
+  const parts: string[] = [];
+  if (to.length) parts.push(`To ${to.map(displayName).join(", ")}`);
+  if (cc.length) parts.push(`cc ${cc.map(displayName).join(", ")}`);
+  return parts.join(", ");
+}
+
+/** The first words of a draft body for the collapsed strip. Cut at a word boundary; "..." only when something was cut. */
+export function draftPreview(bodyHtml: string, max = 72): string {
+  const text = bodyHtml
+    .replace(/<\/(p|div|li|br|h\d)>/gi, " ")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return "(empty)";
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max + 1);
+  const at = cut.lastIndexOf(" ");
+  return `${(at > max / 2 ? cut.slice(0, at) : text.slice(0, max)).trim()}...`;
+}
+
+export interface SentMessageInput {
+  draft: ComposeDraft;
+  sendId: number;
+  sentAt: number;
+  from: Address;
+}
+
+/** The id prefix on a message shown in the thread before the sync has seen it. */
+export const PENDING_PREFIX = "pending:";
+
+/**
+ * The sent message shown under the thread the moment Send is pressed, before
+ * the sync confirms it. The real message (signature and quote included)
+ * replaces it once the sync sees an outbound message at or after its time.
+ */
+export function sentMessage(input: SentMessageInput): MessageView {
+  const { draft } = input;
+  const html = draft.bodyHtml.trim() || "<p></p>";
+  return {
+    accountId: draft.accountId,
+    id: `${PENDING_PREFIX}${input.sendId}`,
+    threadId: draft.threadId ?? "",
+    internalDate: input.sentAt,
+    from: input.from,
+    replyTo: null,
+    to: draft.to,
+    cc: draft.cc,
+    messageIdHeader: null,
+    references: draft.references ?? null,
+    subject: draft.subject,
+    snippet: draftPreview(html, 120),
+    labelIds: ["SENT"],
+    direction: "out",
+    isAuto: false,
+    hasAttachments: false,
+    body: { html, text: null, attachments: [] },
+    loadImages: false,
+  };
+}
+
+export function isPending(m: Pick<MessageView, "id">): boolean {
+  return m.id.startsWith(PENDING_PREFIX);
+}
+
+/**
+ * Merges a freshly fetched thread with the optimistic sent messages still
+ * shown. A pending message is confirmed (dropped) when the fetch carries an
+ * outbound message at or after its time, and given up on after fifteen
+ * minutes so a failed send never leaves a phantom message in the thread.
+ */
+export function mergePending(fresh: MessageView[], pending: MessageView[], now = Date.now()): MessageView[] {
+  const keep = pending.filter((p) => {
+    if (now - p.internalDate > 15 * 60_000) return false;
+    return !fresh.some((m) => m.direction === "out" && !isPending(m) && m.internalDate >= p.internalDate - 60_000);
+  });
+  return [...fresh, ...keep];
 }
