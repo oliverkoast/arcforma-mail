@@ -73,7 +73,7 @@ test("an inline reply owns the keys while its editor has focus; collapsed to its
   assert.equal(resolveBinding("compose", key("Escape"), true)?.action, "closeCompose", "Escape collapses the box to its strip");
   assert.equal(resolveBinding("compose", key("Tab"), true)?.action, "acceptDraft");
   assert.equal(resolveBinding("compose", key("Enter", true), true)?.action, "send");
-  assert.equal(resolveBinding("compose", key("Enter", true, true), true)?.action, "sendLater");
+  assert.equal(resolveBinding("compose", key("l", true, true), true)?.action, "sendLater");
   assert.equal(resolveBinding("compose", key(";", true), true)?.action, "snippets");
 
   const strip = state({ compose: { mode: "reply" }, inlineCollapsed: true, open: {} });

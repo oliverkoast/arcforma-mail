@@ -23,7 +23,8 @@ test("compose scope: plain letters never trigger list actions, even off the edit
   assert.equal(resolveBinding("compose", key("Escape"), true)?.action, "closeCompose");
   assert.equal(resolveBinding("compose", key("Tab"), true)?.action, "acceptDraft");
   assert.equal(resolveBinding("compose", key("Enter", { metaKey: true }), true)?.action, "send");
-  assert.equal(resolveBinding("compose", key("Enter", { metaKey: true, shiftKey: true }), true)?.action, "sendLater");
+  assert.equal(resolveBinding("compose", key("l", { metaKey: true, shiftKey: true }), true)?.action, "sendLater");
+  assert.equal(resolveBinding("compose", key("l"), true), null, "the bare letter still types");
   assert.equal(resolveBinding("compose", key(";", { metaKey: true }), true)?.action, "snippets");
   assert.equal(resolveBinding("compose", key("Enter"), true), null, "plain Enter stays in the editor");
 });

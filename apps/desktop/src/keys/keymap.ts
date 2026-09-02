@@ -60,7 +60,7 @@ export const KEYMAP: Binding[] = [
   { key: "Tab", scope: "compose", action: "acceptDraft", label: "Accept auto-draft" },
   { key: "Escape", scope: "compose", action: "closeCompose", label: "Keep the draft" },
   { key: "Enter", meta: true, scope: "compose", action: "send", label: "Send" },
-  { key: "Enter", meta: true, shift: true, scope: "compose", action: "sendLater", label: "Send later" },
+  { key: "l", meta: true, shift: true, scope: "compose", action: "sendLater", label: "Send later, pick a time" },
   { key: "d", meta: true, shift: true, scope: "compose", action: "discardCompose", label: "Discard draft" },
   { key: "Escape", scope: "sendLater", action: "closeSendLater", label: "Back to the message" },
   { key: "t", scope: "sendLater", action: "sendTomorrow", label: "Tomorrow 9:00" },

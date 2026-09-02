@@ -114,7 +114,7 @@ test("the compose scope gets Send, Send later, Discard, and Insert snippet for e
     cmds.map((c) => [c.label, c.key]),
     [
       ["Send", "Cmd+Enter"],
-      ["Send later", "Cmd+Shift+Enter"],
+      ["Send later", "Cmd+Shift+L"],
       ["Discard draft", "Cmd+Shift+D"],
       ["Insert snippet Thanks and next step", ";thanks"],
     ]

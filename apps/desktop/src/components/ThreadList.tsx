@@ -247,7 +247,7 @@ export function ThreadList() {
             ) : isQueueView(view) ? (
               <EmptyState headline="Nothing in Later." detail="Weekly 0 threads older than a week land here." />
             ) : view === "scheduled" ? (
-              <EmptyState headline="Nothing scheduled." detail="Cmd+Shift+Enter in a message sends it later; it waits here until then." />
+              <EmptyState headline="Nothing scheduled." detail="Shift+Cmd+L in a message sends it later; it waits here until then." />
             ) : view.startsWith("search:") ? (
               <div className="af-h3">Nothing matches {title}</div>
             ) : (
