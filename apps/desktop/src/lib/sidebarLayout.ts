@@ -25,6 +25,12 @@ export interface SidebarRowDescriptor {
   view: ViewSpec;
   count: (c: SidebarCounts) => number;
   hiddenByDefault?: boolean;
+  /**
+   * A row that earns its place whether or not it has anything in it. Everything else is a filter or
+   * an overflow, and a filter matching nothing is noise: it is folded away until it has something,
+   * or until the reader asks to see the whole group.
+   */
+  alwaysShown?: boolean;
   /** Where a row the stored layout never saw wants to land: right after this row id, when that row is in the same group. */
   after?: string;
   /** A row the stored layout never saw that belongs at the head of its group rather than the end. */
@@ -54,23 +60,23 @@ const none = () => 0;
 const BUILTIN_ROWS: SidebarRowDescriptor[] = [
   // The one row that answers "what do I have to deal with". It sits above the queues because it is
   // the only list where something is waiting on him rather than on his calendar.
-  { id: "needsyou", kind: "builtin", label: "Needs you", group: "queues", view: { view: "needsyou" }, count: (c) => c.needsYou, first: true },
-  { id: "daily", kind: "builtin", label: "Daily 0", group: "queues", view: { view: "daily" }, count: (c) => c.daily },
+  { id: "needsyou", kind: "builtin", label: "Needs you", group: "queues", view: { view: "needsyou" }, count: (c) => c.needsYou, first: true, alwaysShown: true },
+  { id: "daily", kind: "builtin", label: "Daily 0", group: "queues", view: { view: "daily" }, count: (c) => c.daily, alwaysShown: true },
   { id: "weekly", kind: "builtin", label: "Weekly 0", group: "queues", view: { view: "weekly" }, count: (c) => c.weekly },
   { id: "later", kind: "builtin", label: "Later", group: "queues", view: { view: "later" }, count: (c) => c.later },
-  { id: "inbox", kind: "builtin", label: "Everything", group: "inbox", view: { view: "inbox" }, count: (c) => c.inbox },
-  { id: "important", kind: "builtin", label: "Important", group: "inbox", view: { view: "inbox", split: "important" }, count: (c) => c.important },
-  { id: "other", kind: "builtin", label: "Other", group: "inbox", view: { view: "inbox", split: "other" }, count: (c) => c.other },
+  { id: "inbox", kind: "builtin", label: "Everything", group: "inbox", view: { view: "inbox" }, count: (c) => c.inbox, alwaysShown: true },
+  { id: "important", kind: "builtin", label: "Important", group: "inbox", view: { view: "inbox", split: "important" }, count: (c) => c.important, alwaysShown: true },
+  { id: "other", kind: "builtin", label: "Other", group: "inbox", view: { view: "inbox", split: "other" }, count: (c) => c.other, alwaysShown: true },
   { id: "unread", kind: "builtin", label: "Unread", group: "inbox", view: { view: "unread" }, count: (c) => c.unread },
   { id: "attachments", kind: "builtin", label: "With attachments", group: "inbox", view: { view: "attachments" }, count: (c) => c.attachments },
   { id: "snoozed", kind: "builtin", label: "Snoozed", group: "folders", view: { view: "snoozed" }, count: (c) => c.snoozed },
   { id: "starred", kind: "builtin", label: "Starred", group: "folders", view: { view: "starred" }, count: (c) => c.starred },
-  { id: "sent", kind: "builtin", label: "Sent", group: "folders", view: { view: "sent" }, count: none },
-  { id: "drafts", kind: "builtin", label: "Drafts", group: "folders", view: { view: "drafts" }, count: none },
+  { id: "sent", kind: "builtin", label: "Sent", group: "folders", view: { view: "sent" }, count: none, alwaysShown: true },
+  { id: "drafts", kind: "builtin", label: "Drafts", group: "folders", view: { view: "drafts" }, count: none, alwaysShown: true },
   { id: "scheduled", kind: "builtin", label: "Scheduled", group: "folders", view: { view: "scheduled" }, count: (c) => c.scheduled },
   // Done in the interface, "archive" as the stored id, so a layout saved when
   // the row was called Archive keeps its place, its order, and its hidden flag.
-  { id: "archive", kind: "builtin", label: "Done", group: "folders", view: { view: "archive" }, count: (c) => c.archive },
+  { id: "archive", kind: "builtin", label: "Done", group: "folders", view: { view: "archive" }, count: (c) => c.archive, alwaysShown: true },
   { id: "spam", kind: "builtin", label: "Spam", group: "folders", view: { view: "spam" }, count: (c) => c.spam, hiddenByDefault: true },
   { id: "trash", kind: "builtin", label: "Trash", group: "folders", view: { view: "trash" }, count: (c) => c.trash, hiddenByDefault: true },
 ];
@@ -112,6 +118,23 @@ export function rowDescriptors(categories: CategoryInfo[], searches: SavedSearch
     ref: String(s.id),
   }));
   return [...withOrder(BUILTIN_ROWS, "attachments", [...types, ...customRows]), ...searchRows];
+}
+
+/**
+ * Which rows a group actually shows. A row is shown when it is pinned, when it holds something,
+ * when it is the view being read, or when the reader has asked for the whole group. The rest are
+ * counted so the group can offer them, and a group whose every row is empty still shows its pinned
+ * rows rather than collapsing to nothing.
+ */
+export function rowsToShow(
+  rows: SidebarRowDescriptor[],
+  countOf: (row: SidebarRowDescriptor) => number,
+  isActive: (row: SidebarRowDescriptor) => boolean,
+  showAll: boolean
+): { shown: SidebarRowDescriptor[]; folded: number } {
+  if (showAll) return { shown: rows, folded: 0 };
+  const shown = rows.filter((r) => r.alwaysShown === true || isActive(r) || countOf(r) > 0);
+  return { shown, folded: rows.length - shown.length };
 }
 
 export function defaultLayout(rows: SidebarRowDescriptor[]): SidebarLayout {

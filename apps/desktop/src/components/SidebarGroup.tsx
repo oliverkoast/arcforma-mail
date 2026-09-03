@@ -2,7 +2,7 @@ import type React from "react";
 import { Fragment, useState } from "react";
 import type { Anchor } from "../state/store";
 import { SidebarRow, anchorOf } from "./SidebarRow";
-import type { SidebarRowDescriptor } from "../lib/sidebarLayout";
+import { rowsToShow, type SidebarRowDescriptor } from "../lib/sidebarLayout";
 import type { SidebarGroupId } from "../../shared/types";
 
 export interface SidebarGroupProps {
@@ -41,6 +41,7 @@ function dropTarget(container: HTMLElement, y: number): string | null {
  */
 export function SidebarGroup(p: SidebarGroupProps) {
   // undefined: nothing hovering; null: drop at the end; a string: drop before that row.
+  const [showAll, setShowAll] = useState(false);
   const [drop, setDrop] = useState<string | null | undefined>(undefined);
 
   const over = (e: React.DragEvent<HTMLDivElement>) => {
@@ -61,6 +62,11 @@ export function SidebarGroup(p: SidebarGroupProps) {
     p.setDragId(null);
   };
 
+  // A row that holds nothing is noise. Only the rows that answer "where am I", the ones with mail
+  // in them, and the one being read are shown; the rest fold behind a single line the group can
+  // open. Nothing is lost and nothing has to be configured.
+  const { shown, folded } = rowsToShow(p.rows, p.countOf, p.isActive, showAll || p.dragId !== null);
+
   return (
     <div className={`nav-group${drop !== undefined ? " drop-target" : ""}`} data-group={p.id} onDragOver={over} onDragEnter={over} onDragLeave={leave} onDrop={dropped}>
       <div className="nav-group-head">
@@ -71,8 +77,22 @@ export function SidebarGroup(p: SidebarGroupProps) {
           </svg>
         </button>
       </div>
+      {folded > 0 ? (
+        <button
+          className="af-mono nav-more"
+          onClick={() => setShowAll(true)}
+          data-tip={`${folded} ${folded === 1 ? "row is" : "rows are"} empty right now. They come back on their own when something lands in them.`}
+        >
+          {folded} more
+        </button>
+      ) : null}
+      {showAll && folded === 0 && p.rows.some((r) => r.alwaysShown !== true && p.countOf(r) === 0 && !p.isActive(r)) ? (
+        <button className="af-mono nav-more" onClick={() => setShowAll(false)} data-tip="Fold the empty rows away again.">
+          Show fewer
+        </button>
+      ) : null}
       <div className="nav-rows">
-        {p.rows.map((row) => (
+        {shown.map((row) => (
           <Fragment key={row.id}>
             {drop === row.id ? <div className="nav-drop-line" aria-hidden="true" /> : null}
             <SidebarRow
@@ -94,7 +114,7 @@ export function SidebarGroup(p: SidebarGroupProps) {
           </Fragment>
         ))}
         {drop === null ? <div className="nav-drop-line" aria-hidden="true" /> : null}
-        {p.rows.length === 0 && drop === undefined ? <div className="af-mono nav-rows-empty">No rows. Drag one here or add one.</div> : null}
+        {shown.length === 0 && drop === undefined ? <div className="af-mono nav-rows-empty">No rows. Drag one here or add one.</div> : null}
       </div>
     </div>
   );

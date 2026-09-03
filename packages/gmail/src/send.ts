@@ -19,6 +19,12 @@ export interface ComposeInput {
   inReplyTo?: string | null;
   references?: string[] | string | null;
   signatureHtml?: string | null;
+  /**
+   * A read receipt's 1x1 image, appended as the very last element of the HTML
+   * part and never written into the plain text part. Absent unless the sender
+   * armed a receipt for this one message. See packages/pixel-service.
+   */
+  trackingPixelHtml?: string | null;
   attachments?: Array<{ filename: string; content: Buffer | string; contentType?: string; cid?: string }>;
   messageId?: string;
   date?: Date;
@@ -49,6 +55,16 @@ export function appendQuote(html: string, quotedHtml: string | null | undefined)
   return `${html}<br><div class="gmail_quote">${quotedHtml}</div>`;
 }
 
+/**
+ * The read receipt image, last of everything. It goes into the HTML part only:
+ * a plain text reader has no way to fetch it, and putting a URL there would
+ * show the recipient a tracker rather than hide one.
+ */
+export function appendPixel(html: string, pixelHtml: string | null | undefined): string {
+  if (!pixelHtml) return html;
+  return `${html}${pixelHtml}`;
+}
+
 export interface BuiltMessage {
   /** base64url for messages.send. */
   raw: string;
@@ -62,8 +78,10 @@ export async function buildRawMessage(input: ComposeInput): Promise<BuiltMessage
   }
   const bodyHtml = input.html ?? (input.text ? `<div>${input.text.replace(/\n/g, "<br>")}</div>` : "");
   // Body, then signature, then the quoted history: signature once, above the quote.
-  const html = appendQuote(appendSignature(bodyHtml, input.signatureHtml), input.quotedHtml);
+  // A read receipt's image, when one is armed, goes after all of it.
+  const html = appendPixel(appendQuote(appendSignature(bodyHtml, input.signatureHtml), input.quotedHtml), input.trackingPixelHtml);
   const bodyText = input.text ?? htmlToText(bodyHtml);
+  // The text part is built from the body, signature, and quote only: the pixel is never in it.
   const textParts = [bodyText];
   if (input.signatureHtml) textParts.push(htmlToText(input.signatureHtml));
   if (input.quotedHtml && input.quotedHtml.trim()) textParts.push(htmlToText(input.quotedHtml));

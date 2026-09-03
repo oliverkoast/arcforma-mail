@@ -8,7 +8,7 @@ import { reindexAllMessages } from "./queries/messages.js";
 
 export type Db = DatabaseSync;
 
-const SCHEMA_VERSION = 14;
+const SCHEMA_VERSION = 15;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
@@ -217,6 +217,51 @@ BEGIN
 END;
 `;
 
+// Version 15: read receipts. One row per message a sender armed, keyed by the
+// 32 hex token the image URL carries, plus one row per fetch the pixel service
+// reported. Nothing here says a person read anything: an event records that
+// software asked for an image, and classify.mjs in packages/pixel-service
+// grades it opened, automatic, or unknown. A message with no event has no
+// signal, which is not the same as unread, so there is deliberately no
+// "read" column to be tempted by.
+//
+// The events table is keyed by (token, at, grade) so the poller can replay a
+// page of events, or the same page twice after a failure, without doubling
+// anything up.
+//
+// drafts.read_receipt carries the per-message choice while the message is
+// still being written, so Esc, park, and a round trip through Gmail's drafts
+// do not quietly disarm it.
+const MIGRATION_15 = `
+CREATE TABLE IF NOT EXISTS read_receipts (
+  token      TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  thread_id  TEXT,
+  send_id    INTEGER,
+  message_id TEXT,
+  sent_at    INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS read_receipts_thread ON read_receipts(account_id, thread_id);
+CREATE INDEX IF NOT EXISTS read_receipts_message ON read_receipts(account_id, message_id);
+CREATE INDEX IF NOT EXISTS read_receipts_sent ON read_receipts(sent_at DESC);
+
+CREATE TABLE IF NOT EXISTS read_receipt_events (
+  token      TEXT NOT NULL,
+  at         INTEGER NOT NULL,
+  grade      TEXT NOT NULL,
+  why        TEXT NOT NULL DEFAULT '',
+  user_agent TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (token, at, grade)
+);
+`;
+
+/** ALTER TABLE ADD COLUMN has no IF NOT EXISTS, so the column is checked first; the step can then rerun like the others. */
+function migrateDraftReceipts(db: Db): void {
+  const have = new Set((db.prepare("PRAGMA table_info(drafts)").all() as Array<{ name: string }>).map((c) => c.name));
+  if (!have.has("read_receipt")) db.exec("ALTER TABLE drafts ADD COLUMN read_receipt INTEGER NOT NULL DEFAULT 0");
+}
+
 /** Opens (or creates) the store, applies pragmas, and migrates to the current schema. */
 export function openStore(file: string): Db {
   if (file !== ":memory:") fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -266,6 +311,7 @@ export function migrate(db: Db): void {
     // The unified list had no index and scanned the whole table on every keystroke of the sidebar.
     { version: 14, sql: () => "CREATE INDEX IF NOT EXISTS threads_all_sort ON threads(sort_at DESC, account_id, id);" },
     { version: 13, sql: () => MIGRATION_13 },
+    { version: 15, sql: () => MIGRATION_15, after: (d) => migrateDraftReceipts(d) },
   ];
   for (const step of steps) {
     if (step.version <= current) continue;

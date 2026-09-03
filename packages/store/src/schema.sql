@@ -197,7 +197,9 @@ CREATE TABLE IF NOT EXISTS reminders (
 );
 CREATE INDEX IF NOT EXISTS reminders_due ON reminders(status, due_at);
 
--- tracking_token is reserved for read statuses, which are not built.
+-- tracking_token holds the read receipt token this message was armed with, or
+-- NULL, which is the usual case: receipts are off by default and chosen per
+-- message. See read_receipts (schema 15) and packages/pixel-service.
 CREATE TABLE IF NOT EXISTS send_queue (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
   account_id        TEXT NOT NULL,

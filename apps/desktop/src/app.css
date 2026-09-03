@@ -1369,6 +1369,20 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 }
 .nav-group.drop-target .nav-eyebrow { color: var(--af-cobalt); }
 .nav-rows-empty { padding: 6px 12px; color: var(--af-text-soft); }
+/* The one line a group offers when it has folded its empty rows away. Quieter than a row, because
+   it is a way back rather than a place to go. */
+.nav-more {
+  display: block;
+  width: 100%;
+  padding: 4px 12px 8px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: var(--af-text-soft);
+  cursor: pointer;
+}
+.nav-more:hover { color: var(--af-text); }
+.nav-more:focus-visible { outline: 2px solid var(--af-bright); outline-offset: -2px; }
 .sidebar-popover {
   position: fixed;
   z-index: 25;

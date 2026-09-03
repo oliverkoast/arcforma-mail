@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EMPTY_SIDEBAR_COUNTS, type CategoryInfo, type SavedSearchInfo, type SidebarLayout } from "../../shared/types";
-import { defaultLayout, groupOf, hiddenRows, isActiveView, moveRow, reconcileLayout, rowDescriptors, setRowHidden, viewTitle, visibleRows } from "./sidebarLayout";
+import { defaultLayout, groupOf, hiddenRows, isActiveView, moveRow, reconcileLayout, rowDescriptors, setRowHidden, viewTitle, visibleRows, rowsToShow } from "./sidebarLayout";
 import { sidebarRowTip } from "./tips";
 
 const categories: CategoryInfo[] = [
@@ -192,4 +192,26 @@ test("Archive became Done in the interface only: a layout that hid or reordered 
   const moved = reconcileLayout({ version: 1, groups: [{ id: "queues", rows: [{ id: "archive", hidden: false }, { id: "daily", hidden: false }] }] }, rows);
   assert.equal(groupOf(moved, "archive"), "queues");
   assert.ok(visibleRows(moved, "queues", rows).some((r) => r.label === "Done"), "and it shows there, as Done");
+});
+
+test("a row holding nothing folds away, unless it is pinned, active, or the group is opened", () => {
+  const rows = rowDescriptors([], []);
+  const empty = () => 0;
+  const none = () => false;
+  const pinned = rows.filter((r) => r.alwaysShown === true).map((r) => r.id);
+  assert.deepEqual(rowsToShow(rows, empty, none, false).shown.map((r) => r.id), pinned,
+    "with an empty mailbox the sidebar is only the rows that earn their place empty");
+  assert.ok(rowsToShow(rows, empty, none, false).folded > 0, "the rest are counted, not lost");
+  assert.equal(rowsToShow(rows, empty, none, true).shown.length, rows.length, "opening the group shows everything");
+
+  const unread = rows.find((r) => r.id === "unread");
+  assert.ok(unread, "unread is a row");
+  assert.ok(!rowsToShow(rows, empty, none, false).shown.includes(unread), "an empty filter folds");
+  assert.ok(rowsToShow(rows, (r) => (r.id === "unread" ? 3 : 0), none, false).shown.includes(unread), "a filter with mail in it shows");
+  assert.ok(rowsToShow(rows, empty, (r) => r.id === "unread", false).shown.includes(unread), "the view being read always shows");
+});
+
+test("the pinned rows are the ones that answer where am I, not the filters", () => {
+  const ids = rowDescriptors([], []).filter((r) => r.alwaysShown === true).map((r) => r.id).sort();
+  assert.deepEqual(ids, ["archive", "daily", "drafts", "important", "inbox", "needsyou", "other", "sent"]);
 });

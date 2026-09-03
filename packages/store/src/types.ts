@@ -217,6 +217,34 @@ export interface DraftRow {
   origin: DraftOrigin;
   /** Last edit made in this app; imports from Gmail leave it alone. Decides who wins a conflict. */
   local_edited_at: number | null;
+  /** 1 when the writer armed a read receipt for this one message. Off unless they turned it on. */
+  read_receipt: number;
+}
+
+/**
+ * One message a sender armed a read receipt on (schema 15). The token is what
+ * the image URL carries; message_id is filled in once the send succeeds.
+ * Nothing here records that anyone read anything, because the pixel cannot
+ * know that; the events say what asked for the image and when.
+ */
+export interface ReadReceiptRow {
+  token: string;
+  account_id: string;
+  thread_id: string | null;
+  send_id: number | null;
+  message_id: string | null;
+  sent_at: number;
+  created_at: number;
+}
+
+/** One fetch of a receipt's image, as the pixel service graded it. */
+export interface ReadReceiptEventRow {
+  token: string;
+  at: number;
+  /** opened, automatic, or unknown, from classifyFetch in packages/pixel-service. */
+  grade: string;
+  why: string;
+  user_agent: string;
 }
 
 export interface CorrectionRow {
