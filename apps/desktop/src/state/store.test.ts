@@ -1072,6 +1072,43 @@ test("a thread open with no list behind it is still what E acts on", async () =>
   useApp.getState().showToast(null);
 });
 
+test("S and U act on the row the cursor is on, and U flips whichever state it is in", async () => {
+  // Pointing at a row selects it, so this is what hovering and pressing S or U does.
+  const { useApp } = await import("./store");
+  const readRow = { ...summary("t-read", "Already read"), unread: false };
+  const unreadRow = { ...summary("t-unread", "Not read yet"), unread: true, starred: true };
+  useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [readRow, unreadRow], selected: 0, open: null, toast: null, view: "inbox", readingPane: false, categories: [] });
+
+  calls.length = 0;
+  await useApp.getState().starSelected();
+  assert.deepEqual(calls.find((c) => c.channel === "threads:star")?.args.slice(1), ["t-read", true], "S stars the row under the cursor");
+  assert.equal(useApp.getState().rows[0]?.starred, true);
+
+  await useApp.getState().toggleReadSelected();
+  assert.deepEqual(calls.find((c) => c.channel === "threads:markRead")?.args.slice(1), ["t-read", false], "a read thread is marked unread");
+  assert.equal(useApp.getState().rows[0]?.unread, true, "and the dot comes back on the row");
+
+  // Move the cursor to the unread one: the same key does the opposite, because it reads the state.
+  calls.length = 0;
+  useApp.setState({ selected: 1 });
+  await useApp.getState().toggleReadSelected();
+  assert.deepEqual(calls.find((c) => c.channel === "threads:markRead")?.args.slice(1), ["t-unread", true], "an unread thread is marked read");
+  assert.equal(useApp.getState().rows[1]?.unread, false);
+
+  // S on a starred thread takes the star off, the same way.
+  calls.length = 0;
+  await useApp.getState().starSelected();
+  assert.deepEqual(calls.find((c) => c.channel === "threads:star")?.args.slice(1), ["t-unread", false]);
+  useApp.getState().showToast(null);
+});
+
+test("marking read or unread says nothing, because the row already shows it", async () => {
+  const { useApp } = await import("./store");
+  useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [summary("t-a", "A")], selected: 0, open: null, toast: null, view: "inbox", readingPane: false, categories: [] });
+  await useApp.getState().toggleReadSelected();
+  assert.equal(useApp.getState().toast, null, "a toast for a change you can see is noise");
+});
+
 test("with nothing open, E still acts on the row the cursor is on", async () => {
   const { useApp } = await import("./store");
   useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [summary("t-a", "A"), summary("t-b", "B")], selected: 1, open: null, toast: null, view: "inbox", readingPane: false, categories: [] });

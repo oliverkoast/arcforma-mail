@@ -95,7 +95,7 @@ function Row({ row, selected, owners, onClick, onHover, accountLabel, accountEma
           </span>
         ) : null}
         {accountLabel ? <span className="af-mono row-account">{accountLabel}</span> : null}
-        {row.canUnsubscribe ? <span className="row-unsub" data-tip="Unsubscribe and archive (U)" data-key={keyLabel("unsubscribe") ?? undefined}>U</span> : null}
+        {row.canUnsubscribe ? <span className="row-unsub" data-tip="Unsubscribe and archive" data-key={keyLabel("unsubscribe") ?? undefined}>U</span> : null}
       </div>
     </div>
   );

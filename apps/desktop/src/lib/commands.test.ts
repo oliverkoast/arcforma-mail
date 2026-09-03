@@ -66,7 +66,7 @@ test("the registry lists every keymap command once with its label and key, threa
   const withLink = buildCommands(source({ thread: { canUnsubscribe: true, queue: "daily", starred: true } }));
   const linked = new Map(withLink.map((c) => [c.id, c]));
   assert.equal(linked.get("action:unsubscribe")?.label, "Unsubscribe and archive");
-  assert.equal(linked.get("action:unsubscribe")?.key, "U");
+  assert.equal(linked.get("action:unsubscribe")?.key, "Shift+U", "U now marks read or unread");
   assert.equal(linked.get("action:toggleDaily")?.label, "Remove from Daily 0");
   assert.equal(linked.get("action:star")?.label, "Unstar");
 

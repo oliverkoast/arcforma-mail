@@ -58,17 +58,27 @@ test("D and W drive the queues in the list and the thread, with labels in the ke
   assert.equal(weekly?.label, "Add to or remove from Weekly 0");
 });
 
-test("U unsubscribes in the list and the thread only: never while typing, never in a popover", () => {
+test("U marks read or unread in the list and the thread only: never while typing, never in a popover", () => {
   for (const scope of ["list", "thread"] as const) {
     const b = resolveBinding(scope, key("u"), false);
-    assert.equal(b?.action, "unsubscribe", scope);
-    assert.equal(b?.label, "Unsubscribe and archive");
+    assert.equal(b?.action, "toggleRead", scope);
+    assert.equal(b?.label, "Mark read or unread");
   }
   assert.equal(resolveBinding("list", key("u"), true), null, "a u typed into a field is text");
   assert.equal(resolveBinding("compose", key("u"), true), null);
   assert.equal(resolveBinding("popover", key("u"), false), null);
   assert.equal(resolveBinding("search", key("u"), true), null);
-  assert.equal(resolveBinding("list", key("U", { shiftKey: true }), false), null, "Shift+U is not U");
+  assert.deepEqual(KEYMAP.filter((b) => b.action === "toggleRead").map((b) => b.scope).sort(), ["list", "thread"]);
+});
+
+test("Shift+U is unsubscribe, which U used to be", () => {
+  // Moved to make room for read and unread. Plain U must never reach it again by accident: the two
+  // are not comparable, one is reversible with the same key and the other sends a request that
+  // cannot be recalled.
+  for (const scope of ["list", "thread"] as const) {
+    assert.equal(resolveBinding(scope, key("u", { shiftKey: true }), false)?.action, "unsubscribe", scope);
+    assert.notEqual(resolveBinding(scope, key("u"), false)?.action, "unsubscribe", scope);
+  }
   assert.deepEqual(KEYMAP.filter((b) => b.action === "unsubscribe").map((b) => b.scope).sort(), ["list", "thread"]);
 });
 

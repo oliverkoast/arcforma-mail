@@ -27,6 +27,7 @@ export function appActions(): ActionMap {
       if (s().rows.length) s().setPopover("snooze");
     },
     star: () => void s().starSelected(),
+    toggleRead: () => void s().toggleReadSelected(),
     toggleDaily: () => void s().toggleQueue("daily"),
     toggleWeekly: () => void s().toggleQueue("weekly"),
     reply: () => s().openCompose("reply"),

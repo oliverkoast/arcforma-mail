@@ -190,6 +190,8 @@ export interface AppState {
   /** O, and the control above the first message: every earlier message open, or folded back to how the thread opened. */
   toggleAllMessages: () => void;
   starSelected: () => Promise<void>;
+  /** U: read becomes unread and unread becomes read, on whichever thread the keys are acting on. */
+  toggleReadSelected: () => Promise<void>;
   /** D or W on the cursor row. */
   toggleQueue: (queue: "daily" | "weekly") => Promise<void>;
   snoozeSelected: (wakeAt: number) => Promise<void>;
@@ -770,6 +772,28 @@ export const useApp = create<AppState>((set, get) => ({
     const all = cur.open.messages.length > 0 && cur.open.messages.every((m) => cur.expandedMessages.includes(m.id));
     if (all) set({ expandedMessages: defaultExpanded(cur.open.messages), allExpanded: false });
     else set({ expandedMessages: cur.open.messages.map((m) => m.id), allExpanded: true });
+  },
+
+  async toggleReadSelected() {
+    const s = get();
+    const row = actionTarget(s);
+    if (!row || scheduledOnly(row, s.showToast)) return;
+    // Whichever it is not: an unread thread is being marked read, a read one unread.
+    const read = row.unread;
+    invalidateThreadList();
+    set((cur) => ({
+      rows: cur.rows.map((r) => (r.id === row.id && r.accountId === row.accountId ? { ...r, unread: !read } : r)),
+      open: cur.open && cur.open.thread.id === row.id && cur.open.thread.accountId === row.accountId ? { ...cur.open, thread: { ...cur.open.thread, unread: !read } } : cur.open,
+    }));
+    try {
+      await invoke("threads:markRead", row.accountId, row.id, read);
+      void get().refreshCounts();
+    } catch (err) {
+      set({ error: (err as Error).message });
+      void get().loadThreads(true);
+    }
+    // No toast. The dot on the row is the whole result, it is already on screen, and pressing U
+    // again puts it back: a message announcing something you can see is noise.
   },
 
   async starSelected() {

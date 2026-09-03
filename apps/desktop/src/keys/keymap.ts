@@ -46,8 +46,11 @@ export const KEYMAP: Binding[] = [
   { key: "a", scope: "thread", action: "replyAll", label: "Reply all" },
   { key: "f", scope: "list", action: "forward", label: "Forward" },
   { key: "f", scope: "thread", action: "forward", label: "Forward" },
-  { key: "u", scope: "list", action: "unsubscribe", label: "Unsubscribe and archive" },
-  { key: "u", scope: "thread", action: "unsubscribe", label: "Unsubscribe and archive" },
+  { key: "u", scope: "list", action: "toggleRead", label: "Mark read or unread" },
+  { key: "u", scope: "thread", action: "toggleRead", label: "Mark read or unread" },
+  // Unsubscribe moved off U to make room for read and unread, which is the far more common key.
+  { key: "u", shift: true, scope: "list", action: "unsubscribe", label: "Unsubscribe and archive" },
+  { key: "u", shift: true, scope: "thread", action: "unsubscribe", label: "Unsubscribe and archive" },
   // O in a thread: every earlier message open at once, and again to fold them back.
   { key: "o", scope: "thread", action: "toggleAllMessages", label: "Expand or collapse the earlier messages" },
   { key: "z", scope: "list", action: "undo", label: "Undo" },
