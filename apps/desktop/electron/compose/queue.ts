@@ -4,8 +4,10 @@
 // the send is undone in time.
 
 import { buildRawMessage } from "@arcforma/gmail";
-import { cancelSend, enqueueSend, getAccount, getSend, undoWindowMs, type Db } from "@arcforma/store";
-import type { Address, ComposeDraft, SendResult, UndoSendResult } from "../../shared/types.js";
+import { cancelSend, createReceipt, deleteReceiptForSend, enqueueSend, getAccount, getSend, setSendTrackingToken, undoWindowMs, type Db } from "@arcforma/store";
+import { newReceiptToken } from "../receipts/pixel.js";
+import type { ReceiptArmer } from "../receipts/arm.js";
+import type { Address, ComposeDraft, ReceiptArmResult, SendResult, UndoSendResult } from "../../shared/types.js";
 
 export interface QueueOptions {
   /** Absolute time for send later; omitted means now plus the undo window. */
@@ -15,6 +17,30 @@ export interface QueueOptions {
   signatureHtml?: string | null;
   /** The Gmail draft this message was mirrored as. Deleted once the send succeeds; handed back on undo or failure. */
   gmailDraftId?: string | null;
+  /** The pixel service, when the message asked for a read receipt. Absent means no receipt can be armed. */
+  receipts?: ReceiptArmer;
+}
+
+/** No receipt was asked for, which is the answer for almost every message. */
+const NO_RECEIPT: ReceiptArmResult = { requested: false, armed: false, problem: null };
+
+/**
+ * Arms the receipt this message asked for, if it asked for one. Everything
+ * that can go wrong here comes back as a `problem` sentence rather than a
+ * throw: a receipt that could not be armed must never cost the sender a send.
+ */
+async function armReceipt(draft: ComposeDraft, sentAt: number, armer: ReceiptArmer | undefined): Promise<ReceiptArmResult & { token: string | null; pixelHtml: string | null }> {
+  if (draft.readReceipt !== true) return { ...NO_RECEIPT, token: null, pixelHtml: null };
+  const refuse = (problem: string) => ({ requested: true, armed: false, problem, token: null, pixelHtml: null });
+  if (!armer) return refuse("no pixel service is set up yet; see packages/pixel-service/README.md");
+  if (!armer.usable()) return refuse(armer.unavailable());
+  const token = newReceiptToken();
+  try {
+    await armer.register(token, sentAt);
+  } catch (err) {
+    return refuse((err as Error).message || "the pixel service did not answer");
+  }
+  return { requested: true, armed: true, problem: null, token, pixelHtml: armer.pixelHtml(token) };
 }
 
 /** What a send_queue row remembers about the draft it came from. */
@@ -69,6 +95,9 @@ export async function queueSend(db: Db, draft: ComposeDraft, opts: QueueOptions 
   const later = Boolean(opts.sendAt && opts.sendAt > now);
   const sendAt = later ? opts.sendAt! : now + window;
   const undoUntil = sendAt;
+  // Registered against the time the message actually goes out, not the time it
+  // was written: the service grades a fetch by how soon after sending it came.
+  const receipt = await armReceipt(draft, sendAt, opts.receipts);
   const built = await buildRawMessage({
     from: senderFor(db, draft.accountId),
     to: draft.to,
@@ -83,6 +112,8 @@ export async function queueSend(db: Db, draft: ComposeDraft, opts: QueueOptions 
     signatureHtml: opts.signatureHtml === undefined ? signatureFor(db, draft.accountId) : opts.signatureHtml,
     // A send-later message is dated when it goes out, not when it was written.
     date: later ? new Date(sendAt) : undefined,
+    // Last of everything in the HTML part, and never in the plain text part.
+    trackingPixelHtml: receipt.pixelHtml,
   });
   const row = enqueueSend(db, {
     accountId: draft.accountId,

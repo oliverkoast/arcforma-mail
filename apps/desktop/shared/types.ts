@@ -65,6 +65,41 @@ export interface ThreadSummary {
   unsubscribeState: UnsubscribeState | null;
   /** Set on the pseudo-threads the Scheduled view lists: a send_queue row waiting for its send-later time. */
   scheduled?: ScheduledInfo | null;
+  /** What the pixel service knows about the newest message on this thread that was sent with a receipt armed. Null for every other thread. */
+  receipt?: ReceiptSummary | null;
+}
+
+/**
+ * The three things a read receipt is allowed to say. "Unread" is not one of
+ * them and never will be: a message with no fetch has no signal, because most
+ * clients block images. packages/pixel-service/src/classify.mjs decides which
+ * of the three a message is in.
+ */
+export type ReceiptStatus = "opened" | "possibly automatic" | "no signal";
+
+export interface ReceiptSummary {
+  status: ReceiptStatus;
+  /** The first fetch that counts for this status, or null when there was none. */
+  firstAt: number | null;
+  /** How many fetches. Never rendered as a number of people: one reader's client can fetch many times. */
+  count: number;
+  /** The sentence explaining what this state does and does not mean, shown on hover. */
+  tip: string;
+}
+
+/** What the Test the connection button reports, in plain words. */
+export interface ReceiptCheckResult {
+  ok: boolean;
+  text: string;
+}
+
+/** Whether the receipt this message asked for was actually armed, and why not when it was not. */
+export interface ReceiptArmResult {
+  /** True when the sender asked for a receipt on this message. */
+  requested: boolean;
+  armed: boolean;
+  /** Plain words for the toast when a receipt was asked for and did not happen. */
+  problem: string | null;
 }
 
 /** needs_you is Important that is waiting on a reply from Oliver; important is Important that is not. */
@@ -155,6 +190,8 @@ export interface MessageView {
   hasAttachments: boolean;
   body: { html: string | null; text: string | null; attachments: AttachmentInfo[] } | null;
   loadImages: boolean;
+  /** What the pixel service knows about this message, when the sender armed a receipt on it. Null otherwise, which is almost always. */
+  receipt?: ReceiptSummary | null;
 }
 
 export interface ThreadView {
@@ -293,6 +330,12 @@ export interface SettingsInfo {
   remindClientsAfterDays: number;
   /** Category ids or names whose threads and correspondents count as clients for that rule. */
   remindScope: string[];
+  /** Read receipts are available at all. Off by default, and on does not arm anything: every message is still chosen one at a time. */
+  readReceipts: boolean;
+  /** The pixel service to register tokens with. Empty until one is deployed; see packages/pixel-service/README.md. */
+  readReceiptsUrl: string;
+  /** Whether a bearer token is stored. The token itself never crosses the bridge in either direction. */
+  readReceiptsTokenSet: boolean;
 }
 
 export type ComposeMode = "new" | "reply" | "replyAll" | "forward";
@@ -312,6 +355,12 @@ export interface ComposeDraft {
   quotedHtml: string;
   inReplyTo?: string | null;
   references?: string | null;
+  /**
+   * The writer asked for a read receipt on this one message. Off unless they
+   * turned it on, saved with the draft so Esc, parking, and Gmail's own copy
+   * of the draft cannot quietly disarm or arm it.
+   */
+  readReceipt?: boolean;
 }
 
 export type DraftMirrorState = "pending" | "synced" | "failed";
@@ -334,6 +383,8 @@ export interface SendResult {
   id: number;
   sendAt: number;
   undoUntil: number;
+  /** Whether the read receipt this message asked for was armed. A receipt that could not be armed never stops the send. */
+  receipt: ReceiptArmResult;
 }
 
 /** A queued send that was cancelled in time comes back as a draft to reopen. */
@@ -621,6 +672,10 @@ export interface ArcmailInvoke {
   "snippets:delete": (id: number) => SnippetInfo[];
   "settings:get": () => SettingsInfo;
   "settings:set": (patch: Partial<SettingsInfo>) => SettingsInfo;
+  /** Stores the pixel service's bearer token in the main process. Write only: nothing ever reads it back out to the renderer. */
+  "receipts:setToken": (token: string) => SettingsInfo;
+  /** Asks the configured service for events since now. A 200 means the URL and the token are both right. */
+  "receipts:check": () => ReceiptCheckResult;
   "categories:create": (name: string, prompt: string) => CategoryInfo[];
   "categories:update": (id: string, patch: { name?: string; prompt?: string }) => CategoryInfo[];
   "categories:delete": (id: string) => CategoryInfo[];

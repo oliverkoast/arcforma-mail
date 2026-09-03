@@ -22,6 +22,14 @@ export interface Settings {
   remindClientsAfterDays: number;
   /** Category ids or names whose threads and correspondents count as clients for that rule. */
   remindScope: string[];
+  /**
+   * Whether read receipts are available at all. Off unless someone turns them
+   * on, and turning them on arms nothing: every message is still chosen one at
+   * a time. See docs/adr/0003-read-receipts-reverse-an-earlier-decision.md.
+   */
+  readReceipts: boolean;
+  /** The pixel service this app registers tokens with and collects from. Empty until one is deployed. */
+  readReceiptsUrl: string;
   /** The first-run onboarding step that was on screen when the app last quit, so a resume lands there. */
   onboardingStep: string;
   /** True once someone pressed Start reading at the end of onboarding. Until then the flow owns the window. */
@@ -39,6 +47,8 @@ export const DEFAULT_SETTINGS: Settings = {
   weekStartAt: 0,
   remindClientsAfterDays: 3,
   remindScope: ["Clients"],
+  readReceipts: false,
+  readReceiptsUrl: "",
   onboardingStep: "welcome",
   onboardingDone: false,
 };
@@ -73,6 +83,8 @@ export function getSettings(db: Db): Settings {
     weekStartAt: getSetting(db, "weekStartAt"),
     remindClientsAfterDays: getSetting(db, "remindClientsAfterDays"),
     remindScope: getSetting(db, "remindScope"),
+    readReceipts: getSetting(db, "readReceipts"),
+    readReceiptsUrl: getSetting(db, "readReceiptsUrl"),
     onboardingStep: getSetting(db, "onboardingStep"),
     onboardingDone: getSetting(db, "onboardingDone"),
   };

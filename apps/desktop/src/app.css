@@ -1370,8 +1370,9 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .nav-group.drop-target .nav-eyebrow { color: var(--af-cobalt); }
 .nav-rows-empty { padding: 6px 12px; color: var(--af-text-soft); }
 /* The one line a group offers when it has folded its empty rows away. Quieter than a row, because
-   it is a way back rather than a place to go. */
-.nav-more {
+   it is a way back rather than a place to go. Deliberately not .nav-more: that class already
+   belongs to a row's "..." menu button, and reusing it put the menu on top of the row label. */
+.nav-fold {
   display: block;
   width: 100%;
   padding: 4px 12px 8px;
@@ -1381,8 +1382,8 @@ body.is-resizing { cursor: col-resize; user-select: none; }
   color: var(--af-text-soft);
   cursor: pointer;
 }
-.nav-more:hover { color: var(--af-text); }
-.nav-more:focus-visible { outline: 2px solid var(--af-bright); outline-offset: -2px; }
+.nav-fold:hover { color: var(--af-text); }
+.nav-fold:focus-visible { outline: 2px solid var(--af-bright); outline-offset: -2px; }
 .sidebar-popover {
   position: fixed;
   z-index: 25;

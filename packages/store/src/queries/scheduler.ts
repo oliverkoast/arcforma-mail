@@ -117,6 +117,11 @@ export function enqueueSend(db: Db, input: EnqueueSendInput): SendQueueRow {
   return db.prepare("SELECT * FROM send_queue WHERE id = ?").get(Number(res.lastInsertRowid)) as unknown as SendQueueRow;
 }
 
+/** Records the read receipt token this message was armed with, so the row says what went out in it. */
+export function setSendTrackingToken(db: Db, id: number, token: string | null): void {
+  db.prepare("UPDATE send_queue SET tracking_token = ?, updated_at = ? WHERE id = ?").run(token, Date.now(), id);
+}
+
 /** Cancels only while still queued. Returns false once the worker has picked the row up. */
 export function cancelSend(db: Db, id: number): boolean {
   const res = db.prepare("UPDATE send_queue SET status = 'cancelled', updated_at = ? WHERE id = ? AND status = 'queued'").run(Date.now(), id);

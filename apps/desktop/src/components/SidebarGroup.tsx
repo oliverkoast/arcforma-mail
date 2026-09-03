@@ -79,7 +79,7 @@ export function SidebarGroup(p: SidebarGroupProps) {
       </div>
       {folded > 0 ? (
         <button
-          className="af-mono nav-more"
+          className="af-mono nav-fold"
           onClick={() => setShowAll(true)}
           data-tip={`${folded} ${folded === 1 ? "row is" : "rows are"} empty right now. They come back on their own when something lands in them.`}
         >
@@ -87,7 +87,7 @@ export function SidebarGroup(p: SidebarGroupProps) {
         </button>
       ) : null}
       {showAll && folded === 0 && p.rows.some((r) => r.alwaysShown !== true && p.countOf(r) === 0 && !p.isActive(r)) ? (
-        <button className="af-mono nav-more" onClick={() => setShowAll(false)} data-tip="Fold the empty rows away again.">
+        <button className="af-mono nav-fold" onClick={() => setShowAll(false)} data-tip="Fold the empty rows away again.">
           Show fewer
         </button>
       ) : null}

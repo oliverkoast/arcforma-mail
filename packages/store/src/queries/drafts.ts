@@ -17,6 +17,8 @@ export interface DraftInput {
   references?: string | null;
   /** Carried over when a queued send is undone or fails: the Gmail draft still exists and the update reuses it. */
   gmailDraftId?: string | null;
+  /** The writer armed a read receipt for this message. Kept with the draft so Esc, park, and Gmail's copy do not disarm it. */
+  readReceipt?: boolean;
 }
 
 /**
@@ -29,7 +31,7 @@ export function saveDraft(db: Db, d: DraftInput, now = Date.now()): number {
   if (d.id) {
     db.prepare(
       `UPDATE drafts SET account_id = ?, thread_id = ?, mode = ?, to_json = ?, cc_json = ?, bcc_json = ?, subject = ?, body_html = ?, quoted_html = ?,
-         in_reply_to = ?, references_header = ?, updated_at = ?, local_edited_at = ?, mirror_state = 'pending', mirror_error = NULL WHERE id = ?`
+         in_reply_to = ?, references_header = ?, read_receipt = ?, updated_at = ?, local_edited_at = ?, mirror_state = 'pending', mirror_error = NULL WHERE id = ?`
     ).run(
       d.accountId,
       d.threadId ?? null,
@@ -42,6 +44,7 @@ export function saveDraft(db: Db, d: DraftInput, now = Date.now()): number {
       d.quotedHtml ?? "",
       d.inReplyTo ?? null,
       d.references ?? null,
+      d.readReceipt ? 1 : 0,
       now,
       now,
       d.id
@@ -50,9 +53,9 @@ export function saveDraft(db: Db, d: DraftInput, now = Date.now()): number {
   }
   const res = db
     .prepare(
-      `INSERT INTO drafts (account_id, thread_id, mode, to_json, cc_json, bcc_json, subject, body_html, quoted_html, in_reply_to, references_header, created_at, updated_at,
+      `INSERT INTO drafts (account_id, thread_id, mode, to_json, cc_json, bcc_json, subject, body_html, quoted_html, in_reply_to, references_header, read_receipt, created_at, updated_at,
          gmail_draft_id, mirror_state, origin, local_edited_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'local', ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'local', ?)`
     )
     .run(
       d.accountId,
@@ -66,6 +69,7 @@ export function saveDraft(db: Db, d: DraftInput, now = Date.now()): number {
       d.quotedHtml ?? "",
       d.inReplyTo ?? null,
       d.references ?? null,
+      d.readReceipt ? 1 : 0,
       now,
       now,
       d.gmailDraftId ?? null,
@@ -171,6 +175,11 @@ export interface GmailDraftImport {
  * replaced in place (an edit made in Gmail); otherwise a new row is inserted
  * with origin gmail. Either way the row is synced and local_edited_at is left
  * alone: nothing was typed here. Returns the local id.
+ *
+ * read_receipt is deliberately absent from both statements. Gmail knows
+ * nothing about the choice, so an edit made there must not disarm a receipt
+ * armed here, and a draft that arrives from Gmail starts at the column
+ * default, which is off.
  */
 export function upsertGmailDraft(db: Db, d: GmailDraftImport, now = Date.now()): number {
   return transaction(db, () => {
