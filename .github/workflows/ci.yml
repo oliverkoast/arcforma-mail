@@ -8,9 +8,9 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      # No version here on purpose: package.json's packageManager field is the single source of
+      # truth, and declaring it twice makes the action refuse to run.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
       - uses: actions/setup-node@v4
         with:
           node-version: 24
