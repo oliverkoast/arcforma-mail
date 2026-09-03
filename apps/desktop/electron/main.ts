@@ -482,6 +482,24 @@ const SMOKE_STEPS: SmokeStep[] = [
   // Esc: the box collapses to its one-line strip and the keys go back to the thread.
   { name: "inline-strip", script: "await window.__arcmail.dismissCompose();", waitMs: 800 },
   // Reply from a message in the middle of the thread: the box moves under it, recipients come from that message, the typed text comes along.
+  // Cmd+Enter sends with the caret in the body. This is a step rather than a unit test because the
+  // fault it guards against was invisible to one: the binding resolved correctly in isolation while
+  // TipTap's own keymap, which sits below the window on the editor element, consumed the event
+  // before it ever reached the dispatcher. Only a real editor with a real key event can show that.
+  {
+    name: "send-chord",
+    script:
+      "window.__arcmail.openCompose('reply');" +
+      "await new Promise((r) => setTimeout(r, 500));" +
+      "window.__arcmail.editorApi.setHtml('<p>Sent with the chord.</p>');" +
+      "await new Promise((r) => setTimeout(r, 200));" +
+      "const before = window.__arcmail.compose !== null;" +
+      "const el = document.querySelector('.compose-body');" +
+      "el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', metaKey: true, bubbles: true, cancelable: true }));" +
+      "await new Promise((r) => setTimeout(r, 600));" +
+      "console.log('SEND CHORD had a draft open:', before, 'and it closed:', window.__arcmail.compose === null);",
+    waitMs: 700,
+  },
   { name: "inline-reply-mid", script: "window.__arcmail.openCompose('reply', { messageId: 'm-k6' }); await new Promise((r) => setTimeout(r, 400)); document.querySelector('.inline-reply').scrollIntoView({ block: 'center' });", waitMs: 1200 },
   // The pointer rests on the Mark done icon for longer than the tooltip delay: the card sits under it with the E hint.
   { name: "tooltip-mark-done", script: null, hover: ".reading-actions .icon-btn[data-glyph='done']", waitMs: 900 },

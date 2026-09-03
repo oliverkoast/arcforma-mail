@@ -4,6 +4,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Snippets, insertExpanded } from "../editor/snippets";
+import { SendChord } from "../editor/sendChord";
 import { missingVariablesText } from "../lib/snippets";
 import { useApp } from "../state/store";
 import { keyLabel } from "../keys/keyLabel";
@@ -39,6 +40,7 @@ export function ComposeEditor({ compose, autofocus }: { compose: ComposeDraft; a
   const editor = useEditor(
     {
       extensions: [
+        SendChord.configure({ onSend: () => void useApp.getState().sendCompose(null) }),
         StarterKit.configure({ link: false, heading: false, codeBlock: false, code: false, horizontalRule: false }),
         Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true, defaultProtocol: "https" }),
         Placeholder.configure({ placeholder: "Write your message. ;trigger then Space expands a snippet." }),

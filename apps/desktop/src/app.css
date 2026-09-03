@@ -778,6 +778,19 @@ body.is-resizing { cursor: col-resize; user-select: none; }
   padding-top: 10px;
   border-top: 1px solid var(--af-rule);
 }
+/* Nothing in this row may be squeezed. A flex item shrinks by default, so the long receipt label
+   crushed Send into a black circle with two letters showing. The buttons keep their size and the
+   receipt label, which is the only part that can afford to lose characters, truncates instead. */
+.compose-foot > .btn {
+  flex: none;
+}
+.compose-foot > .compose-receipt {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .compose-hint {
   margin-left: auto;
   text-align: right;
@@ -2407,14 +2420,6 @@ button.message-from {
   color: var(--af-accent);
 }
 
-/* The keyboard chord printed inside a button, the way Superhuman prints it on Send. Quiet enough
-   that the word is still the button, loud enough that nobody has to hover to learn the shortcut. */
-.btn-key {
-  margin-left: 8px;
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  opacity: 0.65;
-}
 
 /* G is armed and waiting for the letter that names a view. A half-typed chord is never a mystery:
    it says what it is waiting for, and it goes away on its own after a couple of seconds. */
