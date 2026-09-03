@@ -8,6 +8,7 @@ import { stripBannerPrefix } from "../lib/mailhtml";
 import { threadRowTip } from "../lib/tooltip";
 import { keyLabel } from "../keys/keyLabel";
 import { SearchExcerpt } from "./SearchExcerpt";
+import { Icon } from "./IconButton";
 import type { DraftInfo, SearchHighlight, ThreadSummary } from "../../shared/types";
 
 /** The search operators, each with what it does, for the hint under an empty focused search field. */
@@ -81,6 +82,11 @@ function Row({ row, selected, owners, onClick, onHover, accountLabel, accountEma
       </div>
       <div className="row-meta">
         <span>{row.scheduled ? `Sends ${sendsAt(row.scheduled.sendAt)}` : listDate(row.lastMessageAt)}</span>
+        {row.hasAttachments ? (
+          <span className="row-clip" data-tip="This thread has files attached.">
+            <Icon glyph="paperclip" />
+          </span>
+        ) : null}
         {row.starred ? (
           <span className="star" data-tip="Starred. S removes the star.">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">

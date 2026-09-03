@@ -2468,3 +2468,31 @@ button.message-from {
   gap: 8px;
   margin-top: 8px;
 }
+
+/* A message has files. Shown at the top next to the date, because the chips themselves sit under
+   the body, and on a long message that is a screen or two below the fold: an attachment nobody
+   scrolls far enough to find is an attachment that may as well not have been sent. */
+.message-files {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--af-text-soft);
+  font-size: 11px;
+}
+.message-files:hover {
+  color: var(--af-text);
+}
+.message-files svg {
+  width: 13px;
+  height: 13px;
+}
+/* The same fact on a list row, so it is known before the thread is opened. */
+.row-clip {
+  display: inline-flex;
+  align-items: center;
+  color: var(--af-text-soft);
+}
+.row-clip svg {
+  width: 13px;
+  height: 13px;
+}

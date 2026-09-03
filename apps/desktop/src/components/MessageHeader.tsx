@@ -3,6 +3,8 @@ import { useState, type ReactNode } from "react";
 import { fullDate } from "../lib/format";
 import { describeRecipients, initials, messageEyebrow, relativeTime, showSenderAddress } from "../lib/recipients";
 import { receiptLine } from "../lib/receipts";
+import { Icon } from "./IconButton";
+import { attachmentMarker } from "../lib/attachments";
 import type { MessageView } from "../../shared/types";
 
 /**
@@ -10,6 +12,10 @@ import type { MessageView } from "../../shared/types";
  * sender's initials; the recipient line reads as a sentence and opens to the
  * full list, grouped To, Cc, and Bcc, with the owner's own addresses shown as
  * "you". The eyebrow appears only when the addressing is worth knowing.
+ *
+ * A message with files says so here, at the top, next to the date. The chips themselves sit under
+ * the body, which on a long message is a screen or two away: an attachment nobody scrolls far enough
+ * to see is an attachment that was not sent. Pressing the marker scrolls to them.
  *
  * A message you sent with a receipt armed also carries what the pixel service knows, under the date.
  * It reads "Opened", "Possibly automatic" or "No signal" and never a count of opens, because one
@@ -24,6 +30,7 @@ export function MessageHeader({ message, owners, repeatSender, actions, onCollap
   const isOwner = own.has(message.from.email.toLowerCase());
   const name = message.from.name.trim() || message.from.email;
   const when = fullDate(message.internalDate);
+  const { count: files, exact } = attachmentMarker(message);
   // Clicking the header folds the message back to a row. Anything that is
   // already a control of its own keeps its own job: the recipient list, the
   // reply icons, the address rows.
@@ -80,6 +87,21 @@ export function MessageHeader({ message, owners, repeatSender, actions, onCollap
         <div className="message-date" data-tip={when}>
           {relativeTime(message.internalDate)}
         </div>
+        {files > 0 ? (
+          <button
+            type="button"
+            className="af-mono message-files"
+            data-tip={exact ? `${files} ${files === 1 ? "file is" : "files are"} attached. Press to scroll down to them.` : "This message has files attached. Press to scroll down to them."}
+            onClick={(e) => {
+              e.stopPropagation();
+              const block = (e.currentTarget.closest(".message") ?? e.currentTarget.parentElement)?.querySelector(".attachments");
+              block?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+            }}
+          >
+            <Icon glyph="paperclip" />
+            {exact ? <span>{files}</span> : null}
+          </button>
+        ) : null}
         {message.receipt ? (
           <div className={`af-mono message-receipt is-${message.receipt.status === "opened" ? "opened" : "quiet"}`} data-tip={message.receipt.tip}>
             {receiptLine(message.receipt)}

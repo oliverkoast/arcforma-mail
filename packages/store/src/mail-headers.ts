@@ -52,10 +52,31 @@ export function senderType(headers: GmailHeaderInput[] | undefined, fromEmail: s
   return "person";
 }
 
+/**
+ * Whether a message carries a file someone would open, as opposed to pieces of its own layout.
+ *
+ * Inline images have filenames and attachment ids like any other part, so counting every named part
+ * marked the paperclip on newsletters and put them in the With attachments view, where a reader
+ * opening one finds nothing to open. An image referenced by the body through a Content-ID, or one
+ * that says Content-Disposition: inline, is part of the message, not something attached to it. This
+ * is the same rule the MIME walker applies when it sets `inline` on a parsed attachment.
+ */
 export function partHasAttachment(part: GmailPartInput | undefined): boolean {
   if (!part) return false;
-  if (part.filename && part.body?.attachmentId) return true;
+  if (part.filename && part.body?.attachmentId && !isInlinePart(part)) return true;
   return (part.parts ?? []).some(partHasAttachment);
+}
+
+function isInlinePart(part: GmailPartInput): boolean {
+  const headers = part.headers ?? [];
+  let disposition = "";
+  let contentId = "";
+  for (const h of headers) {
+    const name = (h.name ?? "").toLowerCase();
+    if (name === "content-disposition") disposition = (h.value ?? "").toLowerCase();
+    else if (name === "content-id") contentId = h.value ?? "";
+  }
+  return disposition.trimStart().startsWith("inline") || contentId.trim().length > 0;
 }
 
 

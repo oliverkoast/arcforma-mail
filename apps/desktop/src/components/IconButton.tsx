@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
 import { keyLabel } from "../keys/keyLabel";
 
-export type Glyph = "reply" | "replyAll" | "forward" | "done" | "inbox" | "snooze" | "star" | "daily" | "weekly" | "trash" | "unsubscribe";
+export type Glyph = "reply" | "replyAll" | "forward" | "done" | "inbox" | "snooze" | "star" | "daily" | "weekly" | "trash" | "unsubscribe" | "paperclip";
 
 const STROKE = { fill: "none", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round", strokeLinejoin: "round" } as const;
 
 /** Small UI glyphs, 16 px, hidden from assistive tech: the button's aria-label carries the meaning. */
-function Icon({ glyph }: { glyph: Glyph }): ReactNode {
+export function Icon({ glyph }: { glyph: Glyph }): ReactNode {
   switch (glyph) {
     case "reply":
       return (
@@ -69,6 +69,13 @@ function Icon({ glyph }: { glyph: Glyph }): ReactNode {
           <circle cx="10.1" cy="8" r="1" />
           <circle cx="12.3" cy="8" r="1" />
           <circle cx="14.5" cy="8" r="1" />
+        </svg>
+      );
+    case "paperclip":
+      // A paperclip, drawn as the one stroke it is: down the long side, round the bottom, back up.
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" {...STROKE} aria-hidden="true">
+          <path d="M11.5 5.5v5a3.5 3.5 0 0 1-7 0V4.75a2.25 2.25 0 0 1 4.5 0v5.75a1 1 0 0 1-2 0V5.5" />
         </svg>
       );
     case "trash":
