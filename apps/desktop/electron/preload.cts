@@ -55,6 +55,8 @@ const INVOKE_CHANNELS = new Set([
   "snippets:delete",
   "settings:get",
   "settings:set",
+  "receipts:setToken",
+  "receipts:check",
   "categories:create",
   "categories:update",
   "categories:delete",

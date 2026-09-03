@@ -16,6 +16,8 @@ const threadDelays = new Map<string, number>();
 let saveDelay = 0;
 /** Delay on the attachment channels, so a test can look at the chip while the fetch is still running. */
 let attachmentDelay = 0;
+/** Makes compose:send answer with an older, receipt-less shape, to prove a sent message stays sent. */
+let sendResultOmitsReceipt = false;
 /** Channels whose next call fails, to check the failure reaches a toast. */
 const failNext = new Map<string, string>();
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -57,8 +59,11 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
         case "drafts:delete":
           draftRows.delete(args[0] as number);
           return undefined;
-        case "compose:send":
-          return { id: nextSendId++, sendAt: Date.now() + 10_000, undoUntil: Date.now() + 10_000 };
+        case "compose:send": {
+          const r = { id: nextSendId++, sendAt: Date.now() + 10_000, undoUntil: Date.now() + 10_000, receipt: { requested: false, armed: false } };
+          if (sendResultOmitsReceipt) delete (r as { receipt?: unknown }).receipt;
+          return r;
+        }
         case "attachments:preview": {
           if (attachmentDelay) await wait(attachmentDelay);
           return undefined;
@@ -416,6 +421,27 @@ test("Send replaces the inline box with the message appended to the thread; Z ta
   useApp.getState().updateCompose({ bodyHtml: "<p>Later.</p>" });
   await useApp.getState().sendCompose(Date.now() + 3_600_000);
   assert.equal(useApp.getState().open?.messages.length, 4);
+  useApp.getState().showToast(null);
+});
+
+test("a message that has left is never reported as not sent, whatever fails afterwards", async () => {
+  // The regression: sendCompose wrapped the invoke and everything after it in one try. When a later
+  // step threw on a field the main process had started returning, the catch showed "NOT SENT" for a
+  // message Gmail had already accepted. Only the invoke is guarded now.
+  const useApp = await freshKickoff();
+  useApp.getState().openCompose("reply");
+  useApp.getState().updateCompose({ bodyHtml: "<p>Gone already.</p>" });
+  sendResultOmitsReceipt = true;
+  try {
+    await useApp.getState().sendCompose(null);
+  } finally {
+    sendResultOmitsReceipt = false;
+  }
+  const s = useApp.getState();
+  assert.notEqual(s.toast?.eyebrow, "NOT SENT", "the send succeeded, so nothing may say it did not");
+  assert.match(s.toast?.text ?? "", /^Sent\./);
+  assert.equal(s.toast?.undo?.kind, "send", "and undo still has something to take back");
+  assert.equal(s.compose, null, "the compose closed, because the message went");
   useApp.getState().showToast(null);
 });
 

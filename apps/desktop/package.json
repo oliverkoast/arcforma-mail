@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@arcforma/gmail": "workspace:*",
+    "@arcforma/pixel-service": "workspace:*",
     "@arcforma/store": "workspace:*",
     "@tanstack/react-virtual": "^3.14.10",
     "@tiptap/core": "3.31.0",

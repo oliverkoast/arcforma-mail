@@ -3,7 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.mjs" },
-  "scripts": { "test": "node --test test/*.test.mjs", "typecheck": "node --check src/index.mjs && node --check src/worker.mjs" },
-  "engines": { "node": ">=22" }
+  "exports": {
+    ".": {
+      "types": "./src/index.d.mts",
+      "default": "./src/index.mjs"
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "typecheck": "node --check src/index.mjs && node --check src/worker.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "types": "./src/index.d.mts",
+  "files": [
+    "src"
+  ]
 }

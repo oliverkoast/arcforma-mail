@@ -238,6 +238,8 @@ export interface AppState {
 
   openCompose: (mode: ComposeMode, opts?: OpenComposeOptions) => void;
   updateCompose: (patch: Partial<ComposeDraft>) => void;
+  /** The read receipt control in the compose footer. Per message, and saved with the draft so parking it does not disarm it. */
+  setReadReceipt: (on: boolean) => void;
   /** Saves the open compose to the drafts table (and so to Gmail) two seconds after the last edit. */
   autosaveCompose: () => Promise<void>;
   closeCompose: (keepDraft?: boolean) => Promise<void>;
@@ -303,7 +305,7 @@ function writeStoredBool(key: string, value: boolean): void {
 }
 
 const EMPTY_STATUS: AccountsStatus = { accounts: [], configPath: "", configError: null };
-const DEFAULT_SETTINGS: SettingsInfo = { undoWindowSec: 10, autoDraft: false, remoteImages: "always", remindClientsAfterDays: 3, remindScope: ["Clients"] };
+const DEFAULT_SETTINGS: SettingsInfo = { undoWindowSec: 10, autoDraft: false, remoteImages: "always", remindClientsAfterDays: 3, remindScope: ["Clients"], readReceipts: false, readReceiptsUrl: "", readReceiptsTokenSet: false };
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 /** How much of the current toast's time is still to run, and when that run started, so a hover can hold it. */
 let toastRemaining = 0;
@@ -324,7 +326,7 @@ let composeSession = 0;
 /** What the open compose last wrote to the drafts table, so an unchanged compose is not saved again and a row that differs is known to have changed elsewhere (Gmail). */
 let lastSaved: { draftId: number; key: string } | null = null;
 function saveKey(d: ComposeDraft): string {
-  return JSON.stringify([d.to, d.cc, d.bcc, d.subject, d.bodyHtml]);
+  return JSON.stringify([d.to, d.cc, d.bcc, d.subject, d.bodyHtml, d.readReceipt === true]);
 }
 /** Bumped on every open, close, or view change of the reading pane; a threads:get that resolves for an older open is dropped, so a fast J J never lands the first thread over the second. */
 let openSeq = 0;
@@ -1265,6 +1267,11 @@ export const useApp = create<AppState>((set, get) => ({
     }
   },
 
+  setReadReceipt(on) {
+    if (!get().compose) return;
+    get().updateCompose({ readReceipt: on });
+  },
+
   updateCompose(patch) {
     set((cur) => (cur.compose ? { compose: { ...cur.compose, ...patch } } : {}));
     cancelAutosave();
@@ -1413,8 +1420,17 @@ export const useApp = create<AppState>((set, get) => ({
     const inline = get().composePlacement === "inline";
     cancelAutosave();
     while (autosaveInflight) await autosaveInflight;
+    // Only the invoke is guarded. Everything after it runs on a message that has already left, so a
+    // failure there must never reach the "NOT SENT" toast: telling someone a sent message was not
+    // sent is worse than any of the errors that could get us here.
+    let r;
     try {
-      const r = await invoke("compose:send", { ...d, draftId: d.draftId ?? get().autosavedDraftId ?? null }, sendAt);
+      r = await invoke("compose:send", { ...d, draftId: d.draftId ?? get().autosavedDraftId ?? null }, sendAt);
+    } catch (err) {
+      get().showToast({ eyebrow: "NOT SENT", text: (err as Error).message });
+      return;
+    }
+    {
       composeSession += 1;
       lastSaved = null;
       set({ compose: null, autosavedDraftId: null, composePlacement: "panel", inlineCollapsed: false, inlineAnchor: null, composeGhost: null, sendLaterOpen: false, snippetPickerOpen: false, editorApi: null });
@@ -1426,13 +1442,13 @@ export const useApp = create<AppState>((set, get) => ({
         const sent = sentMessage({ draft: d, sendId: r.id, sentAt: r.sendAt, from: { email: account?.email ?? d.accountId, name: account?.displayName ?? "" } });
         set((cur) => (cur.open && cur.open.thread.id === d.threadId && cur.open.thread.accountId === d.accountId ? { open: { ...cur.open, messages: [...cur.open.messages, sent] } } : {}));
       }
+      // A receipt that could not be armed costs the receipt, never the send, and the toast says so rather than letting the sender assume one is running.
+      const unarmed = r.receipt?.requested && !r.receipt.armed ? ` The read receipt was not armed: ${r.receipt.problem ?? "the pixel service did not answer"}.` : "";
       if (sendAt) {
-        get().showToast({ eyebrow: "SCHEDULED", text: `Sends ${new Date(r.sendAt).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}. Undo (Z)`, undo: { kind: "send", id: r.id, until: Math.min(r.undoUntil, Date.now() + 15_000) } });
+        get().showToast({ eyebrow: "SCHEDULED", text: `Sends ${new Date(r.sendAt).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}.${unarmed} Undo (Z)`, undo: { kind: "send", id: r.id, until: Math.min(r.undoUntil, Date.now() + 15_000) } });
       } else {
-        get().showToast({ text: "Sent. Undo (Z)", undo: { kind: "send", id: r.id, until: r.undoUntil } });
+        get().showToast({ eyebrow: unarmed ? "NO RECEIPT" : undefined, text: `Sent.${unarmed} Undo (Z)`, undo: { kind: "send", id: r.id, until: r.undoUntil } });
       }
-    } catch (err) {
-      get().showToast({ eyebrow: "NOT SENT", text: (err as Error).message });
     }
   },
 

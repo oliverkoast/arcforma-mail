@@ -13,6 +13,9 @@ importers:
       '@arcforma/gmail':
         specifier: workspace:*
         version: link:../../packages/gmail
+      '@arcforma/pixel-service':
+        specifier: workspace:*
+        version: link:../../packages/pixel-service
       '@arcforma/store':
         specifier: workspace:*
         version: link:../../packages/store

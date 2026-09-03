@@ -16,7 +16,7 @@
 // person's client can fetch an image many times and a proxy can fetch it once
 // for many people.
 
-import { summarise } from "../../../../packages/pixel-service/src/classify.mjs";
+import { summarise } from "@arcforma/pixel-service";
 import type { ReadReceiptEventRow } from "@arcforma/store";
 import type { ReceiptStatus, ReceiptSummary } from "../../shared/types.js";
 

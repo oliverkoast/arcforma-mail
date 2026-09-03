@@ -7,6 +7,7 @@ import {
   openStore,
   migrate,
   schemaVersion,
+  SCHEMA_VERSION,
   upsertAccount,
   upsertThreadFromGmail,
   listThreads,
@@ -105,9 +106,9 @@ function seed(db: ReturnType<typeof openStore>) {
 
 test("migrate is idempotent and records the schema version", () => {
   const { db } = tempDb();
-  assert.equal(schemaVersion(db), 14);
+  assert.equal(schemaVersion(db), SCHEMA_VERSION);
   migrate(db);
-  assert.equal(schemaVersion(db), 14);
+  assert.equal(schemaVersion(db), SCHEMA_VERSION);
   const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table') ORDER BY name").all() as Array<{ name: string }>).map((r) => r.name);
   for (const t of ["accounts", "threads", "messages", "message_bodies", "labels", "thread_labels", "thread_labels_pending", "categories", "classifications", "corrections", "snoozes", "reminders", "send_queue", "snippets", "summaries", "outbox", "contacts", "calendar_events", "messages_fts", "drafts", "settings", "reply_options", "saved_searches", "thread_unsubscribes", "attachment_files", "orphan_attachments"]) {
     assert.ok(tables.includes(t), `missing table ${t}`);
@@ -131,7 +132,7 @@ test("a schema 10 store gains the Promotions and Jobs categories in their sideba
   assert.deepEqual(cats.map((c) => c.id), ["newsletters", "promotions", "jobs", "calendar", "notifications", "receipts"]);
   assert.deepEqual(cats.filter((c) => c.id === "promotions" || c.id === "jobs").map((c) => [c.name, c.gmail_label]), [["Promotions", "Arcforma/Promotions"], ["Jobs", "Arcforma/Jobs"]]);
   migrate(db);
-  assert.equal(schemaVersion(db), 14, "idempotent");
+  assert.equal(schemaVersion(db), SCHEMA_VERSION, "idempotent");
 });
 
 test("upsert threads and list the unified inbox newest first", () => {
@@ -324,7 +325,7 @@ test("a schema 2 store gains fts_id and a rebuilt index on the way to schema 3",
   db.exec("DELETE FROM schema_version WHERE version >= 3");
   assert.equal(schemaVersion(db), 2);
   migrate(db);
-  assert.equal(schemaVersion(db), 14);
+  assert.equal(schemaVersion(db), SCHEMA_VERSION);
   const rows = db.prepare("SELECT id, rowid, fts_id FROM messages").all() as Array<{ id: string; rowid: number; fts_id: number }>;
   assert.ok(rows.length > 0);
   for (const r of rows) assert.equal(r.fts_id, r.rowid, "existing rows keep the rowid the index already used");
@@ -470,7 +471,7 @@ test("a schema 6 drafts table gains the Gmail mirror columns on the way to schem
     DELETE FROM schema_version WHERE version >= 7;`);
   assert.equal(schemaVersion(db), 6);
   migrate(db);
-  assert.equal(schemaVersion(db), 14);
+  assert.equal(schemaVersion(db), SCHEMA_VERSION);
   const cols = (db.prepare("PRAGMA table_info(drafts)").all() as Array<{ name: string }>).map((c) => c.name);
   for (const c of ["gmail_draft_id", "gmail_message_id", "mirror_state", "mirror_error", "mirrored_at", "origin", "local_edited_at"]) assert.ok(cols.includes(c), `missing ${c}`);
   const row = listDrafts(db)[0]!;
@@ -480,7 +481,7 @@ test("a schema 6 drafts table gains the Gmail mirror columns on the way to schem
   assert.equal(row.gmail_draft_id, null);
   assert.equal(row.local_edited_at, 200, "its last save counts as its last local edit");
   migrate(db);
-  assert.equal(schemaVersion(db), 14, "idempotent");
+  assert.equal(schemaVersion(db), SCHEMA_VERSION, "idempotent");
 });
 
 test("draft rows carry their mirror state: a save marks pending, an import from Gmail is synced, ids are found both ways", () => {

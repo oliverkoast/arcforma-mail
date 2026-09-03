@@ -8,7 +8,9 @@ import { reindexAllMessages } from "./queries/messages.js";
 
 export type Db = DatabaseSync;
 
-const SCHEMA_VERSION = 15;
+/** The schema every opened store is migrated up to. Exported so tests assert against this rather
+ *  than a copy of the number, which went stale on every bump and failed four suites at once. */
+export const SCHEMA_VERSION = 15;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
