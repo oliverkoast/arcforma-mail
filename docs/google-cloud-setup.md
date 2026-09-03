@@ -63,3 +63,12 @@ Setup and hand-editing can be mixed. Adding an account through the app keeps eve
 - Choose how AI works. Step 3 of setup does this: local only, a Claude Code login, or an Anthropic API key. The equivalent by hand is `claude setup-token` and `packages/ai-daemon/set-token.sh`.
 - The local model. Step 4 downloads it. By hand: put a GGUF in `~/Library/Application Support/Arcforma/models/` and point `local.model` in `ai-daemon.json` at it.
 - Arcforma Text. Step 5 installs it and checks the Accessibility grant. By hand: `packages/text-tools/install.sh`, then grant Accessibility in System Settings.
+
+
+## Do not leave a personal project in Testing
+
+The seven-day sign-out is a property of Testing publishing status, not of being unverified. In the Google Auth Platform under Audience, press **Publish app**. Google will warn that the app is unverified and, when a stranger signs in, show them a screen saying so. For your own mailbox that is the accurate description and the warning is the whole cost. Refresh tokens then last until you revoke them.
+
+Google's own documentation permits this: verification is not required when "you are the only user of your app or if your app is used by only a few users, all of whom are known personally to you." The limit is 100 users over the lifetime of the project, which does not bind a personal setup.
+
+A Workspace account should use an Internal consent screen instead, which has neither the warning nor the cap.

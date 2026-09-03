@@ -22,7 +22,8 @@ Reliability
 
 ## Phase 2: make it installable by strangers (weeks 3 to 6)
 
-- Google verification for one External OAuth app so nobody has to create GCP projects. This needs a privacy policy, a homepage, a demo video, and the CASA security assessment for restricted scopes. Budget 6 to 8 weeks of calendar time and start it first.
+- OAuth: each person brings their own client, published unverified. See `docs/adr/0004`. The earlier plan here was to verify one shared client so nobody else had to; a survey of every open-source mail client that tried says the cost is not the paperwork but the outages. KDE's client was blocked by Google for fourteen months, K-9's for three and a half. A shared client is also a single point Google can switch off for every user at once. Revisit only with that evidence in view.
+- Onboarding must state that a project left in Testing signs you out every seven days, and that publishing to production without verification removes it. This is the single most confusing thing about Google's OAuth for a new user, because the symptom arrives a week after the cause.
 - Onboarding that needs no terminal: sign in, choose AI mode, done. AI modes: local only (bundled llama.cpp and a 4B model download), bring your own Anthropic key, or Claude Code login for people who have it. The daemon becomes part of the app, not a separate LaunchAgent.
 - Apple Developer ID signing and notarization; auto-update; a Homebrew cask.
 - Multiple providers: IMAP and Microsoft 365 behind the same store interface (the plan already separates the Gmail package).
