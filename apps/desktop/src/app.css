@@ -2239,3 +2239,12 @@ body.is-resizing { cursor: col-resize; user-select: none; }
   margin: 0;
   line-height: 1.5;
 }
+
+/* Row height must not depend on when a webfont finishes loading. The eyebrow is a flex item in
+   .row-main, so an implicit line-height meant the row grew after Roboto Mono arrived and the
+   virtualizer's measured positions went stale, drawing the next row over this one. */
+.row .row-eyebrow {
+  display: block;
+  line-height: 15px;
+  min-height: 15px;
+}

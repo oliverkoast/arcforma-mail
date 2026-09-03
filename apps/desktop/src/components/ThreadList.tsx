@@ -154,6 +154,15 @@ export function ThreadList() {
   const lastPointer = useRef<{ x: number; y: number } | null>(null);
   const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => parentRef.current, estimateSize: () => 74, overscan: 8 });
 
+  // Rows are measured as they mount. A webfont arriving afterwards changes their height, and the
+  // stale measurements leave rows overlapping, so measure again once the fonts have settled.
+  useEffect(() => {
+    let cancelled = false;
+    const remeasure = () => { if (!cancelled) virtualizer.measure(); };
+    void document.fonts?.ready?.then(remeasure).catch(() => {});
+    return () => { cancelled = true; };
+  }, [virtualizer]);
+
   useEffect(() => {
     if (rows.length) virtualizer.scrollToIndex(selected, { align: "auto" });
   }, [selected, rows.length, virtualizer]);
