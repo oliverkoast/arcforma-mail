@@ -43,6 +43,13 @@ export interface Attachment {
   attachmentId: string | null;
   contentId: string | null;
   inline: boolean;
+  /**
+   * base64url bytes Gmail put straight on the part. Only kept when the part
+   * carries no attachmentId, which is the one case where there is nothing else
+   * to fetch the bytes with; otherwise the id is the source and the data would
+   * only bloat the store.
+   */
+  data?: string | null;
 }
 
 export interface Address {
@@ -124,14 +131,17 @@ export function listAttachments(payload: GmailPart | undefined, out: Attachment[
   if (payload.filename && (payload.body?.attachmentId || payload.body?.data)) {
     const disposition = header(payload.headers, "Content-Disposition").toLowerCase();
     const cid = header(payload.headers, "Content-ID").replace(/^<|>$/g, "");
+    const attachmentId = payload.body?.attachmentId ?? null;
     out.push({
       partId: payload.partId ?? null,
       filename: payload.filename,
       mimeType: payload.mimeType ?? "application/octet-stream",
       size: payload.body?.size ?? 0,
-      attachmentId: payload.body?.attachmentId ?? null,
+      attachmentId,
       contentId: cid || null,
       inline: disposition.startsWith("inline") || Boolean(cid),
+      // Without an attachmentId this data is the only copy of the bytes.
+      data: attachmentId ? null : payload.body?.data ?? null,
     });
   }
   for (const part of payload.parts ?? []) listAttachments(part, out);

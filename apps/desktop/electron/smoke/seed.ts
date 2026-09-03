@@ -28,6 +28,7 @@ import {
   type GmailThreadInput,
 } from "@arcforma/store";
 import { scoreAttention, splitForBand } from "../classify/attention.js";
+import { makePdf, makePng, toBase64Url } from "./files.js";
 
 interface FixtureMessage {
   id: string;
@@ -41,6 +42,35 @@ interface FixtureMessage {
   calendar?: boolean;
   html?: string;
   text?: string;
+  /** Files to hang off the message. The bytes are generated here, so the fixture carries no binary. */
+  attachments?: FixtureAttachment[];
+}
+
+/**
+ * A seeded attachment. It is stored as a part with its own base64url data and
+ * no attachmentId, which is exactly the shape Gmail uses for a small part, so
+ * the smoke run exercises the real fetch, cache, and preview path without an
+ * account or a network call.
+ */
+interface FixtureAttachment {
+  filename: string;
+  generate: "pdf" | "png";
+  /** The lines the generated PDF prints. Ignored for a PNG. */
+  lines?: string[];
+}
+
+function buildAttachment(a: FixtureAttachment, index: number) {
+  const bytes = a.generate === "png" ? makePng() : makePdf(a.lines);
+  return {
+    partId: String(index + 1),
+    filename: a.filename,
+    mimeType: a.generate === "png" ? "image/png" : "application/pdf",
+    size: bytes.length,
+    attachmentId: null,
+    contentId: null,
+    inline: false,
+    data: toBase64Url(bytes),
+  };
 }
 
 interface FixtureThread {
@@ -159,7 +189,11 @@ export function seedFixture(db: Db, file: string, now = Date.now()): { threads: 
       }),
     };
     upsertThreadFromGmail(db, t.accountId, thread, { ownerAddresses: Array.from(owners) });
-    for (const m of t.messages) saveBody(db, t.accountId, m.id, { html: m.html ?? null, text: m.text ?? null, attachments: m.calendar ? [{ filename: "invite.ics", mimeType: "text/calendar", size: 1200, inline: false }] : [] });
+    for (const m of t.messages) {
+      const files = (m.attachments ?? []).map(buildAttachment);
+      const invite = m.calendar ? [{ partId: "ics", filename: "invite.ics", mimeType: "text/calendar", size: 1200, attachmentId: null, contentId: null, inline: false, data: null }] : [];
+      saveBody(db, t.accountId, m.id, { html: m.html ?? null, text: m.text ?? null, attachments: [...invite, ...files] });
+    }
     const last = t.messages[t.messages.length - 1]!;
     if (t.classification) {
       upsertClassification(db, {

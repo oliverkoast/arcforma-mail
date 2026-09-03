@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useApp } from "../state/store";
+import { attachmentBusyId, useApp } from "../state/store";
 import { bodyNotice } from "../lib/compose";
 import { bytes, eyebrowDate, fullDate, sendsAt } from "../lib/format";
 import { messageText } from "../lib/mailhtml";
@@ -8,7 +8,7 @@ import { InlineReply } from "./InlineReply";
 import { IconButton, ReplyIcons, hint } from "./IconButton";
 import { MessageBody } from "./MessageBody";
 import { MessageHeader } from "./MessageHeader";
-import type { RefileTarget, ThreadSummary } from "../../shared/types";
+import type { AttachmentInfo, MessageView, RefileTarget, ThreadSummary } from "../../shared/types";
 
 const NO_PRIORS: string[] = [];
 
@@ -59,6 +59,69 @@ function RefileSelect() {
           ))}
       </select>
     </label>
+  );
+}
+
+/** What clicking a chip will do, in the words the tooltip uses. */
+function previewPromise(a: AttachmentInfo): string {
+  switch (a.preview) {
+    case "image":
+      return "Opens this image in its own window.";
+    case "pdf":
+      return "Opens this PDF in its own window.";
+    case "text":
+      return "Opens this file as text in its own window. Nothing in it is run.";
+    default:
+      return "Opens a window saying this kind of file has no preview here, with Download and Save as.";
+  }
+}
+
+/**
+ * The attachments on one message. Each chip is a button: pressing it (or Enter
+ * on it, since it is in the tab order) fetches the bytes if they are not
+ * already on this machine and opens the preview window. The Download glyph
+ * beside it puts a copy in Downloads instead. Neither ever opens the file in
+ * another app.
+ */
+function Attachments({ message }: { message: MessageView }) {
+  const busy = useApp((s) => s.attachmentsBusy);
+  const previewAttachment = useApp((s) => s.previewAttachment);
+  const downloadAttachment = useApp((s) => s.downloadAttachment);
+  const files = (message.body?.attachments ?? []).filter((a) => !a.inline);
+  if (files.length === 0) return null;
+  return (
+    <div className="attachments">
+      {files.map((a) => {
+        const working = busy.includes(attachmentBusyId(message.accountId, message.id, a.key));
+        return (
+          <span className={`attachment${working ? " is-busy" : ""}`} key={a.key}>
+            <button
+              type="button"
+              className="attachment-open"
+              disabled={working}
+              data-tip={`${a.filename}, ${bytes(a.size)}. ${previewPromise(a)}`}
+              onClick={() => void previewAttachment(message.accountId, message.id, a.key)}
+            >
+              {working ? <span className="attachment-spinner" aria-hidden="true" /> : null}
+              <span className="attachment-name">{a.filename}</span>
+              <span className="af-mono attachment-size">{bytes(a.size)}</span>
+            </button>
+            <button
+              type="button"
+              className="attachment-download"
+              disabled={working}
+              aria-label={`Download ${a.filename}`}
+              data-tip={`Puts a copy of ${a.filename} in your Downloads folder and shows it in Finder. Nothing is opened.`}
+              onClick={() => void downloadAttachment(message.accountId, message.id, a.key)}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M8 2v8M4.5 7L8 10.5 11.5 7M2.5 13h11" />
+              </svg>
+            </button>
+          </span>
+        );
+      })}
+    </div>
   );
 }
 
@@ -166,17 +229,7 @@ export function ReadingPane() {
               }
             />
             <MessageBody message={m} priorTexts={priorTexts[i] ?? NO_PRIORS} pending={open.bodiesPending} />
-            {m.body && m.body.attachments.filter((a) => !a.inline).length > 0 ? (
-              <div className="attachments">
-                {m.body.attachments
-                  .filter((a) => !a.inline)
-                  .map((a) => (
-                    <span className="attachment" key={a.filename} data-tip={`${a.filename}, ${bytes(a.size)}. Attachments open in Gmail for now.`}>
-                      {a.filename} · {bytes(a.size)}
-                    </span>
-                  ))}
-              </div>
-            ) : null}
+            <Attachments message={m} />
             <InlineReply messageId={m.id} isLast={i === open.messages.length - 1} />
           </article>
         ))}

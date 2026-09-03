@@ -102,6 +102,24 @@ export interface MessageBodyRow {
   fetched_at: number;
 }
 
+/**
+ * One attachment whose bytes are cached on disk (schema 13). filename is the
+ * sanitised name the file actually has, never the raw one off the network, and
+ * path is inside the app's attachments folder. The row goes when the message
+ * does, and the trigger hands the path to orphan_attachments so the file can be
+ * unlinked afterwards.
+ */
+export interface AttachmentFileRow {
+  account_id: string;
+  message_id: string;
+  attachment_key: string;
+  filename: string;
+  mime_type: string;
+  bytes: number;
+  path: string;
+  cached_at: number;
+}
+
 export interface LabelRow {
   account_id: string;
   id: string;

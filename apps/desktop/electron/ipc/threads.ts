@@ -32,6 +32,8 @@ import {
   type ThreadListRow,
 } from "@arcforma/store";
 import type { AccountRegistry } from "../accounts.js";
+import { previewKind } from "../attachments/kind.js";
+import { attachmentKey, type StoredPart } from "../attachments/service.js";
 import { categoryInfos } from "./ai.js";
 import { requireAccount, requireEmail, requireId } from "./guard.js";
 import { logError } from "../log.js";
@@ -39,7 +41,7 @@ import { scheduledSendId, scheduledSummary, scheduledView } from "../scheduled.j
 import type { Scheduler } from "../scheduler.js";
 import { unsubscribeThread } from "../unsubscribe.js";
 import type { SyncManager } from "../sync.js";
-import type { Address, CategoryInfo, ListRequest, ListResponse, MessageView, ThreadSummary, ThreadView, UnsubscribeResult } from "../../shared/types.js";
+import type { Address, AttachmentInfo, CategoryInfo, ListRequest, ListResponse, MessageView, ThreadSummary, ThreadView, UnsubscribeResult } from "../../shared/types.js";
 
 export function toSummary(row: ThreadListRow): ThreadSummary {
   return {
@@ -101,22 +103,33 @@ function toMessageView(db: Db, m: MessageRow): MessageView {
     direction: m.direction,
     isAuto: m.is_auto === 1,
     hasAttachments: m.has_attachments === 1,
-    body: body
-      ? {
-          html: body.html,
-          text: body.text,
-          attachments: (JSON.parse(body.attachments_json) as Array<{ filename: string; mimeType: string; size: number; inline: boolean }>).map((a) => ({
-            filename: a.filename,
-            mimeType: a.mimeType,
-            size: a.size,
-            inline: a.inline,
-          })),
-        }
-      : null,
+    // Attachments cross as a key, a name, a type, and a size. The Gmail
+    // attachment id and the inline base64 data stay in the main process: the
+    // renderer asks for a part of a message, never for bytes or a path.
+    body: body ? { html: body.html, text: body.text, attachments: attachmentInfos(body.attachments_json) } : null,
     loadImages: shouldLoadImages(db, m, contact?.load_images ?? null),
   };
 }
 
+
+/** The attachment list for one message body, as the renderer sees it. A part whose JSON is unreadable is left out rather than half shown. */
+function attachmentInfos(attachmentsJson: string): AttachmentInfo[] {
+  let parts: StoredPart[] = [];
+  try {
+    const parsed = JSON.parse(attachmentsJson) as StoredPart[];
+    if (Array.isArray(parsed)) parts = parsed;
+  } catch {
+    return [];
+  }
+  return parts.map((a, i) => ({
+    key: attachmentKey(a, i),
+    filename: a.filename,
+    mimeType: a.mimeType,
+    size: a.size,
+    inline: a.inline,
+    preview: previewKind(a.mimeType, a.filename),
+  }));
+}
 
 function senderFor(db: Db, accountId: string): Address {
   const a = getAccount(db, accountId);

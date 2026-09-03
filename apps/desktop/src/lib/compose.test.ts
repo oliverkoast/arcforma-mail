@@ -116,9 +116,9 @@ test("parseAddresses and textToHtml", () => {
 });
 
 test("forwarding a message with attachments is an explicit error, never a silent text-only forward", () => {
-  const withFile = msg({ body: { html: "<p>See attached.</p>", text: null, attachments: [{ filename: "deck.pdf", mimeType: "application/pdf", size: 1024, inline: false }] } });
+  const withFile = msg({ body: { html: "<p>See attached.</p>", text: null, attachments: [{ key: "1", filename: "deck.pdf", mimeType: "application/pdf", size: 1024, inline: false, preview: "pdf" as const }] } });
   assert.throws(() => buildDraft({ mode: "forward", accountId: "arcforma", thread, messages: [withFile], owners }), /Forwarding attachments is not supported yet/);
-  const inlineOnly = msg({ body: { html: "<p>logo</p>", text: null, attachments: [{ filename: "logo.png", mimeType: "image/png", size: 10, inline: true }] } });
+  const inlineOnly = msg({ body: { html: "<p>logo</p>", text: null, attachments: [{ key: "2", filename: "logo.png", mimeType: "image/png", size: 10, inline: true, preview: "image" as const }] } });
   assert.equal(buildDraft({ mode: "forward", accountId: "arcforma", thread, messages: [inlineOnly], owners }).mode, "forward", "inline images are part of the body");
   assert.equal(buildDraft({ mode: "reply", accountId: "arcforma", thread, messages: [withFile], owners }).mode, "reply", "a reply does not carry attachments, so it is fine");
   const unfetched = msg({ body: null, hasAttachments: true });

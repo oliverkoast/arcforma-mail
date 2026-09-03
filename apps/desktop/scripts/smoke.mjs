@@ -69,7 +69,10 @@ try {
           }
         : {}),
     },
-    timeoutMs: 90_000,
+    // The walk grew with the attachment preview steps, which open two more
+    // windows and wait for each to paint. The cap is a backstop against a hung
+    // Electron, not a budget: it kills the child, so nothing outlives the run.
+    timeoutMs: 180_000,
   });
 } catch (err) {
   exitError = err;

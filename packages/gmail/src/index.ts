@@ -2,6 +2,7 @@ export * from "./transport.js";
 export * from "./errors.js";
 export * from "./client.js";
 export * from "./mime.js";
+export * from "./attachments.js";
 export * from "./normalize.js";
 export * from "./oauth.js";
 export * from "./owners.js";

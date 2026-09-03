@@ -14,6 +14,8 @@ let nextSendId = 1;
 const threadDelays = new Map<string, number>();
 /** Delay on drafts:save, to overlap two autosaves. */
 let saveDelay = 0;
+/** Delay on the attachment channels, so a test can look at the chip while the fetch is still running. */
+let attachmentDelay = 0;
 /** Channels whose next call fails, to check the failure reaches a toast. */
 const failNext = new Map<string, string>();
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -57,6 +59,14 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
           return undefined;
         case "compose:send":
           return { id: nextSendId++, sendAt: Date.now() + 10_000, undoUntil: Date.now() + 10_000 };
+        case "attachments:preview": {
+          if (attachmentDelay) await wait(attachmentDelay);
+          return undefined;
+        }
+        case "attachments:download": {
+          if (attachmentDelay) await wait(attachmentDelay);
+          return { saved: true, path: "/Users/someone/Downloads/deck.pdf", filename: "deck.pdf" };
+        }
         case "send:undo":
           return { cancelled: true, draft: { ...(lastSent ?? {}), draftId: null } };
         case "settings:set":
@@ -809,4 +819,55 @@ test("adding an account sends the credentials once and gets an accounts status b
   const after = useApp.getState();
   assert.equal(after.onboardingOpen, true, "a refused account never closes the flow");
   assert.equal(after.onboarding?.step, "accounts", "and never advances it on its own");
+});
+
+// ---- attachments -----------------------------------------------------------------------
+
+test("an attachment chip marks itself busy while the fetch runs, refuses a second press, and clears when it is done", async () => {
+  const { attachmentBusyId, useApp } = await import("./store");
+  const id = attachmentBusyId("arcforma", "m-k4", "1");
+  attachmentDelay = 40;
+  useApp.setState({ attachmentsBusy: [] });
+  const first = useApp.getState().previewAttachment("arcforma", "m-k4", "1");
+  await settle();
+  assert.deepEqual(useApp.getState().attachmentsBusy, [id], "the chip spins while the main process works");
+
+  const before = calls.filter((c) => c.channel === "attachments:preview").length;
+  await useApp.getState().previewAttachment("arcforma", "m-k4", "1");
+  assert.equal(calls.filter((c) => c.channel === "attachments:preview").length, before, "a second press while it is busy starts nothing");
+
+  await first;
+  assert.deepEqual(useApp.getState().attachmentsBusy, [], "and stops spinning when the window has opened");
+  attachmentDelay = 0;
+});
+
+test("Download says where the copy went; a fetch that fails says why, in a toast, and never leaves a chip spinning", async () => {
+  const { attachmentBusyId, useApp } = await import("./store");
+  useApp.setState({ attachmentsBusy: [], toast: null });
+  await useApp.getState().downloadAttachment("arcforma", "m-k4", "1");
+  assert.deepEqual(calls.filter((c) => c.channel === "attachments:download").at(-1)?.args, ["arcforma", "m-k4", "1"]);
+  assert.deepEqual(useApp.getState().toast, { eyebrow: "DOWNLOADED", text: "deck.pdf is in your Downloads folder." });
+
+  failNext.set("attachments:preview", "Gmail no longer has this attachment.");
+  await useApp.getState().previewAttachment("arcforma", "m-k4", "1");
+  assert.deepEqual(useApp.getState().toast, { eyebrow: "ATTACHMENT NOT OPENED", text: "Gmail no longer has this attachment." });
+  assert.deepEqual(useApp.getState().attachmentsBusy, [], "a failure clears the chip too");
+
+  failNext.set("attachments:download", "That attachment is not on this message any more.");
+  await useApp.getState().downloadAttachment("arcforma", "m-k4", "2");
+  assert.equal(useApp.getState().toast?.text, "That attachment is not on this message any more.");
+  assert.equal(useApp.getState().attachmentsBusy.includes(attachmentBusyId("arcforma", "m-k4", "2")), false);
+});
+
+test("two different attachments fetch at once without either clearing the other's spinner", async () => {
+  const { attachmentBusyId, useApp } = await import("./store");
+  attachmentDelay = 40;
+  useApp.setState({ attachmentsBusy: [] });
+  const a = useApp.getState().previewAttachment("arcforma", "m-k4", "1");
+  const b = useApp.getState().downloadAttachment("arcforma", "m-k4", "2");
+  await settle();
+  assert.deepEqual(useApp.getState().attachmentsBusy.sort(), [attachmentBusyId("arcforma", "m-k4", "1"), attachmentBusyId("arcforma", "m-k4", "2")].sort());
+  await Promise.all([a, b]);
+  assert.deepEqual(useApp.getState().attachmentsBusy, []);
+  attachmentDelay = 0;
 });

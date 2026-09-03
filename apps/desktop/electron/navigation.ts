@@ -40,3 +40,36 @@ export function isAllowedNavigation(url: string, policy: NavigationPolicy = {}):
 export function isExternalLink(url: string): boolean {
   return /^https?:\/\//i.test(url);
 }
+
+/**
+ * Chromium's built-in PDF viewer. A window showing a PDF loads the viewer as an
+ * internal extension frame under this fixed id, so a preview window that is
+ * rendering a PDF has to let that one frame load or it shows nothing. It is a
+ * frame Chromium creates for itself out of the browser's own resources; no
+ * bytes from the network reach it, and no other extension origin is allowed.
+ */
+export const PDF_VIEWER_ORIGIN = "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai";
+
+/**
+ * The navigation policy for an attachment preview window, which is stricter
+ * than the app's. Such a window shows exactly one thing and must never become a
+ * way to reach anything else. Two URLs are pinned to it: its own page, and the
+ * one attachment route that page frames for a PDF. Those, the blank page it
+ * starts on, and Chromium's PDF viewer frame are all it may reach. Every other
+ * URL is refused, including the app's own pages, another attachment's route,
+ * http and https of any kind, and file:, data:, and javascript: URLs.
+ */
+export function isPreviewNavigation(url: string, pinnedUrls: string | readonly string[]): boolean {
+  if (!url) return false;
+  if (url === "about:blank") return true;
+  const pinned = typeof pinnedUrls === "string" ? [pinnedUrls] : pinnedUrls;
+  for (const p of pinned) {
+    if (p && stripFragment(url) === stripFragment(p)) return true;
+  }
+  return url === PDF_VIEWER_ORIGIN || url.startsWith(`${PDF_VIEWER_ORIGIN}/`);
+}
+
+function stripFragment(url: string): string {
+  const at = url.indexOf("#");
+  return at === -1 ? url : url.slice(0, at);
+}

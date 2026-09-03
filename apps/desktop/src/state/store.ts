@@ -5,6 +5,7 @@ import {
   EMPTY_SIDEBAR_COUNTS,
   type AccountsStatus,
   type AiErrorCode,
+  type AttachmentSaveResult,
   type AiStatus,
   type AskResult,
   type CategoryInfo,
@@ -175,6 +176,16 @@ export interface AppState {
   /** U: runs the best unsubscribe method on the cursor row and archives it when the request went out. */
   unsubscribeSelected: () => Promise<void>;
   setLoadImages: (email: string, load: boolean) => Promise<void>;
+  /**
+   * Attachments whose bytes are being fetched right now, as
+   * "<account>/<message>/<key>". A chip in this list shows its spinner and
+   * refuses a second press, so one click never starts two fetches.
+   */
+  attachmentsBusy: string[];
+  /** Click, or Enter, on an attachment chip: fetch if needed, then open the preview window. */
+  previewAttachment: (accountId: string, messageId: string, key: string) => Promise<void>;
+  /** The chip's Download glyph: fetch if needed, copy into Downloads, and show it in Finder. */
+  downloadAttachment: (accountId: string, messageId: string, key: string) => Promise<void>;
   refreshCounts: () => Promise<void>;
   setPopover: (p: Popover) => void;
   openSidebarMenu: (m: SidebarMenu) => void;
@@ -322,6 +333,40 @@ function scheduledOnly(row: ThreadSummary, showToast: (t: ToastEvent) => void): 
   if (!row.scheduled) return false;
   showToast({ eyebrow: "SCHEDULED", text: "Open the message and use Cancel send." });
   return true;
+}
+
+/**
+ * One attachment action. The chip is marked busy for as long as the main
+ * process is working, and whatever goes wrong comes back as a toast with the
+ * reason on it: a fetch that fails is never silent, and never leaves a chip
+ * spinning.
+ */
+async function runAttachment(
+  set: (fn: (s: AppState) => Partial<AppState>) => void,
+  get: () => AppState,
+  channel: "attachments:preview" | "attachments:download",
+  accountId: string,
+  messageId: string,
+  key: string,
+  toastFor: (result: AttachmentSaveResult) => ToastEvent | null
+): Promise<void> {
+  const id = attachmentBusyId(accountId, messageId, key);
+  if (get().attachmentsBusy.includes(id)) return;
+  set((s) => ({ attachmentsBusy: [...s.attachmentsBusy, id] }));
+  try {
+    const result = (await invoke(channel, accountId, messageId, key)) as AttachmentSaveResult | undefined;
+    const toast = result ? toastFor(result) : null;
+    if (toast) get().showToast(toast);
+  } catch (err) {
+    get().showToast({ eyebrow: "ATTACHMENT NOT OPENED", text: (err as Error).message });
+  } finally {
+    set((s) => ({ attachmentsBusy: s.attachmentsBusy.filter((x) => x !== id) }));
+  }
+}
+
+/** The busy key for one attachment. The reading pane builds the same string to decide whether a chip is spinning. */
+export function attachmentBusyId(accountId: string, messageId: string, key: string): string {
+  return `${accountId}/${messageId}/${key}`;
 }
 
 function hasContent(d: ComposeDraft): boolean {
@@ -656,6 +701,18 @@ export const useApp = create<AppState>((set, get) => ({
   async setLoadImages(email, load) {
     await invoke("contacts:setLoadImages", email, load);
     set((cur) => (cur.open ? { open: { ...cur.open, messages: cur.open.messages.map((m) => (m.from.email === email ? { ...m, loadImages: load } : m)) } } : {}));
+  },
+
+  attachmentsBusy: [],
+
+  async previewAttachment(accountId, messageId, key) {
+    await runAttachment(set, get, "attachments:preview", accountId, messageId, key, () => null);
+  },
+
+  async downloadAttachment(accountId, messageId, key) {
+    await runAttachment(set, get, "attachments:download", accountId, messageId, key, (r) =>
+      r.saved ? { eyebrow: "DOWNLOADED", text: `${r.filename} is in your Downloads folder.` } : null
+    );
   },
 
   setPopover(p) {

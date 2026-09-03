@@ -89,11 +89,49 @@ export interface ScheduledInfo {
 
 export type QueueName = "daily" | "weekly" | "later";
 
+/** What the preview window does with an attachment. Nothing outside these four is ever rendered, and none of them is executed. */
+export type AttachmentPreviewKind = "image" | "pdf" | "text" | "none";
+
 export interface AttachmentInfo {
+  /**
+   * Names this part within its message. The renderer passes this back to
+   * preview or download; it never handles a path or a Gmail attachment id, and
+   * the main process resolves the key against the stored message.
+   */
+  key: string;
   filename: string;
   mimeType: string;
   size: number;
   inline: boolean;
+  /** What a preview of this would show, so the chip's tooltip can say it before the window opens. */
+  preview: AttachmentPreviewKind;
+}
+
+/** Everything the preview window shows for one attachment. Built in the main process; the bytes are cached before it opens. */
+export interface AttachmentDetail {
+  accountId: string;
+  messageId: string;
+  key: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  kind: AttachmentPreviewKind;
+  /** app://mail/attachment/... for an image or a PDF, served from the cache folder. null for the other kinds. */
+  src: string | null;
+  /** The file as text, for a text preview. Never HTML, never executed. null for the other kinds. */
+  text: string | null;
+  /** True when the file was longer than the preview reads and the text above stops early. */
+  truncated: boolean;
+  /** The message it came on, for the window title. */
+  subject: string;
+  from: string;
+}
+
+/** Where a copy of an attachment landed. saved is false only when a Save as dialog was closed without choosing. */
+export interface AttachmentSaveResult {
+  saved: boolean;
+  path: string | null;
+  filename: string | null;
 }
 
 export interface MessageView {
@@ -537,6 +575,14 @@ export interface ArcmailInvoke {
   /** Throttled keyboard or mouse activity while the window is focused; drives the Daily 0 day boundary. */
   "app:activity": (at: number) => void;
   "categories:list": () => CategoryInfo[];
+  /** Fetches the attachment if it is not cached, then opens it in its own preview window. Nothing is executed and nothing is handed to the system opener. */
+  "attachments:preview": (accountId: string, messageId: string, key: string) => void;
+  /** Fetches if needed, then copies into the Downloads folder under a name nothing there has, and reveals it in Finder. */
+  "attachments:download": (accountId: string, messageId: string, key: string) => AttachmentSaveResult;
+  /** The same, to a folder and name chosen in the native save dialog. saved is false when the dialog was cancelled. */
+  "attachments:saveAs": (accountId: string, messageId: string, key: string) => AttachmentSaveResult;
+  /** What the preview window shows. Only answers for an attachment whose bytes are already cached. */
+  "attachments:detail": (accountId: string, messageId: string, key: string) => AttachmentDetail;
   "contacts:setLoadImages": (email: string, load: boolean) => void;
   "search:query": (query: string, accountIds?: string[]) => SearchHitView[];
   "scheduler:status": () => SchedulerStatus;

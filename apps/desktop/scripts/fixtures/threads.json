@@ -114,7 +114,25 @@
           "labels": [
             "SENT"
           ],
-          "html": "<p>9:00 works. I will update the invites.</p>"
+          "html": "<p>9:00 works. I will update the invites. The session plan and the venue photo are attached.</p>",
+          "attachments": [
+            {
+              "filename": "Session plan.pdf",
+              "generate": "pdf",
+              "lines": [
+                "Session plan",
+                "Northwind, Tuesday 9:00",
+                "Three blocks of ninety minutes",
+                "Block one: what the quarter is actually for",
+                "Block two: the two decisions nobody has made",
+                "Block three: what each person leaves holding"
+              ]
+            },
+            {
+              "filename": "Room 2 north light.png",
+              "generate": "png"
+            }
+          ]
         },
         {
           "id": "m-k5",

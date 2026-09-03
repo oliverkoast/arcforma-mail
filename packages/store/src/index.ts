@@ -4,6 +4,7 @@ export * from "./mail-headers.js";
 export * from "./queries/accounts.js";
 export * from "./queries/labels.js";
 export * from "./queries/messages.js";
+export * from "./queries/attachments.js";
 export * from "./queries/threads.js";
 export * from "./queries/outbox.js";
 export * from "./queries/scheduler.js";

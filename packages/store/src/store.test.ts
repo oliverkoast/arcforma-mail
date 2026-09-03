@@ -105,11 +105,11 @@ function seed(db: ReturnType<typeof openStore>) {
 
 test("migrate is idempotent and records the schema version", () => {
   const { db } = tempDb();
-  assert.equal(schemaVersion(db), 12);
+  assert.equal(schemaVersion(db), 13);
   migrate(db);
-  assert.equal(schemaVersion(db), 12);
+  assert.equal(schemaVersion(db), 13);
   const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table') ORDER BY name").all() as Array<{ name: string }>).map((r) => r.name);
-  for (const t of ["accounts", "threads", "messages", "message_bodies", "labels", "thread_labels", "thread_labels_pending", "categories", "classifications", "corrections", "snoozes", "reminders", "send_queue", "snippets", "summaries", "outbox", "contacts", "calendar_events", "messages_fts", "drafts", "settings", "reply_options", "saved_searches", "thread_unsubscribes"]) {
+  for (const t of ["accounts", "threads", "messages", "message_bodies", "labels", "thread_labels", "thread_labels_pending", "categories", "classifications", "corrections", "snoozes", "reminders", "send_queue", "snippets", "summaries", "outbox", "contacts", "calendar_events", "messages_fts", "drafts", "settings", "reply_options", "saved_searches", "thread_unsubscribes", "attachment_files", "orphan_attachments"]) {
     assert.ok(tables.includes(t), `missing table ${t}`);
   }
   const cols = (db.prepare("PRAGMA table_info(send_queue)").all() as Array<{ name: string }>).map((c) => c.name);
@@ -131,7 +131,7 @@ test("a schema 10 store gains the Promotions and Jobs categories in their sideba
   assert.deepEqual(cats.map((c) => c.id), ["newsletters", "promotions", "jobs", "calendar", "notifications", "receipts"]);
   assert.deepEqual(cats.filter((c) => c.id === "promotions" || c.id === "jobs").map((c) => [c.name, c.gmail_label]), [["Promotions", "Arcforma/Promotions"], ["Jobs", "Arcforma/Jobs"]]);
   migrate(db);
-  assert.equal(schemaVersion(db), 12, "idempotent");
+  assert.equal(schemaVersion(db), 13, "idempotent");
 });
 
 test("upsert threads and list the unified inbox newest first", () => {
@@ -324,7 +324,7 @@ test("a schema 2 store gains fts_id and a rebuilt index on the way to schema 3",
   db.exec("DELETE FROM schema_version WHERE version >= 3");
   assert.equal(schemaVersion(db), 2);
   migrate(db);
-  assert.equal(schemaVersion(db), 12);
+  assert.equal(schemaVersion(db), 13);
   const rows = db.prepare("SELECT id, rowid, fts_id FROM messages").all() as Array<{ id: string; rowid: number; fts_id: number }>;
   assert.ok(rows.length > 0);
   for (const r of rows) assert.equal(r.fts_id, r.rowid, "existing rows keep the rowid the index already used");
@@ -470,7 +470,7 @@ test("a schema 6 drafts table gains the Gmail mirror columns on the way to schem
     DELETE FROM schema_version WHERE version >= 7;`);
   assert.equal(schemaVersion(db), 6);
   migrate(db);
-  assert.equal(schemaVersion(db), 12);
+  assert.equal(schemaVersion(db), 13);
   const cols = (db.prepare("PRAGMA table_info(drafts)").all() as Array<{ name: string }>).map((c) => c.name);
   for (const c of ["gmail_draft_id", "gmail_message_id", "mirror_state", "mirror_error", "mirrored_at", "origin", "local_edited_at"]) assert.ok(cols.includes(c), `missing ${c}`);
   const row = listDrafts(db)[0]!;
@@ -480,7 +480,7 @@ test("a schema 6 drafts table gains the Gmail mirror columns on the way to schem
   assert.equal(row.gmail_draft_id, null);
   assert.equal(row.local_edited_at, 200, "its last save counts as its last local edit");
   migrate(db);
-  assert.equal(schemaVersion(db), 12, "idempotent");
+  assert.equal(schemaVersion(db), 13, "idempotent");
 });
 
 test("draft rows carry their mirror state: a save marks pending, an import from Gmail is synced, ids are found both ways", () => {
@@ -620,4 +620,64 @@ test("getThreadListRow carries the same columns as the list row for that thread,
   assert.deepEqual(one, listed);
   assert.equal(one.wake_at, T0 + 86_400_000, "a thread far down the list still reports its snooze");
   assert.equal(getThreadListRow(db, "arcforma", "nope"), null);
+});
+
+test("the attachment cache index round trips, and deleting a message hands its file back to be unlinked", async () => {
+  const { countOrphanAttachments, drainOrphanAttachments, forgetAttachmentFile, getAttachmentFile, listAttachmentFiles, recordAttachmentFile } = await import("./queries/attachments.js");
+  const { deleteMessage } = await import("./queries/messages.js");
+  const { db } = tempDb();
+  seed(db);
+  recordAttachmentFile(db, { accountId: "arcforma", messageId: "m1", attachmentKey: "1", filename: "invoice.pdf", mimeType: "application/pdf", bytes: 2048, path: "/cache/arcforma/m1/invoice.pdf" }, 500);
+  recordAttachmentFile(db, { accountId: "arcforma", messageId: "m1", attachmentKey: "2", filename: "logo.png", mimeType: "image/png", bytes: 900, path: "/cache/arcforma/m1/logo.png" }, 600);
+
+  const one = getAttachmentFile(db, "arcforma", "m1", "1")!;
+  assert.equal(one.filename, "invoice.pdf");
+  assert.equal(one.bytes, 2048);
+  assert.equal(one.path, "/cache/arcforma/m1/invoice.pdf");
+  assert.equal(one.cached_at, 500);
+  assert.equal(getAttachmentFile(db, "arcforma", "m1", "9"), null, "a part that was never cached is a miss, not a throw");
+  assert.equal(getAttachmentFile(db, "personal", "m1", "1"), null, "the cache is scoped by account");
+  assert.deepEqual(listAttachmentFiles(db, "arcforma", "m1").map((r) => r.filename), ["invoice.pdf", "logo.png"]);
+
+  // A second fetch of the same part replaces the row rather than adding one.
+  recordAttachmentFile(db, { accountId: "arcforma", messageId: "m1", attachmentKey: "1", filename: "invoice-1.pdf", mimeType: "application/pdf", bytes: 2049, path: "/cache/arcforma/m1/invoice-1.pdf" }, 700);
+  assert.equal(listAttachmentFiles(db, "arcforma", "m1").length, 2);
+  assert.equal(getAttachmentFile(db, "arcforma", "m1", "1")!.filename, "invoice-1.pdf");
+  drainOrphanAttachments(db);
+
+  // Dropping a row whose file is gone from disk leaves the other one alone.
+  forgetAttachmentFile(db, "arcforma", "m1", "2");
+  assert.deepEqual(listAttachmentFiles(db, "arcforma", "m1").map((r) => r.attachment_key), ["1"]);
+  assert.deepEqual(drainOrphanAttachments(db), ["/cache/arcforma/m1/logo.png"]);
+
+  deleteMessage(db, "arcforma", "m1");
+  assert.equal(listAttachmentFiles(db, "arcforma", "m1").length, 0, "the row goes with the message");
+  assert.deepEqual(drainOrphanAttachments(db), ["/cache/arcforma/m1/invoice-1.pdf"], "and its path is queued for the file to be unlinked");
+  assert.equal(countOrphanAttachments(db), 0, "a drained path is not handed out twice");
+});
+
+test("attachment files cached under a thread go when the thread does, and under an account when the account does", async () => {
+  const { countOrphanAttachments, drainOrphanAttachments, recordAttachmentFile } = await import("./queries/attachments.js");
+  const { db } = tempDb();
+  seed(db);
+  // t2 holds m2 and m3; the whole thread is removed, so its messages cascade and so must their files.
+  recordAttachmentFile(db, { accountId: "arcforma", messageId: "m2", attachmentKey: "1", filename: "receipt.pdf", mimeType: "application/pdf", bytes: 10, path: "/cache/arcforma/m2/receipt.pdf" });
+  recordAttachmentFile(db, { accountId: "arcforma", messageId: "m3", attachmentKey: "1", filename: "note.txt", mimeType: "text/plain", bytes: 4, path: "/cache/arcforma/m3/note.txt" });
+  recordAttachmentFile(db, { accountId: "personal", messageId: "m5", attachmentKey: "1", filename: "photo.png", mimeType: "image/png", bytes: 7, path: "/cache/personal/m5/photo.png" });
+  db.prepare("DELETE FROM threads WHERE account_id = ? AND id = ?").run("arcforma", "t2");
+  assert.deepEqual(drainOrphanAttachments(db).sort(), ["/cache/arcforma/m2/receipt.pdf", "/cache/arcforma/m3/note.txt"]);
+
+  db.prepare("DELETE FROM accounts WHERE id = ?").run("personal");
+  assert.deepEqual(drainOrphanAttachments(db), ["/cache/personal/m5/photo.png"]);
+  assert.equal(countOrphanAttachments(db), 0);
+});
+
+test("drainOrphanAttachments hands back one batch at a time", async () => {
+  const { countOrphanAttachments, drainOrphanAttachments } = await import("./queries/attachments.js");
+  const { db } = tempDb();
+  for (let i = 0; i < 5; i++) db.prepare("INSERT INTO orphan_attachments (path, orphaned_at) VALUES (?, ?)").run(`/cache/x/${i}`, 1000 + i);
+  assert.deepEqual(drainOrphanAttachments(db, 2), ["/cache/x/0", "/cache/x/1"]);
+  assert.equal(countOrphanAttachments(db), 3);
+  assert.deepEqual(drainOrphanAttachments(db, 10), ["/cache/x/2", "/cache/x/3", "/cache/x/4"]);
+  assert.deepEqual(drainOrphanAttachments(db), [], "an empty queue is an empty list, not a throw");
 });

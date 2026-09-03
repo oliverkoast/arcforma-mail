@@ -2068,3 +2068,174 @@ body.is-resizing { cursor: col-resize; user-select: none; }
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* ---- attachment chips: a button that previews, with a Download glyph ---- */
+.attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  overflow: hidden;
+}
+.attachment-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 10px;
+  max-width: 320px;
+  color: var(--af-text-body);
+  font-size: 12px;
+  text-align: left;
+}
+.attachment-open:hover:not(:disabled) {
+  color: var(--af-text);
+}
+.attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attachment-size {
+  color: var(--af-text-soft);
+  flex: none;
+}
+.attachment-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 4px;
+  border-radius: 6px;
+  color: var(--af-text-soft);
+  opacity: 0;
+  transition: opacity .12s ease, color .12s ease;
+}
+/* The glyph appears on hover or when it has the keyboard, so a chip at rest is just the file. */
+.attachment:hover .attachment-download,
+.attachment-download:focus-visible {
+  opacity: 1;
+}
+.attachment-download:hover:not(:disabled) {
+  color: var(--af-accent);
+  background: var(--af-bg);
+}
+.attachment.is-busy .attachment-open,
+.attachment.is-busy .attachment-download {
+  color: var(--af-text-soft);
+}
+.attachment-spinner {
+  width: 11px;
+  height: 11px;
+  flex: none;
+  border-radius: var(--af-radius-pill);
+  border: 1.5px solid var(--af-rule);
+  border-top-color: var(--af-accent);
+  animation: af-attachment-spin .7s linear infinite;
+}
+@keyframes af-attachment-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .attachment-spinner { animation-duration: 2.4s; }
+}
+
+/* ---- the attachment preview window ---- */
+.preview {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  height: 100vh;
+  background: var(--af-bg);
+}
+/* The window is frameless, so its top edge is what a hand drags it by. */
+.preview-drag {
+  height: 22px;
+  -webkit-app-region: drag;
+}
+/* 22 + 54 is PREVIEW_HEADER_HEIGHT in electron/attachments/window.ts, which is
+   where the PDF view is parked. The two have to agree. */
+.preview-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 54px;
+  box-sizing: border-box;
+  padding: 0 18px 8px;
+  border-bottom: 1px solid var(--af-rule);
+}
+.preview-title {
+  min-width: 0;
+  flex: 1;
+}
+.preview-name {
+  font-size: 14px;
+  color: var(--af-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-meta {
+  color: var(--af-text-soft);
+  margin-top: 3px;
+}
+.preview-note {
+  color: var(--af-text-soft);
+  flex: none;
+  max-width: 260px;
+}
+.preview-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+.preview-body {
+  min-height: 0;
+  overflow: auto;
+}
+.preview-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: var(--af-bg-alt);
+}
+.preview-image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+/* The PDF area is left empty on purpose: the viewer's own WebContents covers it. */
+.preview-pdf {
+  overflow: hidden;
+  background: var(--af-bg-alt);
+}
+.preview-text {
+  padding: 18px;
+}
+.preview-text pre {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--af-text-body);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.preview-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+}
+.preview-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 420px;
+  text-align: center;
+  color: var(--af-text-body);
+}
+.preview-card p {
+  margin: 0;
+  line-height: 1.5;
+}

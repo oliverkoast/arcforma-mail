@@ -8,7 +8,7 @@ import { reindexAllMessages } from "./queries/messages.js";
 
 export type Db = DatabaseSync;
 
-const SCHEMA_VERSION = 12;
+const SCHEMA_VERSION = 13;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
@@ -177,6 +177,46 @@ function migrateAttention(db: Db): void {
   db.exec("CREATE INDEX IF NOT EXISTS classifications_band ON classifications(band, attention DESC)");
 }
 
+// Version 13: attachment bytes cached on disk. One row per cached attachment,
+// keyed by the message and the part, recording the sanitised filename, the mime
+// type, the byte count, and the path the bytes are at. A second open of the
+// same attachment reads the file instead of asking Gmail again.
+//
+// Deleting the message must not leave the file behind. The foreign key takes
+// the row when its message goes (and messages themselves cascade from threads,
+// and threads from accounts), and the AFTER DELETE trigger copies the path into
+// orphan_attachments on the way out, whichever of those paths the delete came
+// down. openStore turns recursive_triggers on so the trigger also fires for the
+// cascaded deletes, not only for a direct one. The app drains that table and
+// unlinks the files, confining every path to the attachments folder first.
+const MIGRATION_13 = `
+CREATE TABLE IF NOT EXISTS attachment_files (
+  account_id     TEXT NOT NULL,
+  message_id     TEXT NOT NULL,
+  attachment_key TEXT NOT NULL,
+  filename       TEXT NOT NULL,
+  mime_type      TEXT NOT NULL DEFAULT 'application/octet-stream',
+  bytes          INTEGER NOT NULL DEFAULT 0,
+  path           TEXT NOT NULL,
+  cached_at      INTEGER NOT NULL,
+  PRIMARY KEY (account_id, message_id, attachment_key),
+  FOREIGN KEY (account_id, message_id) REFERENCES messages(account_id, id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS attachment_files_message ON attachment_files(account_id, message_id);
+
+CREATE TABLE IF NOT EXISTS orphan_attachments (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  path        TEXT NOT NULL,
+  orphaned_at INTEGER NOT NULL
+);
+
+CREATE TRIGGER IF NOT EXISTS attachment_files_orphan AFTER DELETE ON attachment_files
+BEGIN
+  INSERT INTO orphan_attachments (path, orphaned_at)
+  VALUES (OLD.path, CAST(strftime('%s', 'now') AS INTEGER) * 1000);
+END;
+`;
+
 /** Opens (or creates) the store, applies pragmas, and migrates to the current schema. */
 export function openStore(file: string): Db {
   if (file !== ":memory:") fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -184,6 +224,10 @@ export function openStore(file: string): Db {
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA synchronous = NORMAL");
   db.exec("PRAGMA foreign_keys = ON");
+  // Without this, a row removed by ON DELETE CASCADE fires no trigger on the
+  // child table, and the attachment_files orphan trigger would miss every
+  // message deleted along with its thread. See MIGRATION_13.
+  db.exec("PRAGMA recursive_triggers = ON");
   db.exec("PRAGMA busy_timeout = 5000");
   migrate(db);
   return db;
@@ -219,6 +263,7 @@ export function migrate(db: Db): void {
     { version: 10, sql: () => "SELECT 1", after: (d) => recomputeThreadsWithDrafts(d) },
     { version: 11, sql: () => MIGRATION_11 },
     { version: 12, sql: () => "SELECT 1", after: (d) => migrateAttention(d) },
+    { version: 13, sql: () => MIGRATION_13 },
   ];
   for (const step of steps) {
     if (step.version <= current) continue;
