@@ -115,9 +115,9 @@ body.is-resizing { cursor: col-resize; user-select: none; }
   border-radius: 8px;
   color: var(--af-text-body);
 }
-.nav-item:hover {
-  background: var(--af-bg);
-}
+/* Hover is weight only, in .nav-row:hover .nav-label below. It deliberately paints no background:
+   the selected row already uses --af-bg, and giving hover the same fill made the row under the
+   pointer indistinguishable from the view you were actually in. Background means "you are here". */
 .nav-item[aria-current="true"] {
   background: var(--af-bg);
   color: var(--af-text);
@@ -1324,8 +1324,7 @@ body.is-resizing { cursor: col-resize; user-select: none; }
   min-height: 20px;
 }
 .nav-group-head .nav-eyebrow { padding: 0; margin: 0; }
-.nav-add,
-.nav-more {
+.nav-add {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1339,21 +1338,16 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 }
 .nav-group-head:hover .nav-add,
 .nav-add:focus-visible,
-.nav-add[aria-expanded="true"],
-.nav-row:hover .nav-more,
-.nav-more:focus-visible,
-.nav-more[aria-expanded="true"] { opacity: 1; }
-.nav-add:hover,
-.nav-more:hover { background: var(--af-bg); color: var(--af-text); }
-.nav-add:focus-visible,
-.nav-more:focus-visible { outline: 2px solid var(--af-bright); outline-offset: 2px; }
+.nav-add[aria-expanded="true"] { opacity: 1; }
+.nav-add:hover { background: var(--af-bg); color: var(--af-text); }
+.nav-add:focus-visible { outline: 2px solid var(--af-bright); outline-offset: 2px; }
 .nav-rows { display: flex; flex-direction: column; }
 .nav-row { position: relative; display: flex; align-items: center; }
 .nav-row .nav-item { flex: 1; }
-.nav-row .nav-more { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
-/* The "..." sits where the count was; the count steps aside while the pointer is on the row. */
-.nav-row:hover .nav-count,
-.nav-row .nav-more[aria-expanded="true"] ~ .nav-count { visibility: hidden; }
+/* Hover says "this one" by weight alone. Nothing appears, nothing hides: the label and its count
+   both stay put, because a row that rearranges itself under the pointer is a row you cannot read.
+   The weight is the only change, and the count is already tabular, so no text moves. */
+.nav-row:hover .nav-label { font-weight: 600; }
 .nav-row[draggable="true"] { cursor: grab; }
 .nav-row.dragging .nav-item {
   background: var(--af-bg-alt);
@@ -1370,8 +1364,7 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .nav-group.drop-target .nav-eyebrow { color: var(--af-cobalt); }
 .nav-rows-empty { padding: 6px 12px; color: var(--af-text-soft); }
 /* The one line a group offers when it has folded its empty rows away. Quieter than a row, because
-   it is a way back rather than a place to go. Deliberately not .nav-more: that class already
-   belongs to a row's "..." menu button, and reusing it put the menu on top of the row label. */
+   it is a way back rather than a place to go. */
 .nav-fold {
   display: block;
   width: 100%;
