@@ -12,7 +12,7 @@ test("a bearer token never survives a log line", () => {
   assert.match(redact("Authorization: Bearer ya29.a0AfH6SMBx7Kq2Lm9"), /\[redacted\]/);
   assert.doesNotMatch(redact("Authorization: Bearer ya29.a0AfH6SMBx7Kq2Lm9"), /a0AfH6SMBx7Kq2Lm9/);
   assert.doesNotMatch(redact('refresh_token="1//04dXk9sLmQ2vwCgYIARAAGAQSNwF"'), /04dXk9sLmQ2vwCgYIARAAGAQSNwF/);
-  assert.doesNotMatch(redact("client_secret=GOCSPX-abcdefghijklmnop"), /GOCSPX-abcdefghijklmnop/);
+  assert.doesNotMatch(redact("client_secret=GOCSPX-abcdefghijklmnop"), /GOCSPX-abcdefghijklmnop/); // secret-scan: fixture
   assert.doesNotMatch(redact("api_key: sk-abcdefghijklmnopqrstuvwx"), /abcdefghijklmnopqrstuvwx/);
 });
 

@@ -59,14 +59,14 @@ function EmptyState({ headline, detail }: { headline: string; detail: string | n
   );
 }
 
-function Row({ row, selected, owners, onClick, onHover, accountLabel, accountEmail, highlight }: { row: ThreadSummary; selected: boolean; owners: Set<string>; onClick: () => void; onHover: (e: React.MouseEvent) => void; accountLabel: string | null; accountEmail: string | null; highlight?: SearchHighlight | null }) {
+function Row({ row, selected, owners, onClick, accountLabel, accountEmail, highlight }: { row: ThreadSummary; selected: boolean; owners: Set<string>; onClick: () => void; accountLabel: string | null; accountEmail: string | null; highlight?: SearchHighlight | null }) {
   // Gmail builds its snippet from the first text in the body, so on a domain that stamps a
   // "this came from outside" banner every row previews the same warning and the column stops saying
   // anything about any thread. The preview is what the message says.
   const preview = stripBannerPrefix(row.snippet);
   // The row explains itself only when its own text is cut off: the full subject, the start of the snippet, the account.
   return (
-    <div className={`row${row.unread ? " unread" : ""}${selected ? " selected" : ""}`} onClick={onClick} onMouseMove={onHover} role="option" aria-selected={selected} data-tip={threadRowTip(row.subject, preview, accountEmail)} data-tip-if-truncated=".row-subject, .row-snippet">
+    <div className={`row${row.unread ? " unread" : ""}${selected ? " selected" : ""}`} onClick={onClick} role="option" aria-selected={selected} data-tip={threadRowTip(row.subject, preview, accountEmail)} data-tip-if-truncated=".row-subject, .row-snippet">
       <span className="dot" />
       <div className="row-main">
         {row.band === "needs_you" && row.attentionReason ? <span className="af-mono row-eyebrow" data-tip={row.attentionReason}>{attentionEyebrow(row.attentionReason)}</span> : null}
@@ -156,7 +156,6 @@ export function ThreadList() {
   const savedSearches = useApp((s) => s.savedSearches);
 
   const parentRef = useRef<HTMLDivElement>(null);
-  const lastPointer = useRef<{ x: number; y: number } | null>(null);
   const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => parentRef.current, estimateSize: () => 74, overscan: 8 });
 
   // Rows are measured as they mount. A webfont arriving afterwards changes their height, and the
@@ -299,15 +298,6 @@ export function ThreadList() {
                     onClick={() => {
                       select(item.index);
                       void openSelected();
-                    }}
-                    onHover={(e) => {
-                      // Hover moves the cursor row so E, H, S act on what the mouse is over, the way
-                      // Superhuman does. Only a real mouse movement counts: rows sliding under a
-                      // stationary pointer during keyboard navigation or scrolling must not steal it.
-                      const last = lastPointer.current;
-                      if (last && last.x === e.clientX && last.y === e.clientY) return;
-                      lastPointer.current = { x: e.clientX, y: e.clientY };
-                      if (item.index !== selected) select(item.index);
                     }}
                   />
                 </div>
