@@ -1,4 +1,4 @@
-export { openStore, migrate, schemaVersion, SCHEMA_VERSION, transaction, placeholders, type Db } from "./db.js";
+export { openStore, migrate, schemaVersion, SCHEMA_VERSION, repairInlineAttachments, transaction, placeholders, type Db } from "./db.js";
 export * from "./types.js";
 export * from "./mail-headers.js";
 export * from "./queries/accounts.js";

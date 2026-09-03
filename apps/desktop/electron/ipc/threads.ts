@@ -230,7 +230,7 @@ export function registerThreadIpc(db: Db, accounts: AccountRegistry, sync: SyncM
             // Only messages the store knows: a body for a message the sync has not landed yet would violate the key.
             if (!known.has(m.id)) continue;
             const body = findBody(m.payload);
-            saveBody(db, accountId, m.id, { html: body.html, text: body.text, attachments: listAttachments(m.payload) });
+            saveBody(db, accountId, m.id, { html: body.html, text: body.text, attachments: listAttachments(m.payload, [], body.html) });
           }
           messages = listThreadMessages(db, accountId, threadId);
           const still = listBodies(db, accountId, threadId).length;

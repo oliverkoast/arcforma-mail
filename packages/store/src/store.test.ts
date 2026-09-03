@@ -8,6 +8,7 @@ import {
   migrate,
   schemaVersion,
   SCHEMA_VERSION,
+  repairInlineAttachments,
   upsertAccount,
   upsertThreadFromGmail,
   listThreads,
@@ -226,6 +227,55 @@ test("the inbox list query walks the inbox index rather than scanning threads", 
   const plan = (db.prepare(sql).all("arcforma", "personal", 50) as Array<{ detail: string }>).map((r) => r.detail);
   assert.ok(plan.some((d) => /SEARCH t USING INDEX threads_inbox/.test(d)), plan.join(" | "));
   assert.equal(plan.some((d) => /SCAN t\b/.test(d)), false, plan.join(" | "));
+});
+
+test("schema 16 un-hides attachments that were stored as inline because Gmail stamped a Content-ID", () => {
+  // The bytes were never lost, only filtered out of the chips, the paperclip and the With
+  // attachments view. So this repairs what is stored rather than refetching anything.
+  const { db } = tempDb();
+  seed(db);
+  const cv = { partId: "1", filename: "Matthew Gallo CV.pdf", mimeType: "application/pdf", size: 259275, attachmentId: "A1", contentId: "f_mtllr0hq0", inline: true, data: null };
+  const logo = { partId: "2", filename: "logo.png", mimeType: "image/png", size: 900, attachmentId: "A2", contentId: "logo1", inline: true, data: null };
+  db.prepare("INSERT OR REPLACE INTO message_bodies (account_id, message_id, html, text, attachments_json, fetched_at) VALUES (?,?,?,?,?,?)")
+    .run("arcforma", "m1", '<p>Hi Oliver,</p><img src="cid:logo1">', null, JSON.stringify([cv, logo]), Date.now());
+  db.prepare("UPDATE messages SET has_attachments = 0 WHERE account_id = 'arcforma' AND id = 'm1'").run();
+
+  assert.equal(repairInlineAttachments(db), 1);
+
+  const after = JSON.parse((db.prepare("SELECT attachments_json AS j FROM message_bodies WHERE message_id = 'm1'").get() as { j: string }).j) as Array<{ filename: string; inline: boolean }>;
+  assert.equal(after.find((a) => a.filename.endsWith("CV.pdf"))?.inline, false, "nothing in the HTML points at the CV, so it is a file");
+  assert.equal(after.find((a) => a.filename === "logo.png")?.inline, true, "the HTML does point at the logo, so it stays layout");
+  assert.equal((db.prepare("SELECT has_attachments AS h FROM messages WHERE id = 'm1'").get() as { h: number }).h, 1, "the message has a file again");
+  assert.equal((db.prepare("SELECT has_attachments AS h FROM threads WHERE id = 't1'").get() as { h: number }).h, 1, "and so does its thread");
+});
+
+test("the repair leaves an attachment with no Content-ID exactly as it was", () => {
+  // Those were marked inline by an explicit Content-Disposition, which the stored row does not
+  // carry, so there is nothing to re-decide them with and guessing would be worse than leaving them.
+  const { db } = tempDb();
+  seed(db);
+  const sig = { partId: "1", filename: "sig.png", mimeType: "image/png", size: 90, attachmentId: "A3", contentId: null, inline: true, data: null };
+  db.prepare("INSERT OR REPLACE INTO message_bodies (account_id, message_id, html, text, attachments_json, fetched_at) VALUES (?,?,?,?,?,?)")
+    .run("arcforma", "m1", "<p>No images.</p>", null, JSON.stringify([sig]), Date.now());
+  assert.equal(repairInlineAttachments(db), 0, "nothing to change");
+  assert.equal((JSON.parse((db.prepare("SELECT attachments_json AS j FROM message_bodies WHERE message_id = 'm1'").get() as { j: string }).j) as Array<{ inline: boolean }>)[0]?.inline, true);
+});
+
+test("search answers newest first, whatever the text match scores", () => {
+  // Relevance ranking led, so results came back scattered by date: an August thread above one from
+  // July above one from yesterday, with nothing on screen explaining the order. In mail recency is
+  // the relevance, and a list that cannot be scanned by date has to be read in full.
+  const { db } = tempDb();
+  seed(db);
+  const at = (n: number) => T0 - n * 86_400_000;
+  // The oldest one repeats the term, so bm25 would rank it first. Date has to win anyway.
+  upsertThreadFromGmail(db, "arcforma", thread("t-old", [{ id: "m-old", from: "adee@infinitycreativeagency.com", subject: "infinity infinity infinity", date: at(40), labels: ["INBOX"], snippet: "infinity infinity" }]));
+  upsertThreadFromGmail(db, "arcforma", thread("t-mid", [{ id: "m-mid", from: "bailey@infinitycreativeagency.com", subject: "Following up", date: at(20), labels: ["INBOX"], snippet: "infinity" }]));
+  upsertThreadFromGmail(db, "arcforma", thread("t-new", [{ id: "m-new", from: "jackie@infinitycreativeagency.com", subject: "Fragrance seeding", date: at(1), labels: ["INBOX"], snippet: "infinity" }]));
+
+  const dates = search(db, "infinity").map((h) => h.row.lastMessageAt ?? 0);
+  assert.deepEqual([...dates].sort((a, b) => b - a), dates, "every hit is at or before the one above it");
+  assert.equal(search(db, "infinity")[0]?.messageId, "m-new", "the newest match leads, not the best-scoring one");
 });
 
 test("deleting an account clears its FTS rows and a refetch that drops a message drops it from search", async () => {

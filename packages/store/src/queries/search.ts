@@ -69,7 +69,11 @@ function fromClause(compiled: CompiledSearch, withHighlights: boolean): { sql: s
             JOIN messages m ON m.fts_id = f.fts_rowid
             ${JOINS}`,
       args: [compiled.fts],
-      order: "f.rank, m.internal_date DESC",
+      // Newest first, always. bm25 relevance used to lead, which scattered the results by date:
+      // an August thread above one from July above one from yesterday, with no visible reason for
+      // the order. In mail, recency is the relevance, and a list you cannot scan by date is a list
+      // you have to read all of. rank stays only to settle threads from the same instant.
+      order: "m.internal_date DESC, f.rank",
     };
   }
   return { sql: `FROM messages m ${JOINS}`, args: [], order: "m.internal_date DESC" };

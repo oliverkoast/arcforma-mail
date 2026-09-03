@@ -10,7 +10,7 @@ export type Db = DatabaseSync;
 
 /** The schema every opened store is migrated up to. Exported so tests assert against this rather
  *  than a copy of the number, which went stale on every bump and failed four suites at once. */
-export const SCHEMA_VERSION = 15;
+export const SCHEMA_VERSION = 16;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
@@ -314,6 +314,9 @@ export function migrate(db: Db): void {
     { version: 14, sql: () => "CREATE INDEX IF NOT EXISTS threads_all_sort ON threads(sort_at DESC, account_id, id);" },
     { version: 13, sql: () => MIGRATION_13 },
     { version: 15, sql: () => MIGRATION_15, after: (d) => migrateDraftReceipts(d) },
+    // Every attachment Gmail stamped a Content-ID on was stored as inline and never rendered. The
+    // files are in the database already, so this re-decides them in place rather than refetching.
+    { version: 16, sql: () => "SELECT 1", after: (d) => repairInlineAttachments(d) },
   ];
   for (const step of steps) {
     if (step.version <= current) continue;
@@ -370,4 +373,58 @@ export function recomputeThreadsWithDrafts(db: Db): number {
   const rows = db.prepare(`SELECT DISTINCT account_id, thread_id FROM messages WHERE label_ids_json LIKE '%"DRAFT"%'`).all() as Array<{ account_id: string; thread_id: string }>;
   for (const r of rows) recomputeThread(db, r.account_id, r.thread_id, { keepSortAt: true });
   return rows.length;
+}
+
+/**
+ * Re-decides `inline` on every cached attachment, and repairs the has_attachments flags above it.
+ *
+ * A Content-ID was being read as proof that a part belonged to the message's layout. Gmail stamps
+ * one on every attachment of anything composed in Gmail, so real files, a CV among them, were
+ * marked inline and filtered out of the chips, the paperclip and the With attachments view. The
+ * bytes were never lost, only hidden, which is why this repairs what is stored rather than
+ * refetching anything.
+ *
+ * The stored rows do not carry Content-Disposition, so only parts with a Content-ID are re-decided:
+ * for those, inline means the HTML actually points at them with cid:. A part marked inline with no
+ * Content-ID was marked so by an explicit disposition, and is left alone.
+ */
+export function repairInlineAttachments(db: Db): number {
+  const rows = db.prepare("SELECT account_id, message_id, html, attachments_json FROM message_bodies").all() as Array<{
+    account_id: string;
+    message_id: string;
+    html: string | null;
+    attachments_json: string;
+  }>;
+  let changed = 0;
+  for (const row of rows) {
+    let parsed: Array<{ contentId?: string | null; inline?: boolean }>;
+    try {
+      parsed = JSON.parse(row.attachments_json) as typeof parsed;
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(parsed) || parsed.length === 0) continue;
+    let touched = false;
+    for (const a of parsed) {
+      const cid = typeof a.contentId === "string" ? a.contentId : "";
+      if (!cid) continue;
+      const inline = typeof row.html === "string" && row.html.includes(`cid:${cid}`);
+      if (a.inline !== inline) {
+        a.inline = inline;
+        touched = true;
+      }
+    }
+    if (!touched) continue;
+    db.prepare("UPDATE message_bodies SET attachments_json = ? WHERE account_id = ? AND message_id = ?").run(JSON.stringify(parsed), row.account_id, row.message_id);
+    const hasFiles = parsed.some((a) => a.inline !== true) ? 1 : 0;
+    db.prepare("UPDATE messages SET has_attachments = ? WHERE account_id = ? AND id = ?").run(hasFiles, row.account_id, row.message_id);
+    changed++;
+  }
+  // A thread has files when any message in it does. Only threads touched above can have changed.
+  db.exec(`
+    UPDATE threads SET has_attachments = (
+      SELECT CASE WHEN EXISTS (SELECT 1 FROM messages m WHERE m.account_id = threads.account_id AND m.thread_id = threads.id AND m.has_attachments = 1) THEN 1 ELSE 0 END
+    )
+  `);
+  return changed;
 }

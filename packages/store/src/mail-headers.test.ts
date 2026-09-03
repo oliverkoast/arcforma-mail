@@ -4,17 +4,22 @@ import { partHasAttachment } from "./mail-headers.js";
 
 // ---- what counts as an attachment ---------------------------------------------------------------
 
-test("an inline image is part of the message, not a file attached to it", () => {
-  // Newsletters are built from inline images. Counting them lit the paperclip on rows with nothing
-  // to open and filled the With attachments view with mail that has no attachments.
+test("an image marked Content-Disposition: inline is part of the message", () => {
   const inlineByDisposition = { filename: "hero.png", body: { attachmentId: "a1" }, headers: [{ name: "Content-Disposition", value: "inline; filename=hero.png" }] };
-  const inlineByCid = { filename: "logo.png", body: { attachmentId: "a2" }, headers: [{ name: "Content-ID", value: "<logo@news>" }] };
   assert.equal(partHasAttachment({ parts: [inlineByDisposition] } as never), false);
-  assert.equal(partHasAttachment({ parts: [inlineByCid] } as never), false);
+});
+
+test("a Content-ID does not make a file part of the message", () => {
+  // Gmail stamps one on every attachment of anything composed in Gmail. Reading it as inline hid a
+  // CV from the paperclip and from the With attachments view while it sat in the database.
+  const cv = { filename: "cv.pdf", body: { attachmentId: "a2" }, headers: [{ name: "Content-Disposition", value: "attachment; filename=cv.pdf" }, { name: "Content-ID", value: "<f_mtllr0hq0>" }] };
+  const bareCid = { filename: "photo.png", body: { attachmentId: "a3" }, headers: [{ name: "Content-ID", value: "<x>" }] };
+  assert.equal(partHasAttachment({ parts: [cv] } as never), true);
+  assert.equal(partHasAttachment({ parts: [bareCid] } as never), true, "metadata cannot check the HTML, so it errs toward showing the file");
 });
 
 test("a real attachment still counts, alongside inline images", () => {
-  const inline = { filename: "logo.png", body: { attachmentId: "a1" }, headers: [{ name: "Content-ID", value: "<logo@news>" }] };
+  const inline = { filename: "logo.png", body: { attachmentId: "a1" }, headers: [{ name: "Content-Disposition", value: "inline" }] };
   const real = { filename: "resume.pdf", body: { attachmentId: "a2" }, headers: [{ name: "Content-Disposition", value: "attachment; filename=resume.pdf" }] };
   assert.equal(partHasAttachment({ parts: [inline, real] } as never), true);
 });

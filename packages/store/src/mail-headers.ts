@@ -55,11 +55,15 @@ export function senderType(headers: GmailHeaderInput[] | undefined, fromEmail: s
 /**
  * Whether a message carries a file someone would open, as opposed to pieces of its own layout.
  *
- * Inline images have filenames and attachment ids like any other part, so counting every named part
- * marked the paperclip on newsletters and put them in the With attachments view, where a reader
- * opening one finds nothing to open. An image referenced by the body through a Content-ID, or one
- * that says Content-Disposition: inline, is part of the message, not something attached to it. This
- * is the same rule the MIME walker applies when it sets `inline` on a parsed attachment.
+ * Only an explicit Content-Disposition: inline counts as layout here. A Content-ID does not, and
+ * treating it as one hid real attachments: Gmail stamps a Content-ID on every attachment of a
+ * message composed in Gmail, so a CV sent from Gmail was classed as layout and vanished from the
+ * paperclip and the With attachments view.
+ *
+ * The MIME walker can do better, because it has the HTML and can check whether anything actually
+ * points at the Content-ID with cid:. This runs on metadata, where that is not available, so it
+ * asks only the question it can answer. Erring toward "this is a file" is the right way round: a
+ * layout image listed as an attachment is untidy, a hidden CV is a lost candidate.
  */
 export function partHasAttachment(part: GmailPartInput | undefined): boolean {
   if (!part) return false;
@@ -68,15 +72,11 @@ export function partHasAttachment(part: GmailPartInput | undefined): boolean {
 }
 
 function isInlinePart(part: GmailPartInput): boolean {
-  const headers = part.headers ?? [];
-  let disposition = "";
-  let contentId = "";
-  for (const h of headers) {
-    const name = (h.name ?? "").toLowerCase();
-    if (name === "content-disposition") disposition = (h.value ?? "").toLowerCase();
-    else if (name === "content-id") contentId = h.value ?? "";
+  for (const h of part.headers ?? []) {
+    if ((h.name ?? "").toLowerCase() !== "content-disposition") continue;
+    return (h.value ?? "").toLowerCase().trimStart().startsWith("inline");
   }
-  return disposition.trimStart().startsWith("inline") || contentId.trim().length > 0;
+  return false;
 }
 
 

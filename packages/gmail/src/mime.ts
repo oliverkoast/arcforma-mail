@@ -126,7 +126,35 @@ function findRenderable(payload: GmailPart | undefined, mime: string): GmailPart
   return null;
 }
 
-export function listAttachments(payload: GmailPart | undefined, out: Attachment[] = []): Attachment[] {
+/**
+ * Whether a part is part of the message's own layout rather than a file attached to it.
+ *
+ * A Content-ID alone does not mean inline, and assuming it did hid real attachments. Anything
+ * composed in Gmail gets a Content-ID stamped on every attachment, so a CV sent from Gmail arrived
+ * carrying one and was filtered out of the chips, the paperclip and the With attachments view. The
+ * file was in the database the whole time and simply never rendered.
+ *
+ * The reliable signals, in order:
+ *
+ *   Content-Disposition: attachment is explicit and settles it, whatever else the part carries.
+ *   Content-Disposition: inline is the other explicit answer.
+ *   Otherwise a Content-ID counts only when the HTML actually points at it with cid:, which is what
+ *   being part of the layout means.
+ */
+function isInline(disposition: string, cid: string, html: string | null): boolean {
+  const d = disposition.trimStart();
+  if (d.startsWith("attachment")) return false;
+  if (d.startsWith("inline")) return true;
+  if (!cid) return false;
+  return html !== null && html.includes(`cid:${cid}`);
+}
+
+/**
+ * @param html the message's HTML, when it is known. Without it a Content-ID cannot be checked for a
+ *   reference, and the safe answer is that the part is a real attachment: showing a layout image as
+ *   a file is untidy, hiding someone's CV is not.
+ */
+export function listAttachments(payload: GmailPart | undefined, out: Attachment[] = [], html: string | null = null): Attachment[] {
   if (!payload) return out;
   if (payload.filename && (payload.body?.attachmentId || payload.body?.data)) {
     const disposition = header(payload.headers, "Content-Disposition").toLowerCase();
@@ -139,12 +167,12 @@ export function listAttachments(payload: GmailPart | undefined, out: Attachment[
       size: payload.body?.size ?? 0,
       attachmentId,
       contentId: cid || null,
-      inline: disposition.startsWith("inline") || Boolean(cid),
+      inline: isInline(disposition, cid, html),
       // Without an attachmentId this data is the only copy of the bytes.
       data: attachmentId ? null : payload.body?.data ?? null,
     });
   }
-  for (const part of payload.parts ?? []) listAttachments(part, out);
+  for (const part of payload.parts ?? []) listAttachments(part, out, html);
   return out;
 }
 
