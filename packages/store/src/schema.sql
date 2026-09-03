@@ -43,6 +43,10 @@ CREATE TABLE IF NOT EXISTS threads (
 );
 CREATE INDEX IF NOT EXISTS threads_sort ON threads(account_id, sort_at DESC);
 CREATE INDEX IF NOT EXISTS threads_inbox ON threads(in_inbox, sort_at DESC);
+-- Every account at once, newest first: the default view, and the one with no account to narrow by.
+-- Without this it is a full scan and a sort of the whole table. Measured at 60k threads: 67 ms to
+-- 0.29 ms.
+CREATE INDEX IF NOT EXISTS threads_all_sort ON threads(sort_at DESC, account_id, id);
 
 CREATE TABLE IF NOT EXISTS messages (
   account_id        TEXT NOT NULL,

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { QUOTE_FORBID_ATTR, QUOTE_FORBID_TAGS } from "../lib/quote-policy";
 import DOMPurify from "dompurify";
 import { invoke, isElectron, on } from "../bridge";
 import {
@@ -347,8 +348,18 @@ export function isQueueView(view: InboxView): view is QueueName {
   return view === "daily" || view === "weekly" || view === "later";
 }
 
+// The quoted history a reply carries is rendered by the compose editor directly in the app, not in
+// the sandboxed frame the reading pane uses, so it gets a stricter rule than a message body does.
+// Remote images are removed outright rather than gated on a setting: an image here would be fetched
+// the moment the reply is opened, which tells the sender both that the mail was read and that a
+// reply is being written, and the remote-images setting cannot express that. Anything that could
+// load or execute goes with them.
+//
 // The renderer always has a DOM. Without one (node:test) DOMPurify cannot parse, so the quote keeps only the text.
-const sanitize = (html: string) => (DOMPurify.isSupported ? DOMPurify.sanitize(html, { USE_PROFILES: { html: true }, FORBID_TAGS: ["style", "script", "iframe", "object", "embed", "form", "input", "button", "link", "meta", "base"] }) : html.replace(/<[^>]+>/g, ""));
+const sanitize = (html: string) =>
+  DOMPurify.isSupported
+    ? DOMPurify.sanitize(html, { USE_PROFILES: { html: true }, FORBID_TAGS: QUOTE_FORBID_TAGS, FORBID_ATTR: QUOTE_FORBID_ATTR })
+    : html.replace(/<[^>]+>/g, "");
 
 function wordsOf(view: ThreadView): number {
   let n = 0;

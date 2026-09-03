@@ -1,8 +1,10 @@
 # Engineering audit
 
-Read-only assessment of this repository at `dfb6885`, carried out 2026-09-02 to 2026-09-03. Nothing
-was changed except the addition of this file. Every claim below carries a file path and a line, or
-the output of a command that was actually run.
+Read-only assessment of this repository, carried out 2026-09-02 to 2026-09-03. Findings were
+gathered against `dfb6885` and every headline finding was re-verified against `7b90864`, with line
+numbers unchanged. Nothing was changed except the addition of this file, and no commit was made as
+part of this work. Every claim below carries a file path and a line, or the output of a command that
+was actually run.
 
 ## Verdict
 

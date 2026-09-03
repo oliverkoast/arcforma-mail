@@ -22,3 +22,17 @@ jobs:
       - run: node scripts/brand-check.mjs
       - name: No secrets in the tree
         run: node scripts/secret-scan.mjs
+      # CONTRIBUTING says a change has to pass the build and the smoke walk. Saying it and not
+      # checking it means the rule only applies to whoever remembers it.
+      - run: pnpm --filter desktop build
+      - run: pnpm --filter desktop smoke
+      - name: Known vulnerabilities in dependencies
+        run: pnpm audit --audit-level high
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-screenshots
+          path: /tmp/arcmail-smoke-*/
+          if-no-files-found: ignore
+          retention-days: 7

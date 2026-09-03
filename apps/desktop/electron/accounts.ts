@@ -8,7 +8,7 @@ import { clearAccountOnSignOut, markAccountExpired } from "./auth-state.js";
 import { emit } from "./events.js";
 import { log, logError } from "./log.js";
 import { oauthClientsPath } from "./paths.js";
-import { deleteRefreshToken, hasRefreshToken, loadRefreshToken, saveRefreshToken } from "./tokens.js";
+import { KeychainUnavailableError, deleteRefreshToken, hasRefreshToken, loadRefreshToken, saveRefreshToken } from "./tokens.js";
 import type { AccountInfo, AccountsStatus } from "../shared/types.js";
 
 /** The accounts Arcforma Mail is built for. oauth-clients.json supplies the client ids. */
@@ -84,7 +84,20 @@ export class AccountRegistry {
     const cached = this.clients.get(accountId);
     if (cached) return cached;
     const config = this.configs.get(accountId);
-    const refreshToken = loadRefreshToken(accountId);
+    // A Keychain that cannot be read is a condition of the machine, not of this account. Treating it
+    // as "no client" degrades to the signed-out path, which says so on screen, instead of throwing
+    // out of whatever happened to ask first and surfacing as a raw IPC error on an unrelated call.
+    let refreshToken: string | null = null;
+    try {
+      refreshToken = loadRefreshToken(accountId);
+    } catch (err) {
+      if (err instanceof KeychainUnavailableError) {
+        logError("auth", `${accountId}: ${err.message}`, err);
+        updateAccount(this.db, accountId, { auth_state: "signed_out", error: err.message });
+        return null;
+      }
+      throw err;
+    }
     if (!config || !refreshToken) return null;
     const client = new GmailClient({
       accessToken: createTokenSource({

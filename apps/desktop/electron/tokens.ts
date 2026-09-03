@@ -29,9 +29,23 @@ function writeFile(data: TokenFile): void {
   }
 }
 
+/**
+ * Writing a token without the Keychain would mean writing it in the clear, so a write must fail.
+ * Reading is different: the Keychain can be unavailable for reasons that have nothing to do with
+ * this account, most often because the app bundle was replaced while it was running, and throwing
+ * there turned every later call into a raw IPC error whose message ("the refresh token was not
+ * stored") described a write that never happened. A read now reports that it could not read.
+ */
 function requireEncryption(): void {
   if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("Keychain encryption is unavailable, so the refresh token was not stored.");
+    throw new Error("The Keychain is unavailable, so the refresh token cannot be stored. Quit and reopen Arcforma Mail, then sign in again.");
+  }
+}
+
+export class KeychainUnavailableError extends Error {
+  constructor() {
+    super("The Keychain is unavailable, so the saved sign-in cannot be read. Quit and reopen Arcforma Mail.");
+    this.name = "KeychainUnavailableError";
   }
 }
 
@@ -46,7 +60,7 @@ export function loadRefreshToken(accountId: string): string | null {
   const data = readFile();
   const blob = data[accountId];
   if (!blob) return null;
-  requireEncryption();
+  if (!safeStorage.isEncryptionAvailable()) throw new KeychainUnavailableError();
   try {
     return safeStorage.decryptString(Buffer.from(blob, "base64"));
   } catch {

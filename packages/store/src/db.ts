@@ -8,7 +8,7 @@ import { reindexAllMessages } from "./queries/messages.js";
 
 export type Db = DatabaseSync;
 
-const SCHEMA_VERSION = 13;
+const SCHEMA_VERSION = 14;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
@@ -263,6 +263,8 @@ export function migrate(db: Db): void {
     { version: 10, sql: () => "SELECT 1", after: (d) => recomputeThreadsWithDrafts(d) },
     { version: 11, sql: () => MIGRATION_11 },
     { version: 12, sql: () => "SELECT 1", after: (d) => migrateAttention(d) },
+    // The unified list had no index and scanned the whole table on every keystroke of the sidebar.
+    { version: 14, sql: () => "CREATE INDEX IF NOT EXISTS threads_all_sort ON threads(sort_at DESC, account_id, id);" },
     { version: 13, sql: () => MIGRATION_13 },
   ];
   for (const step of steps) {
