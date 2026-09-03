@@ -18,7 +18,7 @@ Every change runs `pnpm -r typecheck`, `pnpm -r test`, `node scripts/brand-check
 
 ## House rules that are product, not preference
 
-1. No tracking pixels, ever, not even behind a flag.
+1. Read receipts are off by default and chosen per message. A pixel reports that software asked for an image, never that a person read anything, so the app grades every fetch and says "no signal" rather than "unread". Never let a caller collapse those two, and never store anything about the recipient beyond what `packages/pixel-service` already keeps.
 2. Drafts, never automatic sends. The app may write for you; it does not speak for you.
 3. Claude is never called from the sync path. Background work uses the local model only.
 4. Message HTML renders sandboxed, with remote images off unless the setting allows them.

@@ -2248,3 +2248,131 @@ body.is-resizing { cursor: col-resize; user-select: none; }
   line-height: 15px;
   min-height: 15px;
 }
+
+/* ---- the toast, bottom left ----
+   Superhuman's shape: the confirmation lands in the corner and stays out of the
+   way. At rest it is the sentence; the pointer or the keyboard reveals Undo, and
+   the dismissal timer is held for as long as either is on it. Width is capped so
+   the floating compose panel, which is bottom right and at least 396 px in from
+   the left at the smallest window this app opens, never has to share the row. */
+.toast {
+  left: 20px;
+  bottom: 20px;
+  transform: none;
+  max-width: min(360px, calc(100vw - 40px));
+  white-space: normal;
+  align-items: baseline;
+  gap: 10px;
+}
+/* The sidebar's own bottom row keeps clear of the band the toast lands in. */
+.nav-bottom {
+  padding-bottom: 52px;
+}
+.toast:focus-visible {
+  outline: 2px solid var(--af-accent);
+  outline-offset: 2px;
+}
+.toast-undo {
+  flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+.toast-undo .af-mono {
+  color: var(--af-reverse);
+  opacity: 0.7;
+  text-decoration: none;
+}
+.toast-note {
+  color: var(--af-reverse);
+  opacity: 0.7;
+  font-size: 12px;
+}
+/* Said to a screen reader with the rest of the live region, drawn nowhere. */
+.toast-said {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---- a folded message ----
+   Every message except the newest, the first, and anything unread opens as one
+   row. The row mounts no iframe: that is the whole saving on a long thread. */
+.message.is-folded {
+  padding: 0;
+}
+.message-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+  color: var(--af-text-body);
+}
+.message-row:hover {
+  color: var(--af-text);
+}
+.message-row .message-avatar {
+  width: 26px;
+  height: 26px;
+  font-size: 10px;
+}
+.message-row-from {
+  flex: none;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.message-row.is-unread .message-row-from {
+  color: var(--af-accent);
+}
+.message-row-snippet {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--af-text-soft);
+}
+.message-row-files,
+.message-row-date {
+  flex: none;
+  white-space: nowrap;
+}
+/* The header of an open message is its own collapse control. */
+.message-head.is-collapsible {
+  cursor: pointer;
+}
+button.message-from {
+  display: block;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+}
+/* "Show all 32 earlier messages", above the first one, and the way back. */
+.messages-fold {
+  display: block;
+  width: 100%;
+  padding: 12px 0;
+  text-align: left;
+  background: transparent;
+  color: var(--af-text-soft);
+  cursor: pointer;
+}
+.messages-fold:hover {
+  color: var(--af-accent);
+}

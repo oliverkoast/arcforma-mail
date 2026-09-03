@@ -67,6 +67,10 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
           if (attachmentDelay) await wait(attachmentDelay);
           return { saved: true, path: "/Users/someone/Downloads/deck.pdf", filename: "deck.pdf" };
         }
+        case "threads:unsnooze":
+          return true;
+        case "threads:unsubscribe":
+          return unsubscribeResult;
         case "send:undo":
           return { cancelled: true, draft: { ...(lastSent ?? {}), draftId: null } };
         case "settings:set":
@@ -90,6 +94,8 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
   },
 };
 let lastSent: ComposeDraft | null = null;
+/** What the fake main process says U did. Tests set it before pressing U. */
+let unsubscribeResult: { method: string; ok: boolean; archived: boolean; state: string; text: string } = { method: "post", ok: true, archived: true, state: "sent", text: "Unsubscribed from Northwind." };
 /** The fake settings table: settings:set merges the patch and hands the whole row back, the way the main process does. */
 /** The fake settings table's onboarding half: the step and the finished flag survive a reload the way the store does. */
 let onboardingRow = { step: "welcome", done: false, clientsPath: "/tmp/oauth-clients.json" };
@@ -870,4 +876,186 @@ test("two different attachments fetch at once without either clearing the other'
   await Promise.all([a, b]);
   assert.deepEqual(useApp.getState().attachmentsBusy, []);
   attachmentDelay = 0;
+});
+
+// ---- a long thread opens on its newest message ------------------------------------------
+
+/** A thread of n messages, with the given zero-based positions still unread. */
+function longThread(id: string, n: number, unreadAt: number[] = []): ThreadView {
+  return {
+    thread: { ...summary(id, "Kickoff next week"), messageCount: n },
+    messages: Array.from({ length: n }, (_, i) =>
+      message(id, `m${i + 1}`, { labelIds: unreadAt.includes(i) ? ["INBOX", "UNREAD"] : ["INBOX"], snippet: `message ${i + 1} of the thread` })
+    ),
+    bodiesPending: false,
+  };
+}
+threadViews.set("arcforma:t-long", longThread("t-long", 34, [20]));
+
+test("a long thread opens with the newest message expanded and the history folded; the folded ones mount no body, and O opens them all and folds them back", async () => {
+  const { useApp } = await import("./store");
+  useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, open: null, expandedMessages: [], allExpanded: false });
+  await useApp.getState().openThreadById("arcforma", "t-long");
+  await settle();
+
+  let s = useApp.getState();
+  assert.equal(s.open?.messages.length, 34);
+  assert.deepEqual(s.expandedMessages, ["m1", "m21", "m34"], "the first, the unread one, and the newest");
+  assert.equal(s.allExpanded, false);
+  // What the control above the first message says, and what the reading pane will not mount.
+  assert.equal(s.open!.messages.length - s.expandedMessages.length, 31);
+
+  useApp.getState().toggleAllMessages();
+  s = useApp.getState();
+  assert.equal(s.expandedMessages.length, 34, "O opens every message");
+  assert.equal(s.allExpanded, true);
+
+  useApp.getState().toggleAllMessages();
+  s = useApp.getState();
+  assert.deepEqual(s.expandedMessages, ["m1", "m21", "m34"], "and folds them back to how the thread opened");
+  assert.equal(s.allExpanded, false);
+
+  // One row at a time: clicking a folded one opens it, clicking the header of an open one folds it again.
+  useApp.getState().toggleMessage("m7");
+  assert.ok(useApp.getState().expandedMessages.includes("m7"));
+  useApp.getState().toggleMessage("m7");
+  assert.ok(!useApp.getState().expandedMessages.includes("m7"));
+
+  // Opening another thread starts over rather than carrying the last one's folds.
+  await useApp.getState().openThreadById("arcforma", "t-agreement");
+  await settle();
+  assert.deepEqual(useApp.getState().expandedMessages, ["a1"]);
+});
+
+test("a reply that arrives while reading shows open; what was folded stays folded", async () => {
+  const { useApp } = await import("./store");
+  useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, open: null, expandedMessages: [], allExpanded: false });
+  threadViews.set("arcforma:t-grow", longThread("t-grow", 6));
+  await useApp.getState().openThreadById("arcforma", "t-grow");
+  await settle();
+  assert.deepEqual(useApp.getState().expandedMessages, ["m1", "m6"]);
+
+  const grown = longThread("t-grow", 7);
+  threadViews.set("arcforma:t-grow", grown);
+  await useApp.getState().refreshOpen();
+  await settle();
+  assert.deepEqual(useApp.getState().expandedMessages, ["m1", "m6", "m7"], "the new newest message is open; the one that was being read stays open");
+});
+
+// ---- the toast, its timer, and Undo ------------------------------------------------------
+
+test("the toast timer stops while the pointer is on it and picks up the time that was left when it leaves", async () => {
+  const { useApp } = await import("./store");
+  useApp.getState().showToast({ text: "Marked done.", undo: { kind: "archive", accountId: "arcforma", threadId: "t1", until: Date.now() + 1200, text: "Back in the inbox." } });
+  assert.equal(useApp.getState().toastPaused, false);
+
+  await new Promise((r) => setTimeout(r, 200));
+  useApp.getState().pauseToast();
+  assert.equal(useApp.getState().toastPaused, true);
+  await new Promise((r) => setTimeout(r, 1600));
+  assert.ok(useApp.getState().toast, "the toast is still there long after it would have gone, so Undo is still clickable");
+
+  useApp.getState().resumeToast();
+  assert.equal(useApp.getState().toastPaused, false);
+  await new Promise((r) => setTimeout(r, 1300));
+  assert.equal(useApp.getState().toast, null, "and it goes once the pointer has left");
+});
+
+/** The store with one thread under the cursor, its list, and no toast. */
+async function withRow(over: Partial<ThreadSummary> = {}) {
+  const { useApp } = await import("./store");
+  calls.length = 0;
+  const row = { ...summary("t-done", "Northwind invoice"), ...over };
+  useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [row], selected: 0, open: null, toast: null, view: "inbox", readingPane: false, categories: [] });
+  return { useApp, row };
+}
+const undoOf = (t: { undo?: unknown } | null) => (t?.undo ?? null) as { kind?: string; text?: string; starred?: boolean; to?: unknown } | null;
+
+test("E leaves an Undo that puts the thread back in the inbox, and the follow-up toast says so", async () => {
+  const { useApp } = await withRow();
+  await useApp.getState().archiveSelected();
+  await settle();
+  assert.equal(useApp.getState().toast?.text, "Marked done.");
+  assert.equal(undoOf(useApp.getState().toast)?.kind, "archive");
+
+  await useApp.getState().undo();
+  await settle();
+  assert.deepEqual(calls.filter((c) => c.channel === "threads:moveToInbox").at(-1)?.args, ["arcforma", "t-done"]);
+  assert.equal(useApp.getState().toast?.text, "Back in the inbox.");
+  assert.equal(useApp.getState().toast?.undo ?? null, null, "the follow-up offers nothing to undo again");
+});
+
+test("H, S, and the File under select each leave an Undo, and Z is the one path all of them take", async () => {
+  const { useApp } = await withRow();
+  const wake = Date.now() + 86_400_000;
+  await useApp.getState().snoozeSelected(wake);
+  await settle();
+  assert.equal(undoOf(useApp.getState().toast)?.kind, "snooze");
+  await useApp.getState().undo();
+  await settle();
+  assert.deepEqual(calls.filter((c) => c.channel === "threads:unsnooze").at(-1)?.args, ["arcforma", "t-done"]);
+  assert.equal(useApp.getState().toast?.text, "Back in the inbox.");
+
+  await withRow({ starred: false });
+  await useApp.getState().starSelected();
+  await settle();
+  assert.equal(useApp.getState().toast?.text, "Starred.");
+  assert.equal(undoOf(useApp.getState().toast)?.starred, false, "undo puts the star back where it was");
+  await useApp.getState().undo();
+  await settle();
+  assert.deepEqual(calls.filter((c) => c.channel === "threads:star").at(-1)?.args, ["arcforma", "t-done", false]);
+  assert.equal(useApp.getState().toast?.text, "Star removed.");
+
+  const { useApp: app } = await withRow({ split: "important", type: null, categoryId: null });
+  await app.getState().refile({ split: "other", category: "promotions" });
+  await settle();
+  assert.equal(app.getState().toast?.eyebrow, "FILED");
+  assert.deepEqual(undoOf(app.getState().toast)?.to, { split: "important", category: null }, "undo goes back to where it was filed");
+  await app.getState().undo();
+  await settle();
+  assert.deepEqual(calls.filter((c) => c.channel === "classify:refile").at(-1)?.args, ["arcforma", "t-done", { split: "important", category: null }]);
+  assert.equal(app.getState().toast?.text, "Filed back under Important.");
+});
+
+test("U offers Undo for the part that can be taken back and says plainly when there is none", async () => {
+  const { useApp } = await withRow({ canUnsubscribe: true });
+  unsubscribeResult = { method: "post", ok: true, archived: true, state: "sent", text: "Unsubscribed from Northwind." };
+  await useApp.getState().unsubscribeSelected();
+  await settle();
+  assert.equal(useApp.getState().toast?.eyebrow, "UNSUBSCRIBED");
+  assert.equal(undoOf(useApp.getState().toast)?.kind, "archive");
+  await useApp.getState().undo();
+  await settle();
+  assert.match(useApp.getState().toast?.text ?? "", /^Back in the inbox\./);
+
+  await withRow({ canUnsubscribe: true });
+  unsubscribeResult = { method: "open", ok: true, archived: false, state: "opened", text: "The unsubscribe page is open in your browser." };
+  await useApp.getState().unsubscribeSelected();
+  await settle();
+  assert.equal(useApp.getState().toast?.undo ?? null, null, "no button that would do nothing");
+  assert.equal(useApp.getState().toast?.noUndo, "A request that has gone out cannot be recalled.");
+  unsubscribeResult = { method: "post", ok: true, archived: true, state: "sent", text: "Unsubscribed from Northwind." };
+});
+
+test("Shift+E puts a thread back in the inbox: the write, the row leaving the Done list, and the way back out", async () => {
+  const { useApp } = await withRow({ inInbox: false });
+  useApp.setState({ view: "archive" });
+  await useApp.getState().moveToInboxSelected();
+  await settle();
+  assert.deepEqual(calls.filter((c) => c.channel === "threads:moveToInbox").at(-1)?.args, ["arcforma", "t-done"]);
+  assert.deepEqual(useApp.getState().rows, [], "it is not one of the Done rows any more");
+  assert.equal(useApp.getState().toast?.text, "Back in the inbox.");
+  assert.equal(undoOf(useApp.getState().toast)?.kind, "moveToInbox");
+
+  await useApp.getState().undo();
+  await settle();
+  assert.deepEqual(calls.filter((c) => c.channel === "threads:archive").at(-1)?.args, ["arcforma", "t-done"]);
+  assert.equal(useApp.getState().toast?.text, "Back out of the inbox.");
+
+  // A thread already in the inbox is told so, and nothing is written.
+  const { useApp: app } = await withRow({ inInbox: true });
+  await app.getState().moveToInboxSelected();
+  await settle();
+  assert.equal(app.getState().toast?.text, "That thread is already in the inbox.");
+  assert.equal(calls.filter((c) => c.channel === "threads:moveToInbox").length, 0);
 });

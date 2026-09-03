@@ -6,7 +6,7 @@ test("sidebarRowTip: builtins have a sentence, categories answer with their desc
   const categories = [{ id: "clients", name: "Clients", kind: "custom" as const, prompt: "Mail from paying clients." }, { id: "bare", name: "Bare", kind: "custom" as const, prompt: "" }];
   const searches = [{ id: 3, name: "Northwind", query: "northwind invoice" }];
   assert.match(sidebarRowTip({ id: "daily", kind: "builtin", label: "Daily 0" }, [], []), /^Important threads with new mail/);
-  assert.equal(sidebarRowTip({ id: "archive", kind: "builtin", label: "Archive" }, [], []), "Out of the inbox, still in All Mail.");
+  assert.match(sidebarRowTip({ id: "archive", kind: "builtin", label: "Done" }, [], []), /^Threads you marked done/);
   assert.equal(sidebarRowTip({ id: "category:clients", kind: "category", ref: "clients", label: "Clients" }, categories, searches), "Category: Mail from paying clients.");
   assert.equal(sidebarRowTip({ id: "category:bare", kind: "category", ref: "bare", label: "Bare" }, categories, searches), "Category Bare. Describe what belongs in Settings.");
   assert.equal(sidebarRowTip({ id: "search:3", kind: "search", ref: "3", label: "Northwind" }, categories, searches), "Saved search: northwind invoice");

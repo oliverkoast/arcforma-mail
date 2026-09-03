@@ -387,10 +387,30 @@ export interface SyncProgress {
   finished: boolean;
 }
 
+/**
+ * What Z (and the toast's own Undo control) reverses. Every kind carries what
+ * the reverse write needs, so undoing never has to go looking for the row
+ * again, and `until` is when the offer stops standing.
+ */
+export type ToastUndo =
+  | { kind: "send"; id: number; until: number }
+  /** E, and the archive half of U. Undo puts INBOX back. */
+  | { kind: "archive"; accountId: string; threadId: string; until: number; text: string }
+  /** H. Undo cancels the pending snooze, which returns the thread to the inbox. */
+  | { kind: "snooze"; accountId: string; threadId: string; until: number; text: string }
+  /** S. `starred` is what the star was before the press. */
+  | { kind: "star"; accountId: string; threadId: string; starred: boolean; until: number; text: string }
+  /** The File under select. `to` is where the thread was filed before. */
+  | { kind: "refile"; accountId: string; threadId: string; to: RefileTarget; until: number; text: string }
+  /** Shift+E. Undo takes INBOX off again. */
+  | { kind: "moveToInbox"; accountId: string; threadId: string; until: number; text: string };
+
 export interface ToastEvent {
   text: string;
   eyebrow?: string;
-  undo?: { kind: "send"; id: number; until: number } | null;
+  undo?: ToastUndo | null;
+  /** Why this one cannot be taken back. Set instead of `undo`, so the toast says so rather than offering a control that does nothing. */
+  noUndo?: string;
 }
 
 export interface SchedulerStatus {
@@ -559,6 +579,8 @@ export interface ArcmailInvoke {
   "threads:moveToInbox": (accountId: string, threadId: string) => void;
   "threads:trash": (accountId: string, threadId: string) => void;
   "threads:snooze": (accountId: string, threadId: string, wakeAt: number) => void;
+  /** Undo after H: cancels the thread's pending snooze, which puts it straight back in the inbox. False when there was none left to cancel. */
+  "threads:unsnooze": (accountId: string, threadId: string) => boolean;
   "threads:remind": (accountId: string, threadId: string, dueAt: number) => void;
   /** U: runs the best List-Unsubscribe method on the thread and archives it when the request went out. */
   "threads:unsubscribe": (accountId: string, threadId: string) => UnsubscribeResult;

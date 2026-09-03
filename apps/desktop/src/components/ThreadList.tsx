@@ -35,7 +35,7 @@ const VIEW_TITLES: Record<string, string> = {
   unread: "Unread",
   attachments: "With attachments",
   scheduled: "Scheduled",
-  archive: "Archive",
+  archive: "Done",
   spam: "Spam",
   trash: "Trash",
 };
@@ -268,6 +268,8 @@ export function ThreadList() {
               <EmptyState headline="Weekly zero. Nothing left from this week." detail={counts.clearedWeekly > 0 ? `You cleared ${counts.clearedWeekly} this week.` : null} />
             ) : isQueueView(view) ? (
               <EmptyState headline="Nothing in Later." detail="Weekly 0 threads older than a week land here." />
+            ) : view === "archive" ? (
+              <EmptyState headline="Nothing marked done yet." detail="E on a thread takes it out of the inbox and puts it here. Shift+E puts one back." />
             ) : view === "scheduled" ? (
               <EmptyState headline="Nothing scheduled." detail="Shift+Cmd+L in a message sends it later; it waits here until then." />
             ) : view.startsWith("search:") ? (

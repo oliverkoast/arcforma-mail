@@ -19,6 +19,8 @@ export function appActions(): ActionMap {
     next: () => s().move(1),
     prev: () => s().move(-1),
     archive: () => void s().archiveSelected(),
+    moveToInbox: () => void s().moveToInboxSelected(),
+    toggleAllMessages: () => s().toggleAllMessages(),
     compose: () => s().openCompose("new"),
     search: focusSearch,
     snooze: () => {

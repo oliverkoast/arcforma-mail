@@ -1,8 +1,11 @@
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { attachmentBusyId, useApp } from "../state/store";
+import { COLLAPSE_ALL_LABEL, expandAllLabel, isUnread, rowSnippet } from "../lib/collapse";
 import { bodyNotice } from "../lib/compose";
 import { bytes, eyebrowDate, fullDate, sendsAt } from "../lib/format";
 import { messageText } from "../lib/mailhtml";
+import { initials, relativeTime } from "../lib/recipients";
+import { keyLabel } from "../keys/keyLabel";
 import { InstantReplies, SummaryCard } from "./AiCards";
 import { InlineReply } from "./InlineReply";
 import { IconButton, ReplyIcons, hint } from "./IconButton";
@@ -125,6 +128,31 @@ function Attachments({ message }: { message: MessageView }) {
   );
 }
 
+/**
+ * One message of the history, folded to a single row: who wrote it, the first
+ * ninety characters or so, when, and how many files came with it. It mounts no
+ * iframe, which is what keeps a long thread cheap. Pressing it opens the
+ * message in place.
+ */
+function CollapsedMessage({ message, owners, onExpand }: { message: MessageView; owners: string[]; onExpand: () => void }) {
+  const own = new Set(owners.map((o) => o.toLowerCase()));
+  const isOwner = own.has(message.from.email.toLowerCase());
+  const name = message.from.name.trim() || message.from.email;
+  const files = (message.body?.attachments ?? []).filter((a) => !a.inline).length;
+  const text = rowSnippet(message.snippet || messageText(message.body) || "");
+  return (
+    <button type="button" className={`message-row${isUnread(message) ? " is-unread" : ""}`} data-tip="Open this message here. Its body is not loaded until it opens." onClick={onExpand}>
+      <span className={`message-avatar${isOwner ? " is-you" : ""}`} aria-hidden="true">
+        {initials(message.from.name, message.from.email)}
+      </span>
+      <span className="message-row-from">{name}</span>
+      <span className="message-row-snippet">{text}</span>
+      {files > 0 ? <span className="af-mono message-row-files">{files} {files === 1 ? "file" : "files"}</span> : null}
+      <span className="af-mono message-row-date">{relativeTime(message.internalDate)}</span>
+    </button>
+  );
+}
+
 export function ReadingPane() {
   const open = useApp((s) => s.open);
   const openLoading = useApp((s) => s.openLoading);
@@ -136,6 +164,10 @@ export function ReadingPane() {
   const openCompose = useApp((s) => s.openCompose);
   const cancelScheduledSend = useApp((s) => s.cancelScheduledSend);
   const unsubscribeSelected = useApp((s) => s.unsubscribeSelected);
+  const moveToInboxSelected = useApp((s) => s.moveToInboxSelected);
+  const expandedMessages = useApp((s) => s.expandedMessages);
+  const toggleMessage = useApp((s) => s.toggleMessage);
+  const toggleAllMessages = useApp((s) => s.toggleAllMessages);
   const refreshOpen = useApp((s) => s.refreshOpen);
   const messages = open?.messages;
   // Every address the owner reads mail on, so the header can say "you" wherever one of them appears.
@@ -151,6 +183,44 @@ export function ReadingPane() {
       return before;
     });
   }, [messages]);
+
+  const expanded = useMemo(() => new Set(expandedMessages), [expandedMessages]);
+  const collapsedNow = (messages?.length ?? 0) - (messages ?? []).filter((m) => expanded.has(m.id)).length;
+  const foldable = collapsedNow > 0 || (messages ?? []).some((m, i) => i > 0 && i < (messages?.length ?? 0) - 1 && !isUnread(m));
+
+  const box = useRef<HTMLDivElement>(null);
+  const moved = useRef(false);
+  const threadKey = open ? `${open.thread.accountId}:${open.thread.id}` : "";
+  /**
+   * A thread opens scrolled to its newest message, with the folded history
+   * above it. Written straight to scrollTop in a layout effect, so the first
+   * paint is already in the right place and nothing animates into it. The
+   * summary card and the newest message's frame settle a moment later and move
+   * the anchor, so the same jump runs again until the reader takes over.
+   */
+  useLayoutEffect(() => {
+    moved.current = false;
+    const el = box.current;
+    if (!el || !threadKey) return;
+    const toNewest = () => {
+      if (moved.current) return;
+      const last = el.querySelector<HTMLElement>(".message.is-last");
+      if (!last) return;
+      el.scrollTop += last.getBoundingClientRect().top - el.getBoundingClientRect().top - 8;
+    };
+    const onReader = () => {
+      moved.current = true;
+    };
+    el.addEventListener("wheel", onReader, { passive: true });
+    el.addEventListener("pointerdown", onReader);
+    toNewest();
+    const timers = [80, 350, 1000].map((ms) => setTimeout(toNewest, ms));
+    return () => {
+      el.removeEventListener("wheel", onReader);
+      el.removeEventListener("pointerdown", onReader);
+      for (const t of timers) clearTimeout(t);
+    };
+  }, [threadKey]);
 
   if (!open) {
     return (
@@ -189,6 +259,7 @@ export function ReadingPane() {
         ) : null}
         {t.noReplyBy ? <span className="af-mono eyebrow-flag">No reply by {eyebrowDate(t.noReplyBy)}</span> : null}
         {t.wakeAt ? <span className="af-mono eyebrow-flag">Snoozed · back {eyebrowDate(t.wakeAt, true)}</span> : null}
+        {!t.scheduled && !t.inInbox && !t.wakeAt ? <span className="af-mono eyebrow-flag" data-tip="This thread is not in the inbox. Move back to inbox (Shift+E) puts it back.">Done</span> : null}
         {t.unsubscribeState === "sent" ? <span className="af-mono eyebrow-flag">Unsubscribed</span> : null}
         {t.unsubscribeState === "opened" ? <span className="af-mono eyebrow-flag">Unsubscribe page opened</span> : null}
         {t.scheduled ? <span className="af-mono eyebrow-flag">Sends {sendsAt(t.scheduled.sendAt)} · {fullDate(t.scheduled.sendAt)}</span> : null}
@@ -203,6 +274,7 @@ export function ReadingPane() {
           <ReplyIcons onReply={() => openCompose("reply")} onReplyAll={() => openCompose("replyAll")} onForward={() => openCompose("forward")} />
           <span className="icon-sep" aria-hidden="true" />
           <IconButton glyph="done" label="Mark done" keyHint={hint("archive")} tip="Mark done. The thread leaves the inbox and stays in All Mail. In a queue, it clears and the next one opens." onClick={() => void archiveSelected()} />
+          {t.inInbox ? null : <IconButton glyph="inbox" label="Move back to inbox" keyHint={hint("moveToInbox")} tip="Move back to inbox. The thread gets INBOX again, here and in Gmail, and leaves the Done list." onClick={() => void moveToInboxSelected()} />}
           <IconButton glyph="snooze" label="Snooze" keyHint={hint("snooze")} tip="Snooze. The thread leaves until a time you pick, then comes back with a notification." onClick={() => setPopover("snooze")} />
           <IconButton glyph="star" label={t.starred ? "Unstar" : "Star"} keyHint={hint("star")} tip={t.starred ? "Remove the star. The thread leaves Starred." : "Star this thread. It shows under Starred and in Gmail."} active={t.starred} onClick={() => void starSelected()} />
           <IconButton glyph="daily" label={t.queue === "daily" ? "Remove from Daily 0" : "Add to Daily 0"} keyHint={hint("toggleDaily")} tip={t.queue === "daily" ? "Remove from Daily 0, today's queue." : "Add to Daily 0, the queue to clear today."} active={t.queue === "daily"} onClick={() => void toggleQueue("daily")} />
@@ -212,27 +284,43 @@ export function ReadingPane() {
         </div>
         )}
       </div>
-      <div className="messages">
+      <div className="messages" ref={box}>
         <SummaryCard />
-        {open.messages.map((m, i) => (
-          <article className={`message${i === open.messages.length - 1 ? " is-last" : ""}`} key={m.id}>
-            <MessageHeader
-              message={m}
-              owners={owners}
-              repeatSender={open.messages.slice(0, i).some((p) => p.from.email.toLowerCase() === m.from.email.toLowerCase())}
-              actions={
-                t.scheduled ? null : (
-                  <div className="message-actions">
-                    <ReplyIcons onReply={() => openCompose("reply", { messageId: m.id })} onReplyAll={() => openCompose("replyAll", { messageId: m.id })} onForward={() => openCompose("forward", { messageId: m.id })} />
-                  </div>
-                )
-              }
-            />
-            <MessageBody message={m} priorTexts={priorTexts[i] ?? NO_PRIORS} pending={open.bodiesPending} />
-            <Attachments message={m} />
-            <InlineReply messageId={m.id} isLast={i === open.messages.length - 1} />
-          </article>
-        ))}
+        {foldable ? (
+          <button type="button" className="af-mono messages-fold" data-key={keyLabel("toggleAllMessages") ?? undefined} data-tip={collapsedNow > 0 ? "Opens every folded message of this thread, in order." : "Folds the earlier messages back to one row each. The newest one stays open."} onClick={toggleAllMessages}>
+            {collapsedNow > 0 ? expandAllLabel(collapsedNow) : COLLAPSE_ALL_LABEL}
+          </button>
+        ) : null}
+        {open.messages.map((m, i) => {
+          const isLast = i === open.messages.length - 1;
+          const isOpen = expanded.has(m.id);
+          return (
+            <article className={`message${isLast ? " is-last" : ""}${isOpen ? "" : " is-folded"}`} key={m.id}>
+              {isOpen ? (
+                <>
+                  <MessageHeader
+                    message={m}
+                    owners={owners}
+                    repeatSender={open.messages.slice(0, i).some((p) => p.from.email.toLowerCase() === m.from.email.toLowerCase())}
+                    onCollapse={() => toggleMessage(m.id)}
+                    actions={
+                      t.scheduled ? null : (
+                        <div className="message-actions">
+                          <ReplyIcons onReply={() => openCompose("reply", { messageId: m.id })} onReplyAll={() => openCompose("replyAll", { messageId: m.id })} onForward={() => openCompose("forward", { messageId: m.id })} />
+                        </div>
+                      )
+                    }
+                  />
+                  <MessageBody message={m} priorTexts={priorTexts[i] ?? NO_PRIORS} pending={open.bodiesPending} />
+                  <Attachments message={m} />
+                </>
+              ) : (
+                <CollapsedMessage message={m} owners={owners} onExpand={() => toggleMessage(m.id)} />
+              )}
+              <InlineReply messageId={m.id} isLast={isLast} />
+            </article>
+          );
+        })}
         <InstantReplies />
       </div>
     </section>

@@ -76,7 +76,8 @@ test("the registry lists every keymap command once with its label and key, threa
   assert.ok(empty.some((c) => c.id === "action:compose"), "compose still there");
 
   // Every keymap action reachable from the list, thread, global, or popover scopes either lists or is deliberately a key only.
-  const keyOnly = new Set(["next", "prev", "open", "close", "closePopover", "palette", "closePalette", "instantReply1", "instantReply2", "instantReply3"]);
+  // toggleAllMessages folds the open thread's history: a key while reading, not a command with a thread selected in a list.
+  const keyOnly = new Set(["next", "prev", "open", "close", "closePopover", "palette", "closePalette", "instantReply1", "instantReply2", "instantReply3", "toggleAllMessages"]);
   for (const b of KEYMAP.filter((b) => ["list", "thread", "global", "popover"].includes(b.scope))) {
     if (keyOnly.has(b.action)) continue;
     assert.ok(linked.has(`action:${b.action}`), `${b.action} is in the palette`);
@@ -90,7 +91,7 @@ test("dynamic commands: Move to each custom category, Open each visible sidebar 
   assert.ok(labels.includes("Move to Vendors"));
   assert.ok(!labels.includes("Move to Newsletters"), "builtin types are not move targets");
   assert.deepEqual(cmds.find((c) => c.label === "Move to Clients")?.run, { kind: "moveTo", categoryId: "clients" });
-  for (const view of ["Daily 0", "Weekly 0", "Later", "Everything", "Important", "Other", "Unread", "Newsletters", "Clients", "Vendors", "Snoozed", "Starred", "Sent", "Drafts", "Scheduled", "Archive", "Northwind"]) {
+  for (const view of ["Daily 0", "Weekly 0", "Later", "Everything", "Important", "Other", "Unread", "Newsletters", "Clients", "Vendors", "Snoozed", "Starred", "Sent", "Drafts", "Scheduled", "Done", "Northwind"]) {
     assert.ok(labels.includes(`Open ${view}`), `Open ${view}`);
   }
   assert.ok(!labels.includes("Open Spam"), "hidden rows do not list");

@@ -26,7 +26,7 @@ const ROW_TIPS: Record<string, string> = {
   sent: "Mail you sent, from every account.",
   drafts: "Drafts written here and in Gmail, in one list.",
   scheduled: "Mail waiting to send later. Open one to cancel the send.",
-  archive: "Out of the inbox, still in All Mail.",
+  archive: "Threads you marked done: out of the inbox, still in All Mail. Shift+E puts one back.",
   spam: "What Gmail flagged as spam.",
   trash: "Deleted mail. Gmail empties it after 30 days.",
 };

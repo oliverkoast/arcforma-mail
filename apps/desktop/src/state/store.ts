@@ -30,11 +30,13 @@ import {
   type ThreadSummary,
   type ThreadView,
   type ToastEvent,
+  type ToastUndo,
 } from "../../shared/types";
 import { ONBOARDING_STEPS, type OnboardingStepId } from "../../shared/onboarding";
 import { TYPING_SCOPES, type Scope } from "../keys/keymap";
 import { scopeFor } from "../keys/scope";
 import { installActivityTracker } from "../lib/activity";
+import { defaultExpanded } from "../lib/collapse";
 import { buildDraft, hasBody, isPending, mergePending, sameMessages, sentMessage, textToHtml } from "../lib/compose";
 import { nextMondayAt, tomorrowAt } from "../lib/format";
 import { expandSnippet, missingVariablesText, stripCursorToken, type ExpandedSnippet, type SnippetContext } from "../lib/snippets";
@@ -106,6 +108,14 @@ export interface AppState {
   selected: number;
   open: ThreadView | null;
   openLoading: boolean;
+  /**
+   * The ids of the open thread's messages that are showing their body. A
+   * message not in here is a one-line row and mounts no iframe, which is the
+   * whole point: a 47 message thread used to mount 47 sandboxed frames.
+   */
+  expandedMessages: string[];
+  /** True once the "Show all N earlier messages" control (or O) has opened everything. */
+  allExpanded: boolean;
   scope: Scope;
   popover: Popover;
   rail: Rail;
@@ -114,6 +124,8 @@ export interface AppState {
   searchQuery: string;
   searchHits: SearchHitView[] | null;
   toast: ToastEvent | null;
+  /** True while the pointer rests on the toast or the keyboard is in it: the dismissal timer is held. */
+  toastPaused: boolean;
   error: string | null;
 
   settings: SettingsInfo;
@@ -168,6 +180,12 @@ export interface AppState {
   openThreadById: (accountId: string, threadId: string, opts?: { quiet?: boolean }) => Promise<boolean>;
   closeThread: () => void;
   archiveSelected: () => Promise<void>;
+  /** Shift+E, and Move back to inbox in the thread head: the thread gets INBOX again, through the outbox exactly as E takes it off. */
+  moveToInboxSelected: () => Promise<void>;
+  /** Click on a collapsed row, or on the header of an expanded one. */
+  toggleMessage: (messageId: string) => void;
+  /** O, and the control above the first message: every earlier message open, or folded back to how the thread opened. */
+  toggleAllMessages: () => void;
   starSelected: () => Promise<void>;
   /** D or W on the cursor row. */
   toggleQueue: (queue: "daily" | "weekly") => Promise<void>;
@@ -206,6 +224,10 @@ export interface AppState {
   leaveSearch: () => void;
   signIn: (id: string) => Promise<void>;
   showToast: (t: ToastEvent | null) => void;
+  /** Pointer over the toast, or focus in it: the dismissal timer stops, so Undo stays reachable. */
+  pauseToast: () => void;
+  /** Pointer or focus leaving the toast: the timer picks up the time that was left. */
+  resumeToast: () => void;
   undo: () => Promise<void>;
   notBuilt: (feature: string) => void;
 
@@ -282,6 +304,15 @@ function writeStoredBool(key: string, value: boolean): void {
 const EMPTY_STATUS: AccountsStatus = { accounts: [], configPath: "", configError: null };
 const DEFAULT_SETTINGS: SettingsInfo = { undoWindowSec: 10, autoDraft: false, remoteImages: "always", remindClientsAfterDays: 3, remindScope: ["Clients"] };
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
+/** How much of the current toast's time is still to run, and when that run started, so a hover can hold it. */
+let toastRemaining = 0;
+let toastStartedAt = 0;
+/** A toast with no undo on it. */
+export const TOAST_MS = 4000;
+function clearToastTimer(): void {
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = null;
+}
 /** Autosave runs this long after the last keystroke; the main process mirrors to Gmail on the same cadence. */
 export const AUTOSAVE_MS = 2000;
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -326,6 +357,41 @@ function wordsOf(view: ThreadView): number {
     n += text.split(/\s+/).filter(Boolean).length;
   }
   return n;
+}
+
+/**
+ * The reverse of one action, through the same channel that made it. Every
+ * branch is a write the main process already exposes, so undo adds no new way
+ * for the store and Gmail to disagree.
+ */
+async function reverse(u: Exclude<ToastUndo, { kind: "send" }>): Promise<void> {
+  switch (u.kind) {
+    case "archive":
+      await invoke("threads:moveToInbox", u.accountId, u.threadId);
+      return;
+    case "moveToInbox":
+      await invoke("threads:archive", u.accountId, u.threadId);
+      return;
+    case "snooze":
+      await invoke("threads:unsnooze", u.accountId, u.threadId);
+      return;
+    case "star":
+      await invoke("threads:star", u.accountId, u.threadId, u.starred);
+      return;
+    case "refile":
+      await invoke("classify:refile", u.accountId, u.threadId, u.to);
+      return;
+  }
+}
+
+/** When an offer of undo stops standing: the same window Settings gives a send, so one number governs both. */
+function undoUntil(s: AppState): number {
+  return Date.now() + Math.max(1, s.settings.undoWindowSec) * 1000;
+}
+
+/** Where a thread is filed right now, in the shape refile takes, so an undo can put it back. */
+export function currentTarget(t: Pick<ThreadSummary, "split" | "type" | "categoryId">): RefileTarget {
+  return { split: t.split === "important" ? "important" : "other", category: t.categoryId ?? t.type ?? null };
 }
 
 /** Rows in the Scheduled view are queued sends, not threads: E, H, S, D, W have nothing to act on. */
@@ -395,6 +461,8 @@ export const useApp = create<AppState>((set, get) => ({
   selected: 0,
   open: null,
   openLoading: false,
+  expandedMessages: [],
+  allExpanded: false,
   scope: "list",
   popover: null,
   rail: "none",
@@ -402,6 +470,7 @@ export const useApp = create<AppState>((set, get) => ({
   searchQuery: "",
   searchHits: null,
   toast: null,
+  toastPaused: false,
   error: null,
 
   settings: DEFAULT_SETTINGS,
@@ -548,7 +617,8 @@ export const useApp = create<AppState>((set, get) => ({
       const view = await invoke("threads:get", accountId, threadId);
       // A later open (or a close) won the race: this result is for a thread nobody is looking at.
       if (seq !== openSeq) return false;
-      set({ open: view, openLoading: false });
+      // The thread opens on its newest message with the history folded away. No animation: this is the first paint.
+      set({ open: view, openLoading: false, expandedMessages: defaultExpanded(view.messages), allExpanded: false });
       get().syncScope();
       const row = get().rows.find((r) => r.id === threadId && r.accountId === accountId);
       if (row?.unread) {
@@ -567,7 +637,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   closeThread() {
     openSeq += 1;
-    set({ open: null, openLoading: false, popover: null, summary: null, replies: null });
+    set({ open: null, openLoading: false, popover: null, summary: null, replies: null, expandedMessages: [], allExpanded: false });
     get().syncScope();
   },
 
@@ -586,7 +656,7 @@ export const useApp = create<AppState>((set, get) => ({
     get().syncScope();
     try {
       await invoke("threads:archive", row.accountId, row.id);
-      get().showToast({ text: "Done." });
+      get().showToast({ text: "Marked done.", undo: { kind: "archive", accountId: row.accountId, threadId: row.id, until: undoUntil(get()), text: "Back in the inbox." } });
       const next = get().rows[get().selected];
       if (advance && next) void get().openSelected();
       void get().refreshCounts();
@@ -594,6 +664,50 @@ export const useApp = create<AppState>((set, get) => ({
       set({ error: (err as Error).message });
       void get().loadThreads(true);
     }
+  },
+
+  async moveToInboxSelected() {
+    const s = get();
+    // Reachable from the Done list and from an open thread, so the open thread wins when there is one.
+    const row = s.open?.thread ?? s.rows[s.selected] ?? null;
+    if (!row || scheduledOnly(row, s.showToast)) return;
+    if (row.inInbox) {
+      s.showToast({ text: "That thread is already in the inbox." });
+      return;
+    }
+    // In the Done list the thread is no longer one of its rows; everywhere else it stays put and stops reading DONE.
+    const leaves = s.view === "archive" || s.view === "snoozed";
+    set((cur) => {
+      const rows = leaves ? cur.rows.filter((r) => !(r.id === row.id && r.accountId === row.accountId)) : cur.rows.map((r) => (r.id === row.id && r.accountId === row.accountId ? { ...r, inInbox: true } : r));
+      const open = cur.open && cur.open.thread.id === row.id && cur.open.thread.accountId === row.accountId ? { ...cur.open, thread: { ...cur.open.thread, inInbox: true } } : cur.open;
+      return { rows, selected: Math.min(cur.selected, Math.max(0, rows.length - 1)), open };
+    });
+    try {
+      await invoke("threads:moveToInbox", row.accountId, row.id);
+      get().showToast({ text: "Back in the inbox.", undo: { kind: "moveToInbox", accountId: row.accountId, threadId: row.id, until: undoUntil(get()), text: "Back out of the inbox." } });
+      void get().refreshCounts();
+    } catch (err) {
+      set({ error: (err as Error).message });
+      void get().loadThreads(true);
+    }
+  },
+
+  toggleMessage(messageId) {
+    set((cur) => {
+      const on = cur.expandedMessages.includes(messageId);
+      const expandedMessages = on ? cur.expandedMessages.filter((id) => id !== messageId) : [...cur.expandedMessages, messageId];
+      // Closing one by hand means the thread is no longer all the way open, so the control offers to open it again.
+      return { expandedMessages, allExpanded: on ? false : cur.allExpanded };
+    });
+  },
+
+  toggleAllMessages() {
+    const cur = get();
+    if (!cur.open) return;
+    // Everything already open folds back to how the thread opened; anything still folded opens.
+    const all = cur.open.messages.length > 0 && cur.open.messages.every((m) => cur.expandedMessages.includes(m.id));
+    if (all) set({ expandedMessages: defaultExpanded(cur.open.messages), allExpanded: false });
+    else set({ expandedMessages: cur.open.messages.map((m) => m.id), allExpanded: true });
   },
 
   async starSelected() {
@@ -604,6 +718,10 @@ export const useApp = create<AppState>((set, get) => ({
     set((cur) => ({ rows: cur.rows.map((r) => (r.id === row.id && r.accountId === row.accountId ? { ...r, starred } : r)) }));
     try {
       await invoke("threads:star", row.accountId, row.id, starred);
+      get().showToast({
+        text: starred ? "Starred." : "Star removed.",
+        undo: { kind: "star", accountId: row.accountId, threadId: row.id, starred: row.starred, until: undoUntil(get()), text: starred ? "Star removed." : "Starred again." },
+      });
     } catch (err) {
       set({ error: (err as Error).message });
     }
@@ -652,7 +770,11 @@ export const useApp = create<AppState>((set, get) => ({
     get().syncScope();
     try {
       await invoke("threads:snooze", row.accountId, row.id, wakeAt);
-      get().showToast({ eyebrow: "SNOOZED", text: `Back ${new Date(wakeAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}` });
+      get().showToast({
+        eyebrow: "SNOOZED",
+        text: `Back ${new Date(wakeAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`,
+        undo: { kind: "snooze", accountId: row.accountId, threadId: row.id, until: undoUntil(get()), text: "Back in the inbox." },
+      });
     } catch (err) {
       set({ error: (err as Error).message });
       void get().loadThreads(true);
@@ -665,7 +787,11 @@ export const useApp = create<AppState>((set, get) => ({
     if (!row || scheduledOnly(row, s.showToast)) return;
     try {
       await invoke("threads:remind", row.accountId, row.id, dueAt);
-      get().showToast({ eyebrow: "REMINDER SET", text: `If no reply by ${new Date(dueAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` });
+      get().showToast({
+        eyebrow: "REMINDER SET",
+        text: `If no reply by ${new Date(dueAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
+        noUndo: "Set another reminder to change it.",
+      });
     } catch (err) {
       set({ error: (err as Error).message });
     }
@@ -692,7 +818,13 @@ export const useApp = create<AppState>((set, get) => ({
       } else {
         set((cur) => ({ rows: cur.rows.map((x) => (x.id === row.id && x.accountId === row.accountId ? { ...x, unsubscribeState: r.state } : x)) }));
       }
-      get().showToast({ eyebrow: r.ok ? (r.state === "opened" ? "UNSUBSCRIBE PAGE" : "UNSUBSCRIBED") : "NOT UNSUBSCRIBED", text: r.text });
+      const eyebrow = r.ok ? (r.state === "opened" ? "UNSUBSCRIBE PAGE" : "UNSUBSCRIBED") : "NOT UNSUBSCRIBED";
+      // The request itself is gone the moment it goes out. What Undo can still do is put the thread back in the inbox.
+      if (r.archived) {
+        get().showToast({ eyebrow, text: r.text, undo: { kind: "archive", accountId: row.accountId, threadId: row.id, until: undoUntil(get()), text: "Back in the inbox. The unsubscribe request had already gone out." } });
+      } else {
+        get().showToast({ eyebrow, text: r.text, noUndo: r.ok ? "A request that has gone out cannot be recalled." : "Nothing changed, so there is nothing to take back." });
+      }
     } catch (err) {
       get().showToast({ eyebrow: "NOT UNSUBSCRIBED", text: (err as Error).message });
     }
@@ -853,26 +985,68 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   showToast(t) {
-    if (toastTimer) clearTimeout(toastTimer);
-    set({ toast: t });
+    clearToastTimer();
+    set({ toast: t, toastPaused: false });
     if (t) {
-      const ms = t.undo ? Math.max(1000, t.undo.until - Date.now()) : 4000;
-      toastTimer = setTimeout(() => set({ toast: null }), ms);
+      toastRemaining = t.undo ? Math.max(1000, t.undo.until - Date.now()) : TOAST_MS;
+      toastStartedAt = Date.now();
+      toastTimer = setTimeout(() => {
+        toastTimer = null;
+        set({ toast: null, toastPaused: false });
+      }, toastRemaining);
     }
   },
 
+  pauseToast() {
+    const s = get();
+    if (!s.toast || s.toastPaused) return;
+    clearToastTimer();
+    // Whatever was left when the pointer arrived is what runs when it leaves.
+    toastRemaining = Math.max(1000, toastRemaining - (Date.now() - toastStartedAt));
+    set({ toastPaused: true });
+  },
+
+  resumeToast() {
+    const s = get();
+    if (!s.toast || !s.toastPaused) return;
+    toastStartedAt = Date.now();
+    toastTimer = setTimeout(() => {
+      toastTimer = null;
+      set({ toast: null, toastPaused: false });
+    }, toastRemaining);
+    set({ toastPaused: false });
+  },
+
+  /**
+   * Z, and the toast's own Undo control. One code path for both, and one for
+   * every action: a send comes back as a draft, everything else is the reverse
+   * write through the same channel that made the change, and the follow-up
+   * toast says what was undone.
+   */
   async undo() {
-    const t = get().toast;
-    if (t?.undo?.kind !== "send") return;
-    const r = await invoke("send:undo", t.undo.id);
-    if (r.cancelled) {
-      // The message shown optimistically in the thread goes away with the send.
-      const pendingId = `pending:${t.undo.id}`;
-      set((cur) => (cur.open && cur.open.messages.some((m) => m.id === pendingId) ? { open: { ...cur.open, messages: cur.open.messages.filter((m) => m.id !== pendingId) } } : {}));
-      get().showToast({ text: "Send cancelled. The draft is back." });
-      if (r.draft) get().openCompose(r.draft.mode, { draft: r.draft });
-    } else {
-      get().showToast({ text: "Already sent." });
+    const u = get().toast?.undo;
+    if (!u) return;
+    try {
+      if (u.kind === "send") {
+        const r = await invoke("send:undo", u.id);
+        if (r.cancelled) {
+          // The message shown optimistically in the thread goes away with the send.
+          const pendingId = `pending:${u.id}`;
+          set((cur) => (cur.open && cur.open.messages.some((m) => m.id === pendingId) ? { open: { ...cur.open, messages: cur.open.messages.filter((m) => m.id !== pendingId) } } : {}));
+          get().showToast({ text: "Send cancelled. The draft is back." });
+          if (r.draft) get().openCompose(r.draft.mode, { draft: r.draft });
+        } else {
+          get().showToast({ text: "Already sent." });
+        }
+        return;
+      }
+      await reverse(u);
+      get().showToast({ text: u.text });
+      void get().loadThreads(true);
+      void get().refreshOpen();
+      void get().refreshCounts();
+    } catch (err) {
+      get().showToast({ eyebrow: "NOT UNDONE", text: (err as Error).message });
     }
   },
 
@@ -932,10 +1106,15 @@ export const useApp = create<AppState>((set, get) => ({
     const s = get();
     const thread = s.open?.thread ?? s.rows[s.selected] ?? null;
     if (!thread) return;
+    const was = currentTarget(thread);
+    const nameOf = (t: RefileTarget) => (t.category ? get().categories.find((c) => c.id === t.category)?.name ?? t.category : t.split === "important" ? "Important" : "Other");
     try {
       await invoke("classify:refile", thread.accountId, thread.id, to);
-      const label = to.category ? get().categories.find((c) => c.id === to.category)?.name ?? to.category : to.split === "important" ? "Important" : "Other";
-      get().showToast({ eyebrow: "FILED", text: `${label}. The classifier learns from this.` });
+      get().showToast({
+        eyebrow: "FILED",
+        text: `${nameOf(to)}. The classifier learns from this.`,
+        undo: { kind: "refile", accountId: thread.accountId, threadId: thread.id, to: was, until: undoUntil(get()), text: `Filed back under ${nameOf(was)}.` },
+      });
     } catch (err) {
       set({ error: (err as Error).message });
     }
@@ -1187,7 +1366,15 @@ export const useApp = create<AppState>((set, get) => ({
         if (!cur.open || cur.open.thread.id !== id || cur.open.thread.accountId !== accountId) return {};
         const messages = mergePending(fresh.messages, cur.open.messages.filter(isPending));
         // Same messages, same bodies: keep the array the frames are keyed on, so nothing reloads under the reader.
-        return { open: { ...fresh, messages: sameMessages(cur.open.messages, messages) ? cur.open.messages : messages } };
+        const same = sameMessages(cur.open.messages, messages);
+        const open = { ...fresh, messages: same ? cur.open.messages : messages };
+        if (same) return { open };
+        // A reply that arrived while reading is the newest message, so it shows open; what was folded stays folded.
+        const known = new Set(cur.expandedMessages);
+        const last = messages[messages.length - 1]?.id;
+        if (last) known.add(last);
+        const expandedMessages = cur.allExpanded ? messages.map((m) => m.id) : messages.filter((m) => known.has(m.id)).map((m) => m.id);
+        return { open, expandedMessages };
       });
     } catch (err) {
       if (seq !== openSeq) return;

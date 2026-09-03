@@ -68,7 +68,9 @@ const BUILTIN_ROWS: SidebarRowDescriptor[] = [
   { id: "sent", kind: "builtin", label: "Sent", group: "folders", view: { view: "sent" }, count: none },
   { id: "drafts", kind: "builtin", label: "Drafts", group: "folders", view: { view: "drafts" }, count: none },
   { id: "scheduled", kind: "builtin", label: "Scheduled", group: "folders", view: { view: "scheduled" }, count: (c) => c.scheduled },
-  { id: "archive", kind: "builtin", label: "Archive", group: "folders", view: { view: "archive" }, count: (c) => c.archive },
+  // Done in the interface, "archive" as the stored id, so a layout saved when
+  // the row was called Archive keeps its place, its order, and its hidden flag.
+  { id: "archive", kind: "builtin", label: "Done", group: "folders", view: { view: "archive" }, count: (c) => c.archive },
   { id: "spam", kind: "builtin", label: "Spam", group: "folders", view: { view: "spam" }, count: (c) => c.spam, hiddenByDefault: true },
   { id: "trash", kind: "builtin", label: "Trash", group: "folders", view: { view: "trash" }, count: (c) => c.trash, hiddenByDefault: true },
 ];

@@ -1,0 +1,10 @@
+name = "arcforma-pixel"
+main = "src/cloudflare.mjs"
+compatibility_date = "2026-01-01"
+
+# Create with: wrangler kv namespace create EVENTS
+# [[kv_namespaces]]
+# binding = "EVENTS"
+# id = "<the id wrangler prints>"
+
+# Set with: wrangler secret put PIXEL_AUTH_TOKEN

@@ -39,13 +39,13 @@ export interface CommandSource {
 }
 
 /** Keymap actions that move or close things; they are keys, not commands. */
-const NOT_COMMANDS = new Set(["next", "prev", "open", "close", "closePopover", "closeSidebarMenu", "leaveSearch", "runSearch", "instantReply1", "instantReply2", "instantReply3", "acceptDraft", "closeCompose", "closeSendLater", "closeSnippets", "closeAsk", "runAsk", "closeSettings", "palette", "closePalette", "sendTomorrow", "sendNextMonday", "sendPick", "snippets"]);
+const NOT_COMMANDS = new Set(["next", "prev", "open", "close", "toggleAllMessages", "closePopover", "closeSidebarMenu", "leaveSearch", "runSearch", "instantReply1", "instantReply2", "instantReply3", "acceptDraft", "closeCompose", "closeSendLater", "closeSnippets", "closeAsk", "runAsk", "closeSettings", "palette", "closePalette", "sendTomorrow", "sendNextMonday", "sendPick", "snippets"]);
 
 /** Actions that need a thread under the cursor. */
-const THREAD_ACTIONS = new Set(["archive", "snooze", "snoozeTomorrow", "snoozeNextWeek", "snoozePick", "remindThreeDays", "star", "toggleDaily", "toggleWeekly", "reply", "replyAll", "forward", "unsubscribe"]);
+const THREAD_ACTIONS = new Set(["archive", "moveToInbox", "snooze", "snoozeTomorrow", "snoozeNextWeek", "snoozePick", "remindThreeDays", "star", "toggleDaily", "toggleWeekly", "reply", "replyAll", "forward", "unsubscribe"]);
 
 /** The order the mail commands list in when nothing is typed. Actions the keymap adds later append after these. */
-const ORDER = ["compose", "reply", "replyAll", "forward", "archive", "snooze", "snoozeTomorrow", "snoozeNextWeek", "snoozePick", "remindThreeDays", "star", "toggleDaily", "toggleWeekly", "unsubscribe", "search", "undo", "toggleReadingPane", "toggleCalendar", "toggleContact", "ask", "settings"];
+const ORDER = ["compose", "reply", "replyAll", "forward", "archive", "moveToInbox", "snooze", "snoozeTomorrow", "snoozeNextWeek", "snoozePick", "remindThreeDays", "star", "toggleDaily", "toggleWeekly", "unsubscribe", "search", "undo", "toggleReadingPane", "toggleCalendar", "toggleContact", "ask", "settings"];
 
 /** Palette wording where the keymap's label reads as a key hint rather than a command. */
 function labelFor(action: string, fallback: string, thread: CommandSource["thread"]): string {

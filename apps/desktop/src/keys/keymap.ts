@@ -24,6 +24,9 @@ export const KEYMAP: Binding[] = [
   { key: "k", scope: "thread", action: "prev", label: "Previous thread" },
   { key: "e", scope: "list", action: "archive", label: "Mark done" },
   { key: "e", scope: "thread", action: "archive", label: "Mark done" },
+  // Shift+E is the way back. U was taken by unsubscribe long before Done had a row of its own.
+  { key: "e", shift: true, scope: "list", action: "moveToInbox", label: "Move back to inbox" },
+  { key: "e", shift: true, scope: "thread", action: "moveToInbox", label: "Move back to inbox" },
   { key: "c", scope: "list", action: "compose", label: "Compose" },
   { key: "c", scope: "thread", action: "compose", label: "Compose" },
   { key: "/", scope: "list", action: "search", label: "Search" },
@@ -44,6 +47,8 @@ export const KEYMAP: Binding[] = [
   { key: "f", scope: "thread", action: "forward", label: "Forward" },
   { key: "u", scope: "list", action: "unsubscribe", label: "Unsubscribe and archive" },
   { key: "u", scope: "thread", action: "unsubscribe", label: "Unsubscribe and archive" },
+  // O in a thread: every earlier message open at once, and again to fold them back.
+  { key: "o", scope: "thread", action: "toggleAllMessages", label: "Expand or collapse the earlier messages" },
   { key: "z", scope: "list", action: "undo", label: "Undo" },
   { key: "z", scope: "thread", action: "undo", label: "Undo" },
   { key: "z", scope: "popover", action: "undo", label: "Undo" },

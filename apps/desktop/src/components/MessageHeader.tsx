@@ -1,3 +1,4 @@
+import type React from "react";
 import { useState, type ReactNode } from "react";
 import { fullDate } from "../lib/format";
 import { describeRecipients, initials, messageEyebrow, relativeTime, showSenderAddress } from "../lib/recipients";
@@ -9,7 +10,7 @@ import type { MessageView } from "../../shared/types";
  * full list, grouped To, Cc, and Bcc, with the owner's own addresses shown as
  * "you". The eyebrow appears only when the addressing is worth knowing.
  */
-export function MessageHeader({ message, owners, repeatSender, actions }: { message: MessageView; owners: string[]; repeatSender: boolean; actions?: ReactNode }) {
+export function MessageHeader({ message, owners, repeatSender, actions, onCollapse }: { message: MessageView; owners: string[]; repeatSender: boolean; actions?: ReactNode; onCollapse?: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const people = describeRecipients(message.to, message.cc, message.bcc ?? [], owners);
   const eyebrow = messageEyebrow(message, owners);
@@ -17,17 +18,33 @@ export function MessageHeader({ message, owners, repeatSender, actions }: { mess
   const isOwner = own.has(message.from.email.toLowerCase());
   const name = message.from.name.trim() || message.from.email;
   const when = fullDate(message.internalDate);
+  // Clicking the header folds the message back to a row. Anything that is
+  // already a control of its own keeps its own job: the recipient list, the
+  // reply icons, the address rows.
+  const headClick = onCollapse
+    ? (e: React.MouseEvent) => {
+        if ((e.target as HTMLElement).closest("button, a, select, input, dl")) return;
+        onCollapse();
+      }
+    : undefined;
   return (
-    <div className="message-head">
+    <div className={`message-head${onCollapse ? " is-collapsible" : ""}`} onClick={headClick}>
       <div className={`message-avatar${isOwner ? " is-you" : ""}`} aria-hidden="true">
         {initials(message.from.name, message.from.email)}
       </div>
       <div className="message-who">
         {eyebrow ? <div className="af-mono message-eyebrow">{eyebrow}</div> : null}
-        <div className="message-from">
-          {name}
-          {showSenderAddress(message.from, repeatSender) ? <span>{message.from.email}</span> : null}
-        </div>
+        {onCollapse ? (
+          <button type="button" className="message-from message-fold" data-tip="Fold this message back to a single row." onClick={onCollapse}>
+            {name}
+            {showSenderAddress(message.from, repeatSender) ? <span>{message.from.email}</span> : null}
+          </button>
+        ) : (
+          <div className="message-from">
+            {name}
+            {showSenderAddress(message.from, repeatSender) ? <span>{message.from.email}</span> : null}
+          </div>
+        )}
         <button
           type="button"
           className="message-to"

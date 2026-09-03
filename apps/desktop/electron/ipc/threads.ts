@@ -3,6 +3,7 @@ import { shouldLoadImages } from "../images.js";
 import { fetchThreadFull, findBody, listAttachments } from "@arcforma/gmail";
 import {
   archive,
+  cancelSnooze,
   createReminder,
   createSnooze,
   getAccount,
@@ -19,6 +20,7 @@ import {
   markRead,
   moveToInbox,
   parseAddressList,
+  pendingSnooze,
   saveBody,
   search,
   setLoadImages,
@@ -219,6 +221,16 @@ export function registerThreadIpc(db: Db, accounts: AccountRegistry, sync: SyncM
   ipcMain.handle("threads:moveToInbox", mutate((a, t) => moveToInbox(db, a, t)));
   ipcMain.handle("threads:trash", mutate((a, t) => trash(db, a, t)));
   ipcMain.handle("threads:snooze", mutate((a, t, wakeAt: number) => createSnooze(db, { accountId: a, threadId: t, wakeAt })));
+  // Undo after H. cancelSnooze puts INBOX back and takes the Snoozed label off, through the outbox like every other label change.
+  ipcMain.handle("threads:unsnooze", (_e, accountId: string, threadId: string): boolean => {
+    requireAccount(db, accountId);
+    if (!getThread(db, accountId, requireId(threadId, "thread"))) throw new Error("That thread is no longer in the local store.");
+    const row = pendingSnooze(db, accountId, threadId);
+    if (!row) return false;
+    const cancelled = cancelSnooze(db, row.id) !== null;
+    if (cancelled) sync.poke(accountId);
+    return cancelled;
+  });
   ipcMain.handle("threads:remind", mutate((a, t, dueAt: number) => {
     const last = listThreadMessages(db, a, t).at(-1);
     if (!last) throw new Error("Nothing to remind about yet.");

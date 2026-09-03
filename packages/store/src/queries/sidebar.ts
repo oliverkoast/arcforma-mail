@@ -110,7 +110,7 @@ export function sidebarCounts(db: Db, accountIds?: string[], now = Date.now()): 
     .prepare(
       `SELECT
          SUM(CASE WHEN ${NOT_JUNK} AND t.has_attachments = 1 THEN 1 ELSE 0 END) AS attachments,
-         SUM(CASE WHEN ${NOT_JUNK} AND t.in_inbox = 0 AND NOT ${PENDING_SNOOZE} THEN 1 ELSE 0 END) AS archive,
+         SUM(CASE WHEN ${NOT_JUNK} AND t.in_inbox = 0 AND NOT ${PENDING_SNOOZE} AND NOT ${HAS_LABEL("DRAFT")} THEN 1 ELSE 0 END) AS archive,
          SUM(CASE WHEN ${HAS_LABEL("SPAM")} THEN 1 ELSE 0 END) AS spam,
          SUM(CASE WHEN ${HAS_LABEL("TRASH")} THEN 1 ELSE 0 END) AS trash,
          SUM(CASE WHEN ${NOT_JUNK} AND t.starred = 1 THEN 1 ELSE 0 END) AS starred

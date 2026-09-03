@@ -112,8 +112,10 @@ export function listThreads(db: Db, opts: ListThreadsOptions = {}): ListThreadsR
       where.push("t.has_attachments = 1");
       break;
     case "archive":
-      // All Mail minus the inbox: what E moved out, minus what is only sleeping.
-      where.push("t.in_inbox = 0", `NOT ${PENDING_SNOOZE}`);
+      // Done: All Mail minus the inbox, minus what is only sleeping, minus the
+      // threads that are out of the inbox because all they hold is a draft.
+      // Trash and spam are already out through NOT_JUNK.
+      where.push("t.in_inbox = 0", `NOT ${PENDING_SNOOZE}`, `NOT ${HAS_LABEL("DRAFT")}`);
       break;
     case "snoozed":
       where.push(PENDING_SNOOZE);
