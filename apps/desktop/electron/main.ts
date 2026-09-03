@@ -29,6 +29,7 @@ import { findPart } from "./attachments/service.js";
 import { AttachmentReaper } from "./attachments/reaper.js";
 import { closePreviewWindows, guardPreviewContents, pendingPreviewUrls, previewPdfContents } from "./attachments/window.js";
 import { log, logError } from "./log.js";
+import { installIpcSenderGuard } from "./ipc-guard.js";
 import { isAllowedNavigation, isExternalLink } from "./navigation.js";
 import { dbPath } from "./paths.js";
 import { serviceArmer } from "./receipts/arm.js";
@@ -315,6 +316,13 @@ async function boot(): Promise<void> {
     const seeded = seedFixture(store, SMOKE_FIXTURE);
     log("smoke", `seeded ${seeded.threads} threads and ${seeded.events} calendar events from ${SMOKE_FIXTURE}`);
   }
+
+  // Item 17 of Electron's security checklist, applied once so no handler can forget it: every
+  // invoke is checked to have come from the top frame of app://mail before it runs. The renderer
+  // only loads app:// content and navigation is locked, so this is depth rather than a live hole.
+  // It is also the difference between one bug in message rendering and someone reading the mailbox.
+  // It wraps ipcMain.handle, so it has to run before the first register call below.
+  installIpcSenderGuard({ devOrigin: DEV_URL, log: (m) => log("ipc", m) });
 
   registerAccountIpc(accounts, sync, db);
   registerThreadIpc(db, accounts, sync, scheduler);

@@ -26,5 +26,14 @@ export function isTrustedSender(frame: SenderLike | null | undefined, devOrigin?
     return false;
   }
   if (origin === APP_ORIGIN) return true;
-  return Boolean(devOrigin && origin === devOrigin);
+  if (!devOrigin) return false;
+  // The dev server is configured as a whole URL ("http://localhost:5173/"), so it is reduced to an
+  // origin before comparing. Comparing the raw strings refused every call under pnpm dev while the
+  // smoke run, which is served over app://, went on passing.
+  try {
+    const dev = new URL(devOrigin);
+    return origin === `${dev.protocol}//${dev.host}`;
+  } catch {
+    return false;
+  }
 }

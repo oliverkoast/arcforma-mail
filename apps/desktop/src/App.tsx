@@ -14,6 +14,7 @@ import { SnoozePopover } from "./components/SnoozePopover";
 import { SyncSplash } from "./components/SyncSplash";
 import { ThreadList } from "./components/ThreadList";
 import { Toast } from "./components/Toast";
+import { GoToChip } from "./components/GoToChip";
 import { Tooltip } from "./components/Tooltip";
 import { useKeyboard } from "./keys/useKeyboard";
 import { useApp } from "./state/store";
@@ -57,6 +58,7 @@ export function App() {
       <AskPanel />
       <Settings />
       <CommandPalette />
+      <GoToChip />
       <Toast />
       <Tooltip />
     </div>

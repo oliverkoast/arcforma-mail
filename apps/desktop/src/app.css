@@ -2401,3 +2401,37 @@ button.message-from {
 .messages-fold:hover {
   color: var(--af-accent);
 }
+
+/* The keyboard chord printed inside a button, the way Superhuman prints it on Send. Quiet enough
+   that the word is still the button, loud enough that nobody has to hover to learn the shortcut. */
+.btn-key {
+  margin-left: 8px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  opacity: 0.65;
+}
+
+/* G is armed and waiting for the letter that names a view. A half-typed chord is never a mystery:
+   it says what it is waiting for, and it goes away on its own after a couple of seconds. */
+.goto-chip {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid var(--af-rule);
+  border-radius: var(--af-radius-pill);
+  background: var(--af-paper);
+  z-index: 60;
+}
+.goto-chip .goto-keys {
+  display: flex;
+  gap: 6px;
+  color: var(--af-text-soft);
+}
+.goto-chip .goto-key {
+  color: var(--af-text-body);
+}

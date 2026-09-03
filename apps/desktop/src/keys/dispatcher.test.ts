@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveBinding, type KeyLike } from "./dispatcher";
+import { armsGoTo, resolveBinding, type KeyLike } from "./dispatcher";
+import { GO_TO, resolveGoTo } from "./keymap";
 import { KEYMAP } from "./keymap";
 import { keyLabel } from "./keyLabel";
 
@@ -114,4 +115,46 @@ test("O folds and unfolds a thread's history, and only while a thread is open", 
   assert.equal(fold.length, 1);
   assert.equal(fold[0]?.scope, "thread");
   assert.equal(fold[0]?.label, "Expand or collapse the earlier messages");
+});
+
+// ---- G, then a letter -------------------------------------------------------------------------
+// The danger of a prefix chord is that its second key already means something on its own. G then E
+// must go to Done, never archive the selected thread, or the chord is worse than not having it.
+
+const keyEvent = (over: Partial<KeyLike> & { key: string }): KeyLike => ({ metaKey: false, shiftKey: false, altKey: false, ctrlKey: false, ...over });
+
+test("G arms only where a plain letter is a command", () => {
+  assert.equal(armsGoTo("list", keyEvent({ key: "g" }), false), true);
+  assert.equal(armsGoTo("thread", keyEvent({ key: "g" }), false), true);
+  assert.equal(armsGoTo("list", keyEvent({ key: "g" }), true), false, "not while a field has focus");
+  assert.equal(armsGoTo("compose", keyEvent({ key: "g" }), false), false, "not while writing a message");
+  assert.equal(armsGoTo("search", keyEvent({ key: "g" }), false), false);
+  assert.equal(armsGoTo("setup", keyEvent({ key: "g" }), false), false);
+  assert.equal(armsGoTo("list", keyEvent({ key: "g", metaKey: true }), false), false, "Cmd+G is not the prefix");
+  assert.equal(armsGoTo("list", keyEvent({ key: "G", shiftKey: true }), false), false);
+});
+
+test("every go-to letter names a real view, and none is claimed twice", () => {
+  const keys = GO_TO.map((g) => g.key);
+  assert.equal(new Set(keys).size, keys.length, "two destinations cannot share a letter");
+  for (const g of GO_TO) {
+    assert.equal(g.key, g.key.toLowerCase(), "the table is matched case-insensitively against lower case");
+    assert.ok(g.label.length > 0);
+    assert.equal(resolveGoTo(g.key.toUpperCase())?.view, g.view, "shift must not break the chord");
+  }
+});
+
+test("the two Oliver named, and the letters that mirror their actions", () => {
+  assert.equal(resolveGoTo("i")?.view, "inbox");
+  assert.equal(resolveGoTo("t")?.view, "sent");
+  // E marks done, H snoozes, S stars, so those letters go where those actions send mail.
+  assert.equal(resolveGoTo("e")?.view, "archive");
+  assert.equal(resolveGoTo("h")?.view, "snoozed");
+  assert.equal(resolveGoTo("s")?.view, "starred");
+  assert.equal(resolveGoTo("u")?.view, "unread");
+});
+
+test("a letter that means nothing after G goes nowhere", () => {
+  assert.equal(resolveGoTo("z"), null);
+  assert.equal(resolveGoTo(""), null);
 });

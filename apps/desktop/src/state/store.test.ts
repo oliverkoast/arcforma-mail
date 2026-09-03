@@ -18,6 +18,9 @@ let saveDelay = 0;
 let attachmentDelay = 0;
 /** Makes compose:send answer with an older, receipt-less shape, to prove a sent message stays sent. */
 let sendResultOmitsReceipt = false;
+/** Rows the next threads:list answers with, and how long it takes, to overlap a refresh with an action. */
+let listRows: ThreadSummary[] = [];
+let listDelay = 0;
 /** Channels whose next call fails, to check the failure reaches a toast. */
 const failNext = new Map<string, string>();
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -34,7 +37,8 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
       }
       switch (channel) {
         case "threads:list":
-          return { rows: [], nextCursor: null };
+          if (listDelay) await wait(listDelay);
+          return { rows: listRows, nextCursor: null };
         case "sidebar:counts":
           return EMPTY_SIDEBAR_COUNTS;
         case "sidebar:setLayout":
@@ -996,6 +1000,75 @@ async function withRow(over: Partial<ThreadSummary> = {}) {
   return { useApp, row };
 }
 const undoOf = (t: { undo?: unknown } | null) => (t?.undo ?? null) as { kind?: string; text?: string; starred?: boolean; to?: unknown } | null;
+
+test("a refresh that started before E cannot put the archived thread back", async () => {
+  // Oliver's report: "hovering and clicking E gets rid of a thread for a moment then it reappears."
+  // loadThreads awaits threads:list and then sidebar:counts before writing rows, and sync, the
+  // classifier and the counts poll all start those refreshes on their own. A refresh that began
+  // before the keypress was finishing after it and writing back a list that still held the thread.
+  const { useApp } = await import("./store");
+  const kept = summary("t-kept", "Still here");
+  const doomed = summary("t-doomed", "Archive me");
+  listRows = [doomed, kept];
+  useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [], selected: 0, open: null, toast: null, view: "inbox", readingPane: false, categories: [] });
+  await useApp.getState().loadThreads(true);
+  assert.deepEqual(useApp.getState().rows.map((r) => r.id), ["t-doomed", "t-kept"]);
+
+  // A refresh is in the air, carrying the pre-archive list, and it will land after the keypress.
+  listDelay = 40;
+  const inFlight = useApp.getState().loadThreads(true);
+  await useApp.getState().archiveSelected();
+  assert.deepEqual(useApp.getState().rows.map((r) => r.id), ["t-kept"], "E takes the row out at once");
+
+  await inFlight;
+  await settle();
+  listDelay = 0;
+  listRows = [];
+  assert.deepEqual(useApp.getState().rows.map((r) => r.id), ["t-kept"], "and the stale refresh must not bring it back");
+  useApp.getState().showToast(null);
+});
+
+test("a refresh that started before E leaves the list usable, not stuck loading", async () => {
+  const { useApp } = await import("./store");
+  listRows = [summary("t-a", "A")];
+  useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [], selected: 0, open: null, toast: null, view: "inbox", readingPane: false, categories: [] });
+  await useApp.getState().loadThreads(true);
+  listDelay = 30;
+  const inFlight = useApp.getState().loadThreads(true);
+  await useApp.getState().archiveSelected();
+  await inFlight;
+  await settle();
+  listDelay = 0;
+  listRows = [];
+  assert.equal(useApp.getState().loading, false, "a superseded load must not leave the spinner on");
+  useApp.getState().showToast(null);
+});
+
+test("with a thread open, E archives what is on screen and not whatever the mouse is resting over", async () => {
+  // Hover moves the list cursor, so while reading a thread the cursor can sit on a different row.
+  // Reading the target off the cursor archived the wrong thread, which reads as "E is not working".
+  const { useApp } = await import("./store");
+  const reading = summary("t-kickoff", "Kickoff next week");
+  const hovered = summary("t-other", "Something else");
+  useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [reading, hovered], selected: 1, open: null, toast: null, view: "inbox", readingPane: true, categories: [] });
+  await useApp.getState().openThreadById("arcforma", "t-kickoff");
+  await settle();
+  useApp.setState({ selected: 1 });
+  calls.length = 0;
+  await useApp.getState().archiveSelected();
+  const archived = calls.find((c) => c.channel === "threads:archive");
+  assert.equal(archived?.args[1], "t-kickoff", "the open thread is what E acts on");
+  useApp.getState().showToast(null);
+});
+
+test("with nothing open, E still acts on the row the cursor is on", async () => {
+  const { useApp } = await import("./store");
+  useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [summary("t-a", "A"), summary("t-b", "B")], selected: 1, open: null, toast: null, view: "inbox", readingPane: false, categories: [] });
+  calls.length = 0;
+  await useApp.getState().archiveSelected();
+  assert.equal(calls.find((c) => c.channel === "threads:archive")?.args[1], "t-b");
+  useApp.getState().showToast(null);
+});
 
 test("E leaves an Undo that puts the thread back in the inbox, and the follow-up toast says so", async () => {
   const { useApp } = await withRow();

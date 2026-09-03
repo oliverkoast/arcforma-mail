@@ -145,8 +145,11 @@ export function ComposeFooter() {
   return (
     <>
       <div className="compose-foot">
-        <button className="btn btn-sweep btn-compact" data-tip="Send now. Z undoes it during the undo window set in Settings." data-key={hint("send")} onClick={() => void sendCompose(null)}>
+        {/* The chord is printed on the button, not left in the tooltip. A shortcut nobody can see is
+            a shortcut nobody uses, and the first question it gets asked is whether it still exists. */}
+        <button className="btn btn-sweep btn-compact" data-tip="Send now. Z undoes it during the undo window set in Settings." onClick={() => void sendCompose(null)}>
           Send
+          {hint("send") ? <span className="af-mono btn-key">{hint("send")}</span> : null}
         </button>
         <button className="btn btn-nav btn-compact" data-tip="Pick a time to send. The message waits under Scheduled until then." data-key={hint("sendLater")} onClick={() => setSendLater(true)}>
           Send later

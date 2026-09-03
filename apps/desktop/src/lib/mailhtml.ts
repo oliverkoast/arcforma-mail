@@ -183,6 +183,43 @@ export function isBannerText(text: string): boolean {
   return BANNER.test(text.replace(/\s+/g, " "));
 }
 
+/** The rest of a gateway banner after its opening line: the advice, not the message. */
+const BANNER_ADVICE =
+  /^(?:do not (?:click|open|reply)|unless you (?:recognize|recognise|know)|please (?:verify|report|exercise)|verify the sender|report (?:it|this|any)|be (?:careful|cautious)|think before you click|this message came from|if you (?:are not|did not|do not))/i;
+
+/**
+ * A preview line with the gateway banner taken off the front.
+ *
+ * Gmail builds its snippet from the first text in the body, so on any organisation that stamps
+ * "CAUTION: This email originated from outside..." every row in the list previews the warning
+ * instead of the message. The warning is identical on every one of them, so the column carries no
+ * information at all: the reader learns nothing about any thread from a line that is the same on all
+ * of them. Stripping it is what makes the preview column worth its width.
+ *
+ * Only the opening banner sentence and the advice that follows it come off, capped at
+ * BANNER_MAX_CHARS, and a snippet that turns out to be nothing but banner is returned untouched:
+ * showing the warning beats showing an empty row.
+ */
+export function stripBannerPrefix(snippet: string): string {
+  const flat = snippet.replace(/\s+/g, " ").trim();
+  const withoutBracket = flat.replace(BRACKET_PREFIX, "").trim();
+  if (!isBannerText(withoutBracket)) return withoutBracket;
+
+  const sentences = withoutBracket.split(/(?<=[.!?])\s+/);
+  let drop = 0;
+  let dropped = 0;
+  while (drop < sentences.length) {
+    const sentence = sentences[drop] ?? "";
+    const first = drop === 0;
+    if (!first && !BANNER_ADVICE.test(sentence)) break;
+    if (dropped + sentence.length > BANNER_MAX_CHARS) break;
+    dropped += sentence.length + 1;
+    drop += 1;
+  }
+  const rest = sentences.slice(drop).join(" ").trim();
+  return rest || withoutBracket;
+}
+
 const LINE_BREAK_TAGS = new Set(["p", "div", "li", "tr", "table", "blockquote", "pre", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "td", "th", "section", "article", "header", "footer", "dd", "dt", "hr", "address", "center"]);
 const WRAPPER_TAGS = new Set(["div", "span", "font", "center", "table", "tbody", "tr", "td", "section", "article", "body"]);
 const SKIPPED_TAGS = new Set(["style", "script", "head", "title"]);

@@ -1,3 +1,4 @@
+import type { InboxView } from "../../shared/types";
 // One table drives every shortcut. Scope decides where a key applies; the
 // dispatcher adds "global" to whatever scope is active. Inside "compose",
 // "ask", "settings", and the command palette plain letters never reach list actions.
@@ -89,3 +90,30 @@ export const KEYMAP: Binding[] = [
   { key: "d", scope: "popover", action: "snoozePick", label: "Pick a date" },
   { key: "r", scope: "popover", action: "remindThreeDays", label: "Remind if no reply in 3 days" },
 ];
+
+/**
+ * G, then a letter: go to a view. Superhuman's "go to" chords, and the reason they are worth having
+ * is that they are the only way to reach a view without leaving the keyboard or reading the sidebar.
+ *
+ * The letters are not arbitrary. Wherever an action already owns a letter, the view that action
+ * sends mail to owns the same one: E marks done, so G E is Done; H snoozes, so G H is Snoozed; S
+ * stars, so G S is Starred; U is unread. That way there is one alphabet to learn rather than two.
+ */
+export const GO_TO: ReadonlyArray<{ key: string; view: InboxView; label: string }> = [
+  { key: "i", view: "inbox", label: "Inbox" },
+  { key: "a", view: "all", label: "Everything" },
+  { key: "n", view: "needsyou", label: "Needs you" },
+  { key: "t", view: "sent", label: "Sent" },
+  { key: "d", view: "drafts", label: "Drafts" },
+  { key: "e", view: "archive", label: "Done" },
+  { key: "h", view: "snoozed", label: "Snoozed" },
+  { key: "s", view: "starred", label: "Starred" },
+  { key: "u", view: "unread", label: "Unread" },
+  { key: "c", view: "scheduled", label: "Scheduled" },
+];
+
+/** The view a letter goes to after G, or null when that letter means nothing here. */
+export function resolveGoTo(key: string): { view: InboxView; label: string } | null {
+  const hit = GO_TO.find((g) => g.key === key.toLowerCase());
+  return hit ? { view: hit.view, label: hit.label } : null;
+}

@@ -131,6 +131,8 @@ export interface AppState {
 
   settings: SettingsInfo;
   settingsOpen: boolean;
+  /** True while G is waiting for the letter that names a view. Shown, so a half-typed chord is never a mystery. */
+  goToArmed: boolean;
   /** Where first-run setup stands, or null before the main process has been asked. */
   onboarding: OnboardingInfo | null;
   /** True while the setup flow owns the window: first run, or Run setup again from Settings. */
@@ -330,6 +332,37 @@ function saveKey(d: ComposeDraft): string {
 }
 /** Bumped on every open, close, or view change of the reading pane; a threads:get that resolves for an older open is dropped, so a fast J J never lands the first thread over the second. */
 let openSeq = 0;
+/**
+ * The same guard for the list. Bumped by every load and by every action that edits rows by hand, so
+ * a threads:list that resolves late is dropped instead of overwriting what has happened since.
+ *
+ * Without it, E looked broken: the row went, and a refresh that had started before the keypress
+ * landed a second later with the thread still in it, so the thread came back. Sync, the classifier
+ * and the counts poll all trigger those refreshes, and loadThreads awaits twice before it writes,
+ * so the window was wide open. The rule is that the person's action always wins over a read that
+ * started before it.
+ */
+let listSeq = 0;
+
+/**
+ * What a triage key acts on: the thread you have open, or the row the cursor is on.
+ *
+ * Hovering the list moves the cursor, so while a thread is open on the right the cursor can sit on a
+ * different row entirely. Reading these actions off the cursor meant E archived whatever the mouse
+ * happened to rest over rather than the thread on screen, which reads as "E is not working". What
+ * you are looking at wins. moveToInbox already did this; every other triage action does now too.
+ */
+function actionTarget(s: AppState): ThreadSummary | undefined {
+  return s.open?.thread ?? s.rows[s.selected];
+}
+
+/** How many list reads are running. The spinner belongs to the set, not to any one of them. */
+let listInFlight = 0;
+
+/** Invalidates every list read now in flight. Call before optimistically editing rows. */
+function invalidateThreadList(): void {
+  listSeq += 1;
+}
 
 function cancelAutosave(): void {
   if (autosaveTimer) clearTimeout(autosaveTimer);
@@ -488,6 +521,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   settings: DEFAULT_SETTINGS,
   settingsOpen: false,
+  goToArmed: false,
   onboarding: null,
   onboardingOpen: false,
   snippets: [],
@@ -559,18 +593,28 @@ export const useApp = create<AppState>((set, get) => ({
     const s = get();
     if (s.searchHits && !reset) return;
     const accountIds = selectedAccountIds(s);
+    const seq = ++listSeq;
+    listInFlight += 1;
     set({ loading: true });
     try {
       // Drafts is one list of drafts, local and Gmail alike (loadDrafts); the threads they sit in are not rows here.
       const page = s.view === "drafts" ? { rows: [], nextCursor: null } : await invoke("threads:list", { view: s.view, split: s.split, category: s.category, accountIds, cursor: reset ? null : s.nextCursor, limit: 60 });
       const counts = await invoke("sidebar:counts", accountIds);
+      // Anything that happened while those two calls were out ranks above them: an archive, a snooze,
+      // a change of view. Writing this page now would put an archived thread back on screen.
+      if (seq !== listSeq) return;
       set((cur) => {
         const rows = reset ? page.rows : [...cur.rows, ...page.rows];
         const selected = Math.min(cur.selected, Math.max(0, rows.length - 1));
-        return { rows, nextCursor: page.nextCursor, counts, selected, loading: false, searchHits: reset ? null : cur.searchHits };
+        return { rows, nextCursor: page.nextCursor, counts, selected, searchHits: reset ? null : cur.searchHits };
       });
     } catch (err) {
-      set({ loading: false, error: (err as Error).message });
+      if (seq === listSeq) set({ error: (err as Error).message });
+    } finally {
+      // The spinner is off once nothing is reading, including when this read was superseded. Leaving
+      // it on would also block loadMore, which refuses to run while loading is true.
+      listInFlight -= 1;
+      if (listInFlight === 0) set({ loading: false });
     }
   },
 
@@ -656,11 +700,12 @@ export const useApp = create<AppState>((set, get) => ({
 
   async archiveSelected() {
     const s = get();
-    const row = s.rows[s.selected];
+    const row = actionTarget(s);
     if (!row || scheduledOnly(row, s.showToast)) return;
     const wasOpen = s.open?.thread.id === row.id;
     // In a queue view E advances: the next row is selected, and opened when the reading pane is showing.
     const advance = wasOpen || (isQueueView(s.view) && s.readingPane);
+    invalidateThreadList();
     set((cur) => {
       const rows = cur.rows.filter((r) => !(r.id === row.id && r.accountId === row.accountId));
       const selected = Math.min(cur.selected, Math.max(0, rows.length - 1));
@@ -690,6 +735,7 @@ export const useApp = create<AppState>((set, get) => ({
     }
     // In the Done list the thread is no longer one of its rows; everywhere else it stays put and stops reading DONE.
     const leaves = s.view === "archive" || s.view === "snoozed";
+    invalidateThreadList();
     set((cur) => {
       const rows = leaves ? cur.rows.filter((r) => !(r.id === row.id && r.accountId === row.accountId)) : cur.rows.map((r) => (r.id === row.id && r.accountId === row.accountId ? { ...r, inInbox: true } : r));
       const open = cur.open && cur.open.thread.id === row.id && cur.open.thread.accountId === row.accountId ? { ...cur.open, thread: { ...cur.open.thread, inInbox: true } } : cur.open;
@@ -725,9 +771,10 @@ export const useApp = create<AppState>((set, get) => ({
 
   async starSelected() {
     const s = get();
-    const row = s.rows[s.selected];
+    const row = actionTarget(s);
     if (!row || scheduledOnly(row, s.showToast)) return;
     const starred = !row.starred;
+    invalidateThreadList();
     set((cur) => ({ rows: cur.rows.map((r) => (r.id === row.id && r.accountId === row.accountId ? { ...r, starred } : r)) }));
     try {
       await invoke("threads:star", row.accountId, row.id, starred);
@@ -742,7 +789,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   async toggleQueue(queue) {
     const s = get();
-    const row = s.rows[s.selected];
+    const row = actionTarget(s);
     if (!row || scheduledOnly(row, s.showToast)) return;
     try {
       const result = await invoke("threads:toggleQueue", row.accountId, row.id, queue);
@@ -750,6 +797,7 @@ export const useApp = create<AppState>((set, get) => ({
       const was = row.queue;
       const text = result === null ? `Removed from ${name}.` : was && was !== result ? `Moved to ${name}.` : `Added to ${name}.`;
       const leaves = isQueueView(get().view) && get().view !== result;
+      invalidateThreadList();
       set((cur) => {
         const rows = leaves ? cur.rows.filter((r) => !(r.id === row.id && r.accountId === row.accountId)) : cur.rows.map((r) => (r.id === row.id && r.accountId === row.accountId ? { ...r, queue: result } : r));
         const open = cur.open && cur.open.thread.id === row.id && cur.open.thread.accountId === row.accountId ? (leaves ? null : { ...cur.open, thread: { ...cur.open.thread, queue: result } }) : cur.open;
@@ -773,9 +821,10 @@ export const useApp = create<AppState>((set, get) => ({
 
   async snoozeSelected(wakeAt) {
     const s = get();
-    const row = s.rows[s.selected];
+    const row = actionTarget(s);
     if (!row || scheduledOnly(row, s.showToast)) return;
     const wasOpen = s.open?.thread.id === row.id;
+    invalidateThreadList();
     set((cur) => {
       const rows = cur.rows.filter((r) => !(r.id === row.id && r.accountId === row.accountId));
       return { popover: null, rows, selected: Math.min(cur.selected, Math.max(0, rows.length - 1)), open: wasOpen ? null : cur.open };
@@ -796,7 +845,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   async remindSelected(dueAt) {
     const s = get();
-    const row = s.rows[s.selected];
+    const row = actionTarget(s);
     if (!row || scheduledOnly(row, s.showToast)) return;
     try {
       await invoke("threads:remind", row.accountId, row.id, dueAt);
@@ -812,7 +861,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   async unsubscribeSelected() {
     const s = get();
-    const row = s.rows[s.selected];
+    const row = actionTarget(s);
     if (!row || scheduledOnly(row, s.showToast)) return;
     if (!row.canUnsubscribe) {
       get().showToast({ eyebrow: "NO UNSUBSCRIBE LINK", text: "This sender did not include one." });
@@ -822,6 +871,7 @@ export const useApp = create<AppState>((set, get) => ({
       const r = await invoke("threads:unsubscribe", row.accountId, row.id);
       if (r.archived) {
         const wasOpen = get().open?.thread.id === row.id && get().open?.thread.accountId === row.accountId;
+        invalidateThreadList();
         set((cur) => {
           const rows = cur.rows.filter((x) => !(x.id === row.id && x.accountId === row.accountId));
           return { rows, selected: Math.min(cur.selected, Math.max(0, rows.length - 1)), open: wasOpen ? null : cur.open };
@@ -829,6 +879,7 @@ export const useApp = create<AppState>((set, get) => ({
         get().syncScope();
         void get().refreshCounts();
       } else {
+        invalidateThreadList();
         set((cur) => ({ rows: cur.rows.map((x) => (x.id === row.id && x.accountId === row.accountId ? { ...x, unsubscribeState: r.state } : x)) }));
       }
       const eyebrow = r.ok ? (r.state === "opened" ? "UNSUBSCRIBE PAGE" : "UNSUBSCRIBED") : "NOT UNSUBSCRIBED";

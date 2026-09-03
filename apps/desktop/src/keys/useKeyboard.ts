@@ -75,5 +75,12 @@ export function appActions(): ActionMap {
 }
 
 export function useKeyboard(): void {
-  useEffect(() => installKeyDispatcher(() => useApp.getState().scope, appActions()), []);
+  useEffect(
+    () =>
+      installKeyDispatcher(() => useApp.getState().scope, appActions(), {
+        goTo: (view) => useApp.getState().setView(view),
+        onArmed: (armedNow) => useApp.setState({ goToArmed: armedNow }),
+      }),
+    []
+  );
 }

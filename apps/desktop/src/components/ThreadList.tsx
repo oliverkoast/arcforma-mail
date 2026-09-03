@@ -4,6 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { isQueueView, useApp } from "../state/store";
 import { attentionEyebrow, eyebrowDate, listDate, participantsLine, sendsAt } from "../lib/format";
 import { rowDescriptors, viewTitle } from "../lib/sidebarLayout";
+import { stripBannerPrefix } from "../lib/mailhtml";
 import { threadRowTip } from "../lib/tooltip";
 import { keyLabel } from "../keys/keyLabel";
 import { SearchExcerpt } from "./SearchExcerpt";
@@ -59,9 +60,13 @@ function EmptyState({ headline, detail }: { headline: string; detail: string | n
 }
 
 function Row({ row, selected, owners, onClick, onHover, accountLabel, accountEmail, highlight }: { row: ThreadSummary; selected: boolean; owners: Set<string>; onClick: () => void; onHover: (e: React.MouseEvent) => void; accountLabel: string | null; accountEmail: string | null; highlight?: SearchHighlight | null }) {
+  // Gmail builds its snippet from the first text in the body, so on a domain that stamps a
+  // "this came from outside" banner every row previews the same warning and the column stops saying
+  // anything about any thread. The preview is what the message says.
+  const preview = stripBannerPrefix(row.snippet);
   // The row explains itself only when its own text is cut off: the full subject, the start of the snippet, the account.
   return (
-    <div className={`row${row.unread ? " unread" : ""}${selected ? " selected" : ""}`} onClick={onClick} onMouseMove={onHover} role="option" aria-selected={selected} data-tip={threadRowTip(row.subject, row.snippet, accountEmail)} data-tip-if-truncated=".row-subject, .row-snippet">
+    <div className={`row${row.unread ? " unread" : ""}${selected ? " selected" : ""}`} onClick={onClick} onMouseMove={onHover} role="option" aria-selected={selected} data-tip={threadRowTip(row.subject, preview, accountEmail)} data-tip-if-truncated=".row-subject, .row-snippet">
       <span className="dot" />
       <div className="row-main">
         {row.band === "needs_you" && row.attentionReason ? <span className="af-mono row-eyebrow" data-tip={row.attentionReason}>{attentionEyebrow(row.attentionReason)}</span> : null}
@@ -72,7 +77,7 @@ function Row({ row, selected, owners, onClick, onHover, accountLabel, accountEma
           {row.messageCount > 1 ? <span className="nav-count"> {row.messageCount}</span> : null}
         </div>
         <div className="row-subject">{row.subject || "(no subject)"}</div>
-        {highlight ? <div className="row-snippet"><SearchExcerpt highlight={highlight} /></div> : <div className="row-snippet">{row.snippet}</div>}
+        {highlight ? <div className="row-snippet"><SearchExcerpt highlight={highlight} /></div> : <div className="row-snippet">{preview}</div>}
       </div>
       <div className="row-meta">
         <span>{row.scheduled ? `Sends ${sendsAt(row.scheduled.sendAt)}` : listDate(row.lastMessageAt)}</span>

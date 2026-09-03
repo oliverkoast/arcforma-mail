@@ -478,3 +478,40 @@ test("the region helpers: prose, postal addresses, tracking sizes, and where a r
   assert.deepEqual(findTrailingRegion(blocks), { start: 1, kinds: ["signature"] });
   assert.equal(findTrailingRegion(Array.from(parseHtml("<p>Hi Oliver, here is the plan you asked for on Tuesday.</p>").body.childNodes)), null);
 });
+
+import { stripBannerPrefix } from "./mailhtml";
+
+// ---- the preview line -------------------------------------------------------------------------
+// A gateway banner is identical on every message it is stamped on, so a list that previews it shows
+// the same sentence on every row and tells the reader nothing about any of them.
+
+test("stripBannerPrefix drops the banner and its advice, leaving what the message says", () => {
+  const snippet =
+    "CAUTION: This email originated from outside your organization. Do not click links or open attachments unless you recognize the sender and know the content is safe. Hi Oliver, We are set for Tuesday. Could you send the session plan?";
+  assert.equal(stripBannerPrefix(snippet), "Hi Oliver, We are set for Tuesday. Could you send the session plan?");
+});
+
+test("a snippet with no banner is passed through, whitespace tidied", () => {
+  assert.equal(stripBannerPrefix("  Redlines attached.\n The only open point is the term. "), "Redlines attached. The only open point is the term.");
+});
+
+test("an [EXTERNAL] tag comes off even when no banner sentence follows", () => {
+  assert.equal(stripBannerPrefix("[EXTERNAL] Your August statement is ready."), "Your August statement is ready.");
+});
+
+test("a snippet that is nothing but banner keeps the banner, because an empty row is worse", () => {
+  const onlyBanner = "CAUTION: This email originated from outside your organization.";
+  assert.equal(stripBannerPrefix(onlyBanner), onlyBanner);
+});
+
+test("prose that merely mentions the outside is not mistaken for a banner", () => {
+  const real = "This email originated from outside our usual process, so I wanted to flag it before we reply.";
+  assert.equal(stripBannerPrefix(real), real, "the banner pattern must anchor at the start with a caution word");
+});
+
+test("stripping never eats the message when the banner runs unusually long", () => {
+  const long = `CAUTION: ${"This email originated from outside your organization. ".repeat(20)}Hi Oliver.`;
+  const out = stripBannerPrefix(long);
+  assert.ok(out.length > 0);
+  assert.ok(out.length <= long.length);
+});
