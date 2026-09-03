@@ -209,6 +209,27 @@ function SendingSection() {
   );
 }
 
+/** The log file, and the way to reach it. A bug that cannot be looked at afterwards is reported from
+ *  memory, which is how two real faults in this app went undiagnosed until someone described them. */
+function DiagnosticsSection() {
+  return (
+    <section className="settings-section">
+      <span className="af-mono">Diagnostics</span>
+      <div className="settings-row">
+        <span>
+          Log file
+          <span className="settings-help">What the app did, kept across restarts and rotated at two megabytes. It records events and counts, never message content, addresses, or tokens.</span>
+        </span>
+        <span className="settings-row-control">
+          <button className="btn btn-nav btn-compact" data-tip="Shows the log file in Finder." onClick={() => void invoke("app:openLogFolder")}>
+            Show the log
+          </button>
+        </span>
+      </div>
+    </section>
+  );
+}
+
 /** Read receipts: the switch, the service they need, and the plain limits of what one can tell you.
  *
  * This section is the only place the feature can be turned on, so it is also the only place that has
@@ -551,6 +572,7 @@ export function Settings() {
         <FollowUpsSection />
         <StartupSection />
         <SnippetsSection />
+        <DiagnosticsSection />
         <CategoriesSection />
       </section>
     </div>

@@ -13,6 +13,12 @@ import { tokenSourceOf } from "./calendar.js";
 import { log, logError } from "./log.js";
 import type { ContactCard, ContactEventRef, ContactWebResult, ContactWebSummary } from "../shared/types.js";
 
+/** The part of an address that is safe to write down: who they work for, not who they are. */
+function domainOf(email: string): string {
+  const at = email.lastIndexOf("@");
+  return at === -1 ? "an unknown domain" : email.slice(at + 1).toLowerCase();
+}
+
 export const WEB_LOOKUP_MIN_TWO_WAY = 3;
 const PHOTO_MAX_BYTES = 512 * 1024;
 
@@ -109,7 +115,9 @@ export class Contacts {
       const r = await resolvePhoto(e, { accessToken });
       url = r.photoUrl;
       setContactPhoto(this.db, e, url);
-      log("contacts", `${e}: photo ${r.source}`);
+      // The domain, never the person. These lines go to a file now, and a log people attach to bug
+      // reports must not be a list of who writes to them.
+      log("contacts", `photo ${r.source} for a contact at ${domainOf(e)}`);
     }
     // A download that fails is a session miss only: the URL stays on the row so a
     // later open tries again instead of recording "no photo" for good.
@@ -159,7 +167,7 @@ export class Contacts {
       if (!text) throw new AiError("bad_response", "The lookup came back empty.");
       const web: ContactWebSummary = { text, at: now };
       setContactWebJson(this.db, e, web);
-      log("contacts", `${e}: web lookup ${r.model} in ${r.latencyMs} ms`);
+      log("contacts", `web lookup ${r.model} in ${r.latencyMs} ms for a contact at ${domainOf(e)}`);
       return { ok: true, web };
     } catch (err) {
       return toFailure(err);

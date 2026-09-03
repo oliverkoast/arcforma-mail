@@ -2435,3 +2435,31 @@ button.message-from {
 .goto-chip .goto-key {
   color: var(--af-text-body);
 }
+
+/* The screen when the interface itself fails. Plain and calm on purpose: whoever is reading it has
+   just had the window go blank, and the useful thing is what is still true and what to press. */
+.crash {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--af-paper);
+  z-index: 200;
+  padding: 32px;
+}
+.crash-card {
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.crash-detail {
+  color: var(--af-text-soft);
+  overflow-wrap: anywhere;
+}
+.crash-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}

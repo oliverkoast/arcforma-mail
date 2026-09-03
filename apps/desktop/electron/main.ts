@@ -28,7 +28,7 @@ import { serveType } from "./attachments/kind.js";
 import { findPart } from "./attachments/service.js";
 import { AttachmentReaper } from "./attachments/reaper.js";
 import { closePreviewWindows, guardPreviewContents, pendingPreviewUrls, previewPdfContents } from "./attachments/window.js";
-import { log, logError } from "./log.js";
+import { initLogFile, log, logError, logFilePath } from "./log.js";
 import { installIpcSenderGuard } from "./ipc-guard.js";
 import { isAllowedNavigation, isExternalLink } from "./navigation.js";
 import { dbPath } from "./paths.js";
@@ -62,6 +62,24 @@ if (SMOKE_DIR) {
   app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
   app.commandLine.appendSwitch("disable-renderer-backgrounding");
 }
+
+// The paths that used to end the process without saying anything. None of them tries to keep going:
+// an app in an unknown state must not go on touching mail. They exist so that afterwards there is a
+// line in the log saying what happened, which is the difference between a fixable bug and a story.
+process.on("uncaughtException", (err) => {
+  logError("crash", "uncaught exception in the main process", err);
+  app.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  // Not fatal on its own: one unawaited sync or IPC call failing should not close someone's mail.
+  logError("crash", "unhandled promise rejection", reason);
+});
+app.on("render-process-gone", (_e, _contents, details) => {
+  logError("crash", "the window's renderer went away", `${details.reason}${details.exitCode ? ` (exit ${details.exitCode})` : ""}`);
+});
+app.on("child-process-gone", (_e, details) => {
+  logError("crash", `a ${details.type} child process went away`, `${details.reason}${details.exitCode ? ` (exit ${details.exitCode})` : ""}`);
+});
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -273,6 +291,11 @@ function createWindow(): BrowserWindow {
 async function boot(): Promise<void> {
   await app.whenReady();
   app.setName("Arcforma Mail");
+  // Before anything else that can fail: a packed app launched from Finder has nowhere for stdout to
+  // go, so until this runs every line written is a line nobody can ever read.
+  const logFile = initLogFile(path.join(app.getPath("userData"), "logs"));
+  log("app", `version ${app.getVersion()} on ${process.platform} ${process.arch}, electron ${process.versions.electron}`);
+  if (logFile) log("app", `logging to ${logFile}`);
   // A smoke run is a background process that happens to render. No dock icon, no activation, no
   // stealing the frontmost app from whoever is working while it runs.
   if (SMOKE_DIR) app.dock?.hide();

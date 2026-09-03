@@ -662,6 +662,10 @@ export interface ArcmailInvoke {
   "send:undo": (id: number) => UndoSendResult;
   "sync:now": () => void;
   "app:info": () => AppInfo;
+  /** A renderer crash, on its way to the log file. The only record of one that outlives the window. */
+  "app:reportCrash": (report: { message: string; stack: string | null; componentStack: string | null }) => void;
+  /** Reveals the log file in Finder, so a bug report can carry evidence instead of a memory. */
+  "app:openLogFolder": () => void;
   "compose:send": (draft: ComposeDraft, sendAt?: number | null) => SendResult;
   "compose:signature": (accountId: string) => string;
   "drafts:save": (draft: ComposeDraft, opts?: SaveDraftOptions) => number;

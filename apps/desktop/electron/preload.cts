@@ -45,6 +45,8 @@ const INVOKE_CHANNELS = new Set([
   "send:undo",
   "sync:now",
   "app:info",
+  "app:reportCrash",
+  "app:openLogFolder",
   "compose:send",
   "compose:signature",
   "drafts:save",
