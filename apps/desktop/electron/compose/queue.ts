@@ -123,7 +123,12 @@ export async function queueSend(db: Db, draft: ComposeDraft, opts: QueueOptions 
     undoUntil,
     meta: { draft: { ...draft, draftId: null }, gmailDraftId: opts.gmailDraftId ?? null } satisfies SendMeta,
   });
-  return { id: row.id, sendAt: row.send_at, undoUntil: row.undo_until };
+  if (receipt.token) {
+    // The token belongs to the queued row, so an undo or a terminal failure can take it back with the message.
+    setSendTrackingToken(db, row.id, receipt.token);
+    createReceipt(db, { token: receipt.token, accountId: draft.accountId, threadId: draft.threadId ?? null, sendId: row.id, sentAt: sendAt });
+  }
+  return { id: row.id, sendAt: row.send_at, undoUntil: row.undo_until, receipt: { requested: receipt.requested, armed: receipt.armed, problem: receipt.problem } };
 }
 
 /** Cancels a queued send and returns the draft it carried, plus the Gmail draft it was mirrored as, so the compose can reopen. */
@@ -132,6 +137,9 @@ export function undoSend(db: Db, id: number): UndoSendResult & { gmailDraftId: s
   if (!row) return { cancelled: false, draft: null, gmailDraftId: null };
   const cancelled = cancelSend(db, id);
   if (!cancelled) return { cancelled: false, draft: null, gmailDraftId: null };
+  // The message never went out, so its receipt is not a receipt. The draft comes
+  // back still armed, and sending again registers a fresh token.
+  deleteReceiptForSend(db, id);
   const meta = sendMeta(row);
   return { cancelled: true, draft: meta.draft ?? null, gmailDraftId: meta.gmailDraftId ?? null };
 }

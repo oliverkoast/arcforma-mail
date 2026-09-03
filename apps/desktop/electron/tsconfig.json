@@ -9,7 +9,11 @@
     "noEmit": true,
     "skipLibCheck": true,
     "noUncheckedIndexedAccess": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    // packages/pixel-service is plain .mjs with JSDoc types and is imported by
+    // path rather than as a workspace dependency, so summarise() is read from
+    // the same file the deployed service runs.
+    "allowJs": true
   },
   "include": ["./**/*.ts", "./**/*.cts", "../shared/**/*.ts"]
 }

@@ -32,6 +32,7 @@ import {
   type HistoryChange,
 } from "@arcforma/store";
 import { queueSend, senderFor, signatureFor, validateDraft } from "../compose/queue.js";
+import type { ReceiptArmer } from "../receipts/arm.js";
 import { log, logError } from "../log.js";
 import { MirrorDebounce } from "./debounce.js";
 import type { Address, ComposeDraft, SendResult } from "../../shared/types.js";
@@ -91,6 +92,8 @@ export async function restoreDraft(db: Db, draft: ComposeDraft, gmailDraftId: st
     inReplyTo: draft.inReplyTo ?? null,
     references: draft.references ?? null,
     gmailDraftId,
+    // A send that was undone or failed comes back exactly as it was written, receipt choice included.
+    readReceipt: draft.readReceipt === true,
   });
   await mirrorDraft(db, id);
   return id;
@@ -132,14 +135,14 @@ export function detachDraftForSend(db: Db, draftId: number): string | null {
  * a refused send (no recipient, nothing written) must leave the draft exactly
  * where it was, in the table and in Gmail, rather than delete it and then fail.
  */
-export async function sendDraft(db: Db, draft: ComposeDraft, opts: { sendAt?: number | null; cancelMirror?: (draftId: number) => void } = {}): Promise<SendResult> {
+export async function sendDraft(db: Db, draft: ComposeDraft, opts: { sendAt?: number | null; cancelMirror?: (draftId: number) => void; receipts?: ReceiptArmer } = {}): Promise<SendResult> {
   validateDraft(draft);
   let gmailDraftId: string | null = null;
   if (draft.draftId) {
     opts.cancelMirror?.(draft.draftId);
     gmailDraftId = detachDraftForSend(db, draft.draftId);
   }
-  return queueSend(db, draft, { sendAt: opts.sendAt ?? null, gmailDraftId });
+  return queueSend(db, draft, { sendAt: opts.sendAt ?? null, gmailDraftId, ...(opts.receipts ? { receipts: opts.receipts } : {}) });
 }
 
 export interface DraftAckOutcome {

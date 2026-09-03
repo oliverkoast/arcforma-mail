@@ -21,6 +21,9 @@ import {
   moveToInbox,
   parseAddressList,
   pendingSnooze,
+  receiptEvents,
+  receiptForMessage,
+  receiptsForThreads,
   saveBody,
   search,
   setLoadImages,
@@ -36,6 +39,7 @@ import {
 import type { AccountRegistry } from "../accounts.js";
 import { previewKind } from "../attachments/kind.js";
 import { attachmentKey, type StoredPart } from "../attachments/service.js";
+import { receiptSummary } from "../receipts/summary.js";
 import { categoryInfos } from "./ai.js";
 import { requireAccount, requireEmail, requireId } from "./guard.js";
 import { logError } from "../log.js";
@@ -43,7 +47,7 @@ import { scheduledSendId, scheduledSummary, scheduledView } from "../scheduled.j
 import type { Scheduler } from "../scheduler.js";
 import { unsubscribeThread } from "../unsubscribe.js";
 import type { SyncManager } from "../sync.js";
-import type { Address, AttachmentInfo, CategoryInfo, ListRequest, ListResponse, MessageView, ThreadSummary, ThreadView, UnsubscribeResult } from "../../shared/types.js";
+import type { Address, AttachmentInfo, CategoryInfo, ListRequest, ListResponse, MessageView, ReceiptSummary, ThreadSummary, ThreadView, UnsubscribeResult } from "../../shared/types.js";
 
 export function toSummary(row: ThreadListRow): ThreadSummary {
   return {
@@ -71,6 +75,42 @@ export function toSummary(row: ThreadListRow): ThreadSummary {
     canUnsubscribe: row.can_unsubscribe === 1,
     unsubscribeState: row.unsubscribe_state ?? null,
   };
+}
+
+/**
+ * What the pixel service knows about each of these threads, in one query pair
+ * rather than a subquery on every row. Threads with no armed message, which is
+ * every thread for anyone who left the feature alone, cost two empty lookups
+ * and nothing else. The newest armed message on a thread is the one shown.
+ */
+function receiptsByThread(db: Db, rows: ThreadSummary[]): Map<string, ReceiptSummary> {
+  const out = new Map<string, ReceiptSummary>();
+  if (rows.length === 0) return out;
+  const receipts = receiptsForThreads(db, rows.map((r) => ({ accountId: r.accountId, threadId: r.id })));
+  if (receipts.length === 0) return out;
+  const events = receiptEvents(db, receipts.map((r) => r.token));
+  const byToken = new Map<string, typeof events>();
+  for (const e of events) byToken.set(e.token, [...(byToken.get(e.token) ?? []), e]);
+  // receiptsForThreads returns oldest first, so the last write per thread is the newest message's.
+  for (const r of receipts) out.set(`${r.account_id} ${r.thread_id}`, receiptSummary(byToken.get(r.token) ?? []));
+  return out;
+}
+
+/** Fills in the receipt on each row that has one. Rows without one keep a null, which the list renders as nothing at all. */
+export function withReceipts(db: Db, rows: ThreadSummary[]): ThreadSummary[] {
+  const byThread = receiptsByThread(db, rows);
+  if (byThread.size === 0) return rows;
+  return rows.map((r) => {
+    const receipt = byThread.get(`${r.accountId} ${r.id}`);
+    return receipt ? { ...r, receipt } : r;
+  });
+}
+
+/** The receipt on one sent message, or null, which is the answer for every message nobody armed. */
+function messageReceipt(db: Db, m: MessageRow): ReceiptSummary | null {
+  const row = receiptForMessage(db, m.account_id, m.id);
+  if (!row) return null;
+  return receiptSummary(receiptEvents(db, [row.token]));
 }
 
 function toMessageView(db: Db, m: MessageRow): MessageView {
@@ -110,6 +150,7 @@ function toMessageView(db: Db, m: MessageRow): MessageView {
     // renderer asks for a part of a message, never for bytes or a path.
     body: body ? { html: body.html, text: body.text, attachments: attachmentInfos(body.attachments_json) } : null,
     loadImages: shouldLoadImages(db, m, contact?.load_images ?? null),
+    receipt: messageReceipt(db, m),
   };
 }
 
@@ -150,7 +191,7 @@ export function listView(db: Db, req: ListRequest): ListResponse {
   if (req.view.startsWith("search:")) {
     const saved = getSavedSearch(db, Number(req.view.slice(7)));
     if (!saved) return { rows: [], nextCursor: null };
-    return { rows: search(db, saved.query, { accountIds: req.accountIds, limit: req.limit ?? 60 }).map((h) => toSummary(h.row)), nextCursor: null };
+    return { rows: withReceipts(db, search(db, saved.query, { accountIds: req.accountIds, limit: req.limit ?? 60 }).map((h) => toSummary(h.row))), nextCursor: null };
   }
   const page = listThreads(db, {
     view: req.view as StoreView,
@@ -160,7 +201,7 @@ export function listView(db: Db, req: ListRequest): ListResponse {
     cursor: req.cursor ?? null,
     limit: req.limit ?? 60,
   });
-  return { rows: page.rows.map(toSummary), nextCursor: page.nextCursor };
+  return { rows: withReceipts(db, page.rows.map(toSummary)), nextCursor: page.nextCursor };
 }
 
 export function registerThreadIpc(db: Db, accounts: AccountRegistry, sync: SyncManager, scheduler?: Pick<Scheduler, "wakeSoon">): void {
@@ -204,7 +245,8 @@ export function registerThreadIpc(db: Db, accounts: AccountRegistry, sync: SyncM
     }
     // The same columns the list carries, so the header shows the snooze, reminder, queue, and file state for any thread, not only the newest one.
     const summaryRow = getThreadListRow(db, accountId, threadId) ?? ({ ...row, split: null, type: null, category_id: null, attention: null, band: null, attention_reason: null, wake_at: null, no_reply_by: null, queue: null, unsubscribe_state: null, can_unsubscribe: 0 } as ThreadListRow);
-    return { thread: toSummary(summaryRow), messages: messages.map((m) => toMessageView(db, m)), bodiesPending: bodiesError !== null, bodiesError };
+    const summary = withReceipts(db, [toSummary(summaryRow)])[0]!;
+    return { thread: summary, messages: messages.map((m) => toMessageView(db, m)), bodiesPending: bodiesError !== null, bodiesError };
   });
 
   // Every mutation checks the account and the thread first: a bad id would otherwise write an outbox row nothing can drain.

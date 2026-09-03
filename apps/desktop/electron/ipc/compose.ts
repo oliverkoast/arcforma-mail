@@ -1,12 +1,16 @@
 import { ipcMain } from "electron";
-import { deleteSnippet, getSettings, listDrafts, listSnippets, saveDraft, setSetting, updateSnippet, upsertSnippet, type Db, type DraftRow } from "@arcforma/store";
+import fs from "node:fs";
+import { deleteSnippet, getSettings, hasReceiptAuthToken, listDrafts, listSnippets, saveDraft, setReceiptAuthToken, setSetting, updateSnippet, upsertSnippet, type Db, type DraftRow } from "@arcforma/store";
 import { signatureFor, undoSend } from "../compose/queue.js";
 import { discardDraft, restoreDraft, sendDraft, type DraftMirror } from "../drafts/mirror.js";
 import { emit } from "../events.js";
-import { log } from "../log.js";
+import { log, logError } from "../log.js";
+import { normaliseServiceUrl } from "../receipts/pixel.js";
+import type { ReceiptArmer } from "../receipts/arm.js";
+import type { ReceiptService } from "../receipts/service.js";
 import type { Scheduler } from "../scheduler.js";
 import type { SyncManager } from "../sync.js";
-import type { Address, ComposeDraft, DraftInfo, SaveDraftOptions, SettingsInfo, SnippetInfo, UndoSendResult } from "../../shared/types.js";
+import type { Address, ComposeDraft, DraftInfo, ReceiptCheckResult, SaveDraftOptions, SettingsInfo, SnippetInfo, UndoSendResult } from "../../shared/types.js";
 
 export function toDraftInfo(row: DraftRow): DraftInfo {
   return {
@@ -23,20 +27,63 @@ export function toDraftInfo(row: DraftRow): DraftInfo {
     inReplyTo: row.in_reply_to,
     references: row.references_header,
     updatedAt: row.updated_at,
+    readReceipt: row.read_receipt === 1,
     origin: row.origin,
     mirror: { state: row.mirror_state, error: row.mirror_error, at: row.mirrored_at },
   };
+}
+
+/**
+ * The settings the renderer is allowed to see, listed one by one rather than
+ * handed the store's whole row. The pixel service token is stored beside these
+ * and must never come back out, so nothing here may be a spread of getSettings.
+ */
+export function settingsInfo(db: Db): SettingsInfo {
+  const s = getSettings(db);
+  return {
+    undoWindowSec: s.undoWindowSec,
+    autoDraft: s.autoDraft,
+    remoteImages: s.remoteImages,
+    remindClientsAfterDays: s.remindClientsAfterDays,
+    remindScope: s.remindScope,
+    readReceipts: s.readReceipts,
+    readReceiptsUrl: s.readReceiptsUrl,
+    readReceiptsTokenSet: hasReceiptAuthToken(db),
+  };
+}
+
+/**
+ * The store file holds the pixel service token from now on, so it is tightened
+ * to owner-only the way tokens.json and oauth-clients.json are. The write-ahead
+ * files carry the same rows before a checkpoint, so they are tightened too.
+ */
+function tightenStoreFile(file: string | null): void {
+  if (!file) return;
+  for (const f of [file, `${file}-wal`, `${file}-shm`]) {
+    try {
+      if (fs.existsSync(f)) fs.chmodSync(f, 0o600);
+    } catch (err) {
+      logError("receipts", `tighten ${f}`, err);
+    }
+  }
 }
 
 function snippets(db: Db): SnippetInfo[] {
   return listSnippets(db).map((s) => ({ id: s.id, trigger: s.trigger, name: s.name, bodyHtml: s.body_html, bodyText: s.body_text }));
 }
 
-export function registerComposeIpc(db: Db, scheduler: Scheduler, mirror: DraftMirror, sync: Pick<SyncManager, "poke">): void {
+export interface ComposeIpcReceipts {
+  armer: ReceiptArmer;
+  service: Pick<ReceiptService, "check">;
+  /** The store file, tightened to 0600 when the service token is written into it. */
+  storePath: string | null;
+}
+
+export function registerComposeIpc(db: Db, scheduler: Scheduler, mirror: DraftMirror, sync: Pick<SyncManager, "poke">, receipts?: ComposeIpcReceipts): void {
   ipcMain.handle("compose:send", async (_e, draft: ComposeDraft, sendAt?: number | null) => {
     // Checked first, then the local row leaves Drafts; its Gmail draft goes once the send has succeeded.
-    const result = await sendDraft(db, draft, { sendAt: sendAt ?? null, cancelMirror: (id) => mirror.cancel(id) });
-    log("compose", `queued send ${result.id} for ${new Date(result.sendAt).toISOString()}`);
+    const result = await sendDraft(db, draft, { sendAt: sendAt ?? null, cancelMirror: (id) => mirror.cancel(id), ...(receipts ? { receipts: receipts.armer } : {}) });
+    log("compose", `queued send ${result.id} for ${new Date(result.sendAt).toISOString()}${result.receipt.requested ? `, receipt ${result.receipt.armed ? "armed" : `not armed: ${result.receipt.problem ?? "unknown"}`}` : ""}`);
     scheduler.wakeSoon(result.sendAt);
     return result;
   });
@@ -65,6 +112,7 @@ export function registerComposeIpc(db: Db, scheduler: Scheduler, mirror: DraftMi
       quotedHtml: draft.quotedHtml,
       inReplyTo: draft.inReplyTo ?? null,
       references: draft.references ?? null,
+      readReceipt: draft.readReceipt === true,
     });
     mirror.touch(id, draft.accountId, Boolean(opts?.flush));
     return id;
@@ -89,15 +137,40 @@ export function registerComposeIpc(db: Db, scheduler: Scheduler, mirror: DraftMi
     return snippets(db);
   });
 
-  ipcMain.handle("settings:get", (): SettingsInfo => getSettings(db));
+  ipcMain.handle("settings:get", (): SettingsInfo => settingsInfo(db));
   ipcMain.handle("settings:set", (_e, patch: Partial<SettingsInfo>): SettingsInfo => {
     if (typeof patch.undoWindowSec === "number") setSetting(db, "undoWindowSec", Math.max(0, Math.min(60, Math.round(patch.undoWindowSec))));
     if (typeof patch.autoDraft === "boolean") setSetting(db, "autoDraft", patch.autoDraft);
     if (patch.remoteImages === "always" || patch.remoteImages === "known" || patch.remoteImages === "never") setSetting(db, "remoteImages", patch.remoteImages);
     if (typeof patch.remindClientsAfterDays === "number" && Number.isFinite(patch.remindClientsAfterDays)) setSetting(db, "remindClientsAfterDays", Math.max(0, Math.min(60, Math.round(patch.remindClientsAfterDays))));
     if (Array.isArray(patch.remindScope)) setSetting(db, "remindScope", patch.remindScope.filter((v): v is string => typeof v === "string").map((v) => v.trim()).filter(Boolean));
-    const next = getSettings(db);
+    if (typeof patch.readReceipts === "boolean") setSetting(db, "readReceipts", patch.readReceipts);
+    if (typeof patch.readReceiptsUrl === "string") setSetting(db, "readReceiptsUrl", receiptUrl(patch.readReceiptsUrl));
+    const next = settingsInfo(db);
     emit("toast", { text: "Settings saved." });
     return next;
   });
+
+  // Write only. The token goes in and the answer says whether one is stored,
+  // never what it is: nothing in this app reads it back to the renderer.
+  ipcMain.handle("receipts:setToken", (_e, token: unknown): SettingsInfo => {
+    if (typeof token !== "string") throw new Error("A token is text.");
+    setReceiptAuthToken(db, token.trim());
+    tightenStoreFile(receipts?.storePath ?? null);
+    emit("toast", { text: token.trim() ? "Pixel service token saved." : "Pixel service token cleared." });
+    return settingsInfo(db);
+  });
+
+  ipcMain.handle("receipts:check", async (): Promise<ReceiptCheckResult> => {
+    if (!receipts) return { ok: false, text: "Read receipts are not wired up in this run." };
+    return receipts.service.check();
+  });
+}
+
+/** Only http and https reach a recipient's client, and anything else here would be a URL that silently never loads. */
+export function receiptUrl(raw: string): string {
+  const url = normaliseServiceUrl(raw);
+  if (!url) return "";
+  if (!/^https?:\/\//i.test(url)) throw new Error("The pixel service address starts with https:// or http://.");
+  return url;
 }

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { SEND_LATER, useApp } from "../state/store";
 import { filterSnippets } from "../lib/snippets";
+import { RECEIPT_COMPOSE_TIP, RECEIPT_NO_SERVICE_TIP } from "../lib/receipts";
 import { IconButton, hint } from "./IconButton";
 
 function SendLaterPopover() {
@@ -104,7 +105,36 @@ function SnippetPicker() {
   );
 }
 
-/** Send, Send later, Snippets, and the discard glyph, plus the two popovers they open. Shared by the panel and the inline reply. */
+/**
+ * The read receipt control for this one message. Off unless it is turned on
+ * here, every time: there is no global that arms messages on your behalf. With
+ * no service configured it says so rather than doing nothing quietly.
+ */
+function ReadReceiptToggle() {
+  const armed = useApp((s) => s.compose?.readReceipt === true);
+  const settings = useApp((s) => s.settings);
+  const setReadReceipt = useApp((s) => s.setReadReceipt);
+  const ready = settings.readReceipts && Boolean(settings.readReceiptsUrl) && settings.readReceiptsTokenSet;
+  if (!ready) {
+    return (
+      <button className="btn btn-ghost btn-compact compose-receipt" disabled data-tip={RECEIPT_NO_SERVICE_TIP} aria-disabled="true">
+        Read receipt needs a service
+      </button>
+    );
+  }
+  return (
+    <button
+      className={`btn btn-ghost btn-compact compose-receipt${armed ? " is-armed" : ""}`}
+      aria-pressed={armed}
+      data-tip={armed ? `Sends this message without the image. ${RECEIPT_COMPOSE_TIP}` : RECEIPT_COMPOSE_TIP}
+      onClick={() => setReadReceipt(!armed)}
+    >
+      {armed ? "Remove the read receipt" : "Ask for a read receipt"}
+    </button>
+  );
+}
+
+/** Send, Send later, Snippets, the read receipt control, and the discard glyph, plus the two popovers they open. Shared by the panel and the inline reply. */
 export function ComposeFooter() {
   const sendLaterOpen = useApp((s) => s.sendLaterOpen);
   const snippetPickerOpen = useApp((s) => s.snippetPickerOpen);
@@ -124,6 +154,7 @@ export function ComposeFooter() {
         <button className="btn btn-ghost btn-compact" data-tip="Insert a saved snippet at the cursor. Typing ;trigger then Space does the same inline." data-key={hint("snippets")} onClick={() => setSnippetPicker(true)}>
           Snippets
         </button>
+        <ReadReceiptToggle />
         <IconButton glyph="trash" label="Discard draft" keyHint={hint("discardCompose")} tip="Discard this draft. It is deleted here and in Gmail." className="compose-trash" onClick={() => void closeCompose(false)} />
       </div>
       {sendLaterOpen ? <SendLaterPopover /> : null}

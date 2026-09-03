@@ -10,6 +10,8 @@
 import { createRequire } from "node:module";
 import { sendRaw, AuthExpiredError, GmailApiError, isRateLimit } from "@arcforma/gmail";
 import {
+  attachReceiptMessage,
+  deleteReceiptForSend,
   dueReminders,
   dueSnoozes,
   enqueueOutbox,
@@ -32,6 +34,7 @@ import {
 } from "@arcforma/store";
 import { applyClientReminder, sentRecipients } from "./client-reminder.js";
 import { sendMeta } from "./compose/queue.js";
+import type { ReceiptPoller } from "./receipts/poller.js";
 import { restoreDraft } from "./drafts/mirror.js";
 import { emit } from "./events.js";
 import { log, logError } from "./log.js";
@@ -56,6 +59,12 @@ export interface SchedulerOptions {
   now?: () => number;
   /** Runs the platform notification; tests stub it. */
   notify?: (title: string, body: string) => void;
+  /**
+   * Collects read receipt events. Absent means the feature is not wired up at
+   * all, which is what every test that is not about receipts wants. The tick
+   * only ever pokes it: the poll runs on its own and can never hold a send.
+   */
+  receipts?: ReceiptPoller;
 }
 
 export class Scheduler {
@@ -68,6 +77,7 @@ export class Scheduler {
   private readonly tickMs: number;
   private readonly now: () => number;
   private readonly notifyImpl: (title: string, body: string) => void;
+  private readonly receipts: ReceiptPoller | null;
 
   constructor(
     private readonly db: Db,
@@ -78,6 +88,7 @@ export class Scheduler {
     this.tickMs = opts.tickMs ?? TICK_MS;
     this.now = opts.now ?? Date.now;
     this.notifyImpl = opts.notify ?? notify;
+    this.receipts = opts.receipts ?? null;
   }
 
   start(): void {
@@ -174,6 +185,8 @@ export class Scheduler {
       this.wakeSnoozes(now);
       this.checkReminders(now);
       await this.releaseSends(now);
+      // Last, and never awaited: the mail path is done by the time receipts are asked about.
+      this.receipts?.poke();
     } catch (err) {
       logError("scheduler", "tick", err);
     } finally {
@@ -237,6 +250,8 @@ export class Scheduler {
         const raw = Buffer.from(row.raw_mime, "utf8").toString("base64url");
         const sent = await sendRaw(client, raw, row.thread_id);
         markSent(this.db, row.id, sent.id);
+        // The message has an id now, so its receipt can be found from the reading pane.
+        if (row.tracking_token) attachReceiptMessage(this.db, row.id, sent.id, sent.threadId);
         // The message is out; the Gmail draft it was mirrored as is no longer a draft.
         const gmailDraftId = sendMeta(row).gmailDraftId;
         if (gmailDraftId) enqueueOutbox(this.db, { accountId: row.account_id, op: "draftDelete", payload: { gmailDraftId } });
@@ -250,6 +265,8 @@ export class Scheduler {
         if (terminal) {
           // The message will never go out as queued: fail the row and put the draft back where it can be fixed.
           markSendFailed(this.db, row.id, message, null);
+          // Nothing was sent, so nothing can be fetched: the armed token goes with it.
+          deleteReceiptForSend(this.db, row.id);
           const restored = await this.restoreDraft(row);
           emit("toast", { eyebrow: "NOT SENT", text: `${message}${restored ? " The draft is back under Drafts." : ""}` });
         } else {
