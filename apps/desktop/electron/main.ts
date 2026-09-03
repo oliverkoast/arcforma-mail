@@ -31,6 +31,9 @@ import { closePreviewWindows, guardPreviewContents, pendingPreviewUrls, previewP
 import { log, logError } from "./log.js";
 import { isAllowedNavigation, isExternalLink } from "./navigation.js";
 import { dbPath } from "./paths.js";
+import { serviceArmer } from "./receipts/arm.js";
+import { ReceiptPoller } from "./receipts/poller.js";
+import { ReceiptService } from "./receipts/service.js";
 import { Scheduler } from "./scheduler.js";
 import { seedFixture } from "./smoke/seed.js";
 import { SyncManager } from "./sync.js";
@@ -249,7 +252,12 @@ function createWindow(): BrowserWindow {
       spellcheck: true,
     },
   });
-  win.once("ready-to-show", () => win.show());
+  // A smoke run captures from a window that is never shown. capturePage paints an offscreen window
+  // on its own, so showing one buys nothing and costs the person at the keyboard their screen: the
+  // window used to appear full of seeded demo mail, take focus, and sit on top of real work.
+  win.once("ready-to-show", () => {
+    if (!SMOKE_DIR) win.show();
+  });
   // Navigation and window-open policy is attached in guardContents via web-contents-created.
   win.on("focus", () => sync?.setFocused(true));
   win.on("blur", () => sync?.setFocused(false));
@@ -264,15 +272,26 @@ function createWindow(): BrowserWindow {
 async function boot(): Promise<void> {
   await app.whenReady();
   app.setName("Arcforma Mail");
+  // A smoke run is a background process that happens to render. No dock icon, no activation, no
+  // stealing the frontmost app from whoever is working while it runs.
+  if (SMOKE_DIR) app.dock?.hide();
   serveDist();
 
-  db = openStore(dbPath());
-  log("app", `store at ${dbPath()}`);
+  const file = dbPath();
+  db = openStore(file);
+  log("app", `store at ${file}`);
   accounts = new AccountRegistry(db);
   accounts.reloadConfig();
   if (accounts.configError) log("app", accounts.configError);
   sync = new SyncManager(db, accounts);
-  scheduler = new Scheduler(db, accounts, sync);
+  // Read receipts: off by default, per message, and honest about the difference
+  // between no fetch and unread. docs/adr/0003 says why they exist at all.
+  const receiptService = new ReceiptService(db);
+  const receipts = new ReceiptPoller(db, receiptService, {
+    onPoll: (r) => { if (r.received > 0) log("receipts", `${r.received} event(s), ${r.written} new, watermark ${new Date(r.watermark).toISOString()}`); },
+    onError: (err) => logError("receipts", "poll", err),
+  });
+  scheduler = new Scheduler(db, accounts, sync, { receipts });
   mirror = new DraftMirror(db, sync);
   const ai = new AiClient();
   if (!ai.reload()) log("ai", "daemon config missing; AI features report daemon_down until packages/ai-daemon/install.sh runs");
@@ -304,7 +323,7 @@ async function boot(): Promise<void> {
   registerSearchIpc(db);
   registerSidebarIpc(db);
   registerSchedulerIpc(db, scheduler, sync);
-  registerComposeIpc(db, scheduler, mirror, sync);
+  registerComposeIpc(db, scheduler, mirror, sync, { armer: serviceArmer(db, receiptService), service: receiptService, storePath: file });
   registerAiIpc(db, ai, SMOKE_DIR ? null : classifier, sync);
   registerCalendarIpc(db, SMOKE_DIR ? null : calendar);
   registerContactIpc(contacts);
@@ -619,8 +638,7 @@ function runSmoke(win: BrowserWindow, dir: string, ctx: SmokeContext): void {
           if (step.closePreviews) {
             closePreviewWindows();
             await sleep(300);
-            win.moveTop();
-            win.focus();
+            // No moveTop or focus: nothing in a smoke run may come to the front of someone's screen.
           }
         } catch (err) {
           failed = true;

@@ -127,7 +127,10 @@ export function openPreviewWindow(opts: PreviewWindowOptions): BrowserWindow {
   } finally {
     pending = null;
   }
-  win.once("ready-to-show", () => win.show());
+  // Hidden during a smoke run, for the same reason the main window is: see createWindow in main.ts.
+  win.once("ready-to-show", () => {
+    if (!process.env["ARCMAIL_SMOKE"]) win.show();
+  });
   win.on("closed", () => openWindows.delete(url));
   openWindows.set(url, win);
   void win.loadURL(url);
