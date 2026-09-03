@@ -6,11 +6,11 @@ A mail client for people who want their inbox back. It reads your Gmail, sorts i
 |---|---|---|
 | Arcforma Mail | Electron desktop client for several Gmail accounts at once: split inbox, Daily 0 and Weekly 0 queues, keyboard flow, snooze, send later, snippets, inline reply, search operators, calendar and contact rail | `apps/desktop`, `packages/gmail`, `packages/store` |
 | Arcforma Text | Swift menu-bar app: Cmd+J fixes spelling, grammar and punctuation in whatever you have selected, anywhere on the Mac. Cmd+Shift+J edits it from an instruction | `packages/text-tools` |
-| AI daemon | Loopback service both apps call. A local llama.cpp model does the background sorting and never leaves the machine; Claude, through your own Claude Code login rather than an API key, does summaries, drafts and questions on demand | `packages/ai-daemon`, `packages/ai-core` |
+| AI daemon | Loopback service both apps call. A local llama.cpp model does the background sorting and never leaves the machine; Claude, through your own Claude Code login or your own Anthropic key, does summaries, drafts and questions on demand | `packages/ai-daemon`, `packages/ai-core` |
 
 **Why it exists.** Superhuman costs 30 dollars a month and your mail passes through someone else's servers. This does the parts that matter on your own hardware: the classifier is a 4B model on your Mac, the mail lives in a local SQLite database, and the only network calls are to Google's own APIs. There are no tracking pixels and there never will be.
 
-**State of it.** It runs every day on the author's mail, three accounts and about five thousand threads. It is not packaged for other people yet: you create your own Google Cloud OAuth clients (`docs/google-cloud-setup.md`), and it is macOS only. `docs/ROADMAP.md` is the honest list of what stands between here and something a stranger can install.
+**State of it.** It runs every day on the author's mail, three accounts and about five thousand threads. It is not packaged for other people yet: you still create your own Google Cloud OAuth clients, though the app's first-run setup now walks every click of that and needs no terminal (`docs/onboarding.md`), and it is macOS only. `docs/ROADMAP.md` is the honest list of what stands between here and something a stranger can install.
 
 ## Run it
 
@@ -21,6 +21,7 @@ pnpm sync-brand
 pnpm -r test                       # store (schema, FTS across VACUUM), gmail (sync, drafts, OAuth loopback with a fake Google), ai-core, ai-daemon, desktop (rules, golden set, compose, send queue, draft mirror, calendar sync, navigation guard)
 pnpm typecheck && pnpm brand-check
 pnpm --filter desktop smoke [outDir]   # seeds scripts/fixtures/threads.json into a throwaway store, walks inbox, thread, snooze, compose, Ask; fails on any console error
+pnpm --filter desktop smoke [outDir] --onboarding   # the same harness against a machine with nothing set up: every first-run step, and the account form refusing a client id that is not one
 node apps/desktop/scripts/classify-report.mjs [mail.db]   # what the header rules would do to a real mailbox: counts per type, top senders, how many threads move. Read-only, prints no message bodies
 node apps/desktop/scripts/attention-report.mjs [mail.db]  # what the attention model says about a real mailbox: the band split, the senders behind Needs you, how stale it is, a sample with reasons. Read-only, prints no message bodies
 node apps/desktop/scripts/reading-report.mjs [mail.db] [howMany]  # what the reading pass folds away on a real mailbox: messages per region kind, median lines hidden, ten examples by subject. Read-only, prints no message bodies
@@ -31,9 +32,9 @@ packages/text-tools/build.sh       # Arcforma Text .app bundle
 
 ## Before first use
 
-1. `claude auth login` in a terminal. Check from a fresh terminal that `claude auth status` says `"loggedIn": true`.
-2. Google Cloud OAuth clients: follow `docs/google-cloud-setup.md`, then sign in to each account from the app's onboarding screen.
-3. Grant Accessibility to Arcforma Text when it asks.
+Open the app. It starts a six-step setup flow that owns the window until it is finished, and does all of the below without a terminal: adding a Gmail account with its own OAuth client (the Google Cloud console pages open in order, the client id and secret go in by paste, and the file is written for you), choosing how AI works, downloading the local model, and installing Arcforma Text with a live check of its Accessibility grant. Every step can be skipped, the flow resumes where a quit left it, and Settings has a Run setup again button. `docs/onboarding.md` explains it for contributors, `docs/google-cloud-setup.md` for the person doing it.
+
+Doing it by hand instead: `docs/google-cloud-setup.md` has the clients file format, `claude auth login` or `packages/ai-daemon/set-token.sh` handles the Claude login, and `packages/text-tools/install.sh` handles the text tool.
 
 ## What the mail app does today
 

@@ -5,7 +5,7 @@ import { AddRowPopover } from "./components/AddRowPopover";
 import { AskPanel } from "./components/AskPanel";
 import { CommandPalette } from "./components/CommandPalette";
 import { Compose } from "./components/Compose";
-import { Onboarding } from "./components/Onboarding";
+import { NoAccounts, Onboarding } from "./components/Onboarding";
 import { ReadingPane } from "./components/ReadingPane";
 import { RightRail } from "./components/RightRail";
 import { Settings } from "./components/Settings";
@@ -31,6 +31,7 @@ export function App() {
   useKeyboard();
   useHoverScope();
 
+  const onboardingOpen = useApp((s) => s.onboardingOpen);
   const signedIn = accounts.some((a) => a.authState !== "signed_out");
   const backfilling = accounts.some((a) => a.authState === "ok" && (a.syncState === "backfill" || a.syncState === "new"));
   const showSplash = ready && signedIn && backfilling && rows.length === 0;
@@ -38,7 +39,7 @@ export function App() {
   return (
     <div className={`app af-body${rail !== "none" ? " has-rail" : ""}${readingPane ? "" : " no-reading"}`}>
       <Sidebar />
-      {!ready ? null : signedIn ? (
+      {!ready ? null : signedIn || onboardingOpen ? (
         <>
           <ThreadList />
           {readingPane ? <PaneSplitter /> : null}
@@ -46,9 +47,10 @@ export function App() {
           {rail !== "none" && <RightRail />}
         </>
       ) : (
-        <Onboarding />
+        <NoAccounts />
       )}
-      {showSplash && <SyncSplash />}
+      {ready && onboardingOpen ? <Onboarding /> : null}
+      {showSplash && !onboardingOpen && <SyncSplash />}
       <SnoozePopover />
       <AddRowPopover />
       <Compose />

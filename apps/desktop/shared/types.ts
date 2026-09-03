@@ -1,6 +1,10 @@
 // The IPC contract between the Electron main process and the renderer. Both
 // sides import from here; nothing else crosses the bridge.
 
+import type { AiChoice, ConsoleLink, DownloadState, OnboardingStepId } from "./onboarding.js";
+
+export type { AiChoice, ConsoleLink, DownloadState, OnboardingStepId };
+
 export type AuthState = "signed_out" | "ok" | "expired";
 export type SyncState = "new" | "backfill" | "live" | "reauth" | "error";
 
@@ -425,6 +429,65 @@ export interface ContactCard {
 
 export type ContactWebResult = { ok: true; web: ContactWebSummary } | AiFailure;
 
+/** First-run onboarding: where the flow is, and what the machine already has. */
+export interface OnboardingInfo {
+  step: OnboardingStepId;
+  done: boolean;
+  /** The clients file the flow writes, shown so nobody has to guess where credentials landed. */
+  clientsPath: string;
+}
+
+export interface OnboardingAiInfo {
+  /** Daemon health, or null when the daemon could not be reached at all. */
+  status: AiStatus | null;
+  daemonConfigPath: string;
+  daemonConfigPresent: boolean;
+  /** A long-lived Claude Code token is stored. The token itself never crosses the bridge. */
+  hasClaudeToken: boolean;
+  /** An Anthropic key is stored. The key itself never crosses the bridge. */
+  hasApiKey: boolean;
+  /** What the config says was chosen, or null when nothing has been stored. */
+  storedChoice: AiChoice | null;
+}
+
+export interface OnboardingModelInfo {
+  /** The llama.cpp server binary the daemon config points at. */
+  binaryPath: string | null;
+  binaryPresent: boolean;
+  /** Where the GGUF goes, and whether it is there. */
+  modelPath: string;
+  modelPresent: boolean;
+  modelsDir: string;
+  catalog: { name: string; file: string; bytes: number };
+  download: DownloadState;
+}
+
+export type OnboardingAccessibility = "granted" | "not_granted" | "unknown";
+
+export interface OnboardingTextInfo {
+  installed: boolean;
+  appPath: string;
+  label: string;
+  logPath: string;
+  accessibility: OnboardingAccessibility;
+  /** When the log line the state came from was written, or null when there is no log. */
+  checkedAt: number | null;
+  /** False when this build carries no install script, so the button says so instead of failing. */
+  scriptPresent: boolean;
+}
+
+/** Long-running onboarding work, pushed as it happens: the model download and the text tool install. */
+export type OnboardingProgress =
+  | { kind: "model"; state: DownloadState }
+  | { kind: "text"; line: string; phase: "running" | "done" | "failed" };
+
+export interface AddAccountRequest {
+  email: string;
+  consent: "internal" | "external";
+  clientId: string;
+  clientSecret: string;
+}
+
 export interface LoginItemInfo {
   openAtLogin: boolean;
   /** False in dev and smoke runs, where the login item is left alone. */
@@ -441,6 +504,8 @@ export interface ArcmailEvents {
   "calendar:changed": { accountId: string | null };
   /** A draft reached Gmail, failed to, arrived from Gmail, or went away there. The Drafts view reloads. */
   "drafts:changed": { accountId: string | null };
+  /** The model download or the text tool install said something while onboarding is open. */
+  "onboarding:progress": OnboardingProgress;
 }
 
 /** Request channels the renderer can invoke. */
@@ -505,9 +570,32 @@ export interface ArcmailInvoke {
   "contacts:lookupWeb": (email: string) => ContactWebResult;
   "app:loginItem": () => LoginItemInfo;
   "app:setLoginItem": (openAtLogin: boolean) => LoginItemInfo;
+  "onboarding:get": () => OnboardingInfo;
+  /** Records the step on screen so a quit mid-way comes back to it. */
+  "onboarding:setStep": (step: OnboardingStepId) => OnboardingInfo;
+  /** Start reading at the end, or Run setup again from Settings. */
+  "onboarding:setDone": (done: boolean) => OnboardingInfo;
+  /** Opens one of the four Google Cloud pages in the default browser. The URL is built in the main process. */
+  "onboarding:openConsole": (link: ConsoleLink, projectId?: string) => void;
+  /** Opens the Accessibility pane of System Settings. */
+  "onboarding:openAccessibility": () => void;
+  /** Writes one account into oauth-clients.json at mode 0600, then runs the browser sign-in for it. */
+  "onboarding:addAccount": (req: AddAccountRequest) => AccountsStatus;
+  "onboarding:aiState": () => OnboardingAiInfo;
+  /** Stores the credential for a choice in the daemon config at mode 0600. Local only clears both. */
+  "onboarding:setAi": (choice: AiChoice, secret?: string) => OnboardingAiInfo;
+  "onboarding:modelState": () => OnboardingModelInfo;
+  /** Starts or resumes the model download. Progress arrives on onboarding:progress. */
+  "onboarding:downloadModel": () => OnboardingModelInfo;
+  "onboarding:cancelModel": () => OnboardingModelInfo;
+  "onboarding:textState": () => OnboardingTextInfo;
+  /** Runs packages/text-tools/install.sh, streaming its output on onboarding:progress. */
+  "onboarding:installText": () => OnboardingTextInfo;
+  /** Restarts Arcforma Text and reads its own answer about the Accessibility grant. */
+  "onboarding:checkAccessibility": () => OnboardingTextInfo;
 }
 
 export type InvokeChannel = keyof ArcmailInvoke;
 export type EventChannel = keyof ArcmailEvents;
 
-export const EVENT_CHANNELS: EventChannel[] = ["accounts:changed", "threads:changed", "sync:progress", "toast", "categories:changed", "calendar:changed", "drafts:changed"];
+export const EVENT_CHANNELS: EventChannel[] = ["accounts:changed", "threads:changed", "sync:progress", "toast", "categories:changed", "calendar:changed", "drafts:changed", "onboarding:progress"];

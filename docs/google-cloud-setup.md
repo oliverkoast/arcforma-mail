@@ -1,27 +1,32 @@
 # Google Cloud setup for Arcforma Mail
 
-Arcforma Mail talks to Gmail and Google Calendar with OAuth clients you create yourself. Nothing on this Mac has them yet. Budget 20 minutes. You will end with three OAuth desktop clients, one per account, and a local JSON file the app reads.
+Arcforma Mail talks to Gmail and Google Calendar with OAuth clients you create yourself. There is no Arcforma server in between and no shared app id, so nothing works until you have made at least one. Budget 20 minutes for the first account and about five for each one after that.
 
-## Why three projects
+**The app walks you through this.** On first run it opens a six-step setup flow, and step 2 is this page in the app: buttons that open the exact Google Cloud console pages in order, two boxes for the client id and secret, and a Save that writes the file for you and runs the sign-in. Nothing here needs a terminal or a text editor. If you have already finished setup, Settings has a **Run setup again** button that brings it back. `docs/onboarding.md` describes the whole flow.
 
-Gmail scopes are "restricted". A project whose consent screen is **Internal** needs no Google verification and its tokens never expire, but Internal is only available to Google Workspace accounts inside that org. So:
+The rest of this page is the hand-written fallback: what the app is doing on your behalf, and how to do it yourself if you would rather.
 
-| Account | Project | Consent screen | Token life |
-|---|---|---|---|
-| you@example.com | `arcforma-mail` in the arcforma.ai org | Internal | no expiry |
-| you@example.net | `arcforma-mail` in the formai.build org | Internal | no expiry |
-| you@gmail.com | `arcforma-mail-personal` in your personal Google account | External, left in Testing | 7 days, then one keypress in the app to sign in again |
+## Why one project per account
 
-## Steps, per project
+Gmail's scopes are "restricted". A project whose consent screen is **Internal** needs no Google verification and its tokens never expire, but Internal is only available to a Google Workspace account inside that organization. A personal gmail.com account can only be External, and an External app left in Testing has its refresh token expired by Google every 7 days.
 
-Sign in to https://console.cloud.google.com as the account that owns the project (the Workspace admin for the two company orgs, your personal Gmail for the third).
+| Account | Consent screen | Token life |
+|---|---|---|
+| you@your-company.com (Workspace) | Internal | no expiry |
+| you@gmail.com (personal) | External, left in Testing | 7 days, then one press of Sign in |
 
-1. **Create the project.** Top bar project picker > New project. Name it as in the table. For the Workspace ones, make sure the Organization field shows the company domain.
-2. **Enable APIs.** APIs and Services > Library. Enable each of: `Gmail API`, `Google Calendar API`, `People API`.
-3. **Consent screen.** APIs and Services > OAuth consent screen (Google now calls this "Google Auth Platform" > Branding / Audience).
-   - App name: `Arcforma Mail`. Support email: your address. Developer contact: your address.
-   - Audience: **Internal** for the two Workspace projects. **External** for the personal one; do not click Publish, leave it in Testing, and under Audience > Test users add `you@gmail.com`.
-   - Scopes: Add or remove scopes, then paste these into the manual entry box, one per line, and Add to table:
+Phase 2 of `docs/ROADMAP.md` is the plan to get one External app through Google verification so this step disappears for everyone.
+
+## Steps, per account
+
+Sign in to https://console.cloud.google.com as the account that owns the project: the Workspace admin for a company domain, the Gmail address itself for a personal one.
+
+1. **Create the project.** https://console.cloud.google.com/projectcreate. For a Workspace account, check that the Organization field shows your domain. Note the project id under the name; the app takes it and pins the next three links to that project.
+2. **Enable the three APIs.** One page does all three: https://console.cloud.google.com/flows/enableapi?apiid=gmail.googleapis.com,calendar-json.googleapis.com,people.googleapis.com Add `&project=<your project id>` to skip the picker.
+3. **Consent screen.** https://console.cloud.google.com/auth/branding
+   - App name: `Arcforma Mail`. Support email and developer contact: your address.
+   - Audience: **Internal** for a Workspace account. **External** for a personal one; do not press Publish, leave it in Testing, and under Audience > Test users add that address.
+   - Scopes: Add or remove scopes, paste these into the manual entry box one per line, then Add to table.
      ```
      https://www.googleapis.com/auth/gmail.modify
      https://www.googleapis.com/auth/gmail.settings.basic
@@ -30,25 +35,31 @@ Sign in to https://console.cloud.google.com as the account that owns the project
      https://www.googleapis.com/auth/contacts.other.readonly
      https://www.googleapis.com/auth/userinfo.email
      ```
-4. **Create the OAuth client.** APIs and Services > Credentials > Create credentials > OAuth client ID. Application type: **Desktop app**. Name: `Arcforma Mail on Oliver's Mac`. Download the JSON or copy the Client ID and Client secret.
+4. **Create the OAuth client.** https://console.cloud.google.com/auth/clients > Create client. Application type: **Desktop app**. Name it after the machine. It shows you a Client ID and a Client secret.
 
-## Put the clients where the app reads them
+Paste those two into step 2 of the app's setup flow and press **Save and sign in**. That is the end of it.
 
-Create `~/Library/Application Support/Arcforma Mail/oauth-clients.json`:
+## The fallback: writing the clients file by hand
+
+The app reads `~/Library/Application Support/Arcforma Mail/oauth-clients.json`. Setup writes it for you at mode 600. To write it yourself:
 
 ```json
 {
   "accounts": [
-    { "id": "arcforma", "email": "you@example.com", "clientId": "…apps.googleusercontent.com", "clientSecret": "…", "consent": "internal" },
-    { "id": "formai", "email": "you@example.net", "clientId": "…", "clientSecret": "…", "consent": "internal" },
-    { "id": "personal", "email": "you@gmail.com", "clientId": "…", "clientSecret": "…", "consent": "external-testing" }
+    { "id": "company", "email": "you@your-company.com", "clientId": "000000000000-xxxxxxxx.apps.googleusercontent.com", "clientSecret": "...", "consent": "internal" },
+    { "id": "personal", "email": "you@gmail.com", "clientId": "000000000000-yyyyyyyy.apps.googleusercontent.com", "clientSecret": "...", "consent": "external" }
   ]
 }
 ```
 
-Then run `chmod 600` on it. The app opens the browser sign-in per account from its onboarding screen; refresh tokens are stored encrypted by the app, never in this file.
+Then `chmod 600` it. `id` is any short lowercase name, unique in the file, and it is what the app calls that mailbox internally; changing it later orphans the stored token. `consent` is `internal` or `external` and only decides what the app tells you about token expiry. An entry whose `clientId` and `clientSecret` are blank is a placeholder: the account appears in the app with a note that it has no credentials yet, rather than being ignored.
 
-## Also required once
+Refresh tokens are never written here. They are encrypted by macOS through `safeStorage` and kept in the app's own data folder.
 
-- `claude auth login` in a terminal, so the AI daemon can use your Claude Code login. Check with `claude auth status` from a fresh terminal: it must say `"loggedIn": true`.
-- Grant Accessibility to Arcforma Text the first time it asks.
+Setup and hand-editing can be mixed. Adding an account through the app keeps every entry already in the file, including hand-written ones and placeholders, and refuses a slot id, address, or client id that is already there rather than overwriting it.
+
+## Also worth doing once
+
+- Choose how AI works. Step 3 of setup does this: local only, a Claude Code login, or an Anthropic API key. The equivalent by hand is `claude setup-token` and `packages/ai-daemon/set-token.sh`.
+- The local model. Step 4 downloads it. By hand: put a GGUF in `~/Library/Application Support/Arcforma/models/` and point `local.model` in `ai-daemon.json` at it.
+- Arcforma Text. Step 5 installs it and checks the Accessibility grant. By hand: `packages/text-tools/install.sh`, then grant Accessibility in System Settings.

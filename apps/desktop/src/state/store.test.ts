@@ -62,6 +62,17 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
         case "settings:set":
           settingsRow = { ...settingsRow, ...(args[0] as Record<string, unknown>) };
           return settingsRow;
+        case "onboarding:get":
+          return { ...onboardingRow };
+        case "onboarding:setStep":
+          onboardingRow = { ...onboardingRow, step: args[0] as string };
+          return { ...onboardingRow };
+        case "onboarding:setDone":
+          onboardingRow = { ...onboardingRow, done: args[0] as boolean, step: args[0] ? onboardingRow.step : "welcome" };
+          return { ...onboardingRow };
+        case "onboarding:addAccount":
+          addedAccounts.push(args[0] as Record<string, unknown>);
+          return { accounts, configPath: onboardingRow.clientsPath, configError: null };
         default:
           return undefined;
       }
@@ -70,6 +81,10 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 };
 let lastSent: ComposeDraft | null = null;
 /** The fake settings table: settings:set merges the patch and hands the whole row back, the way the main process does. */
+/** The fake settings table's onboarding half: the step and the finished flag survive a reload the way the store does. */
+let onboardingRow = { step: "welcome", done: false, clientsPath: "/tmp/oauth-clients.json" };
+/** Every request that reached onboarding:addAccount, so a test can check the secret went once and came back never. */
+const addedAccounts: Array<Record<string, unknown>> = [];
 let settingsRow: Record<string, unknown> = { undoWindowSec: 10, autoDraft: false, remoteImages: "always", remindClientsAfterDays: 3, remindScope: ["Clients"] };
 
 const account = (id: string, email: string): AccountInfo => ({ id, email, displayName: null, consent: "internal", authState: "ok", syncState: "live", configured: true, backfill: null, lastSyncAt: null, error: null });
@@ -715,4 +730,83 @@ test("a draft edited in Gmail while its compose is open here takes the Gmail tex
   useApp.getState().showToast(null);
   await useApp.getState().closeCompose(false);
   draftRows.clear();
+});
+
+
+test("setup owns the window on a first run, records every step, and a reload comes back to the same one", async () => {
+  const { useApp } = await import("./store");
+  onboardingRow = { step: "welcome", done: false, clientsPath: "/tmp/oauth-clients.json" };
+
+  await useApp.getState().loadOnboarding();
+  let s = useApp.getState();
+  assert.equal(s.onboardingOpen, true, "an unfinished setup owns the window");
+  assert.equal(s.onboarding?.step, "welcome");
+  assert.equal(s.scope, "setup", "no list or thread shortcut can fire behind it");
+
+  useApp.getState().goToOnboardingStep("accounts");
+  useApp.getState().goToOnboardingStep("ai");
+  await settle();
+  assert.equal(useApp.getState().onboarding?.step, "ai");
+  assert.equal(onboardingRow.step, "ai", "the step reached the main process, not just the screen");
+
+  // A quit here and a fresh launch: loadOnboarding reads the stored step back.
+  useApp.setState({ onboarding: null, onboardingOpen: false });
+  await useApp.getState().loadOnboarding();
+  s = useApp.getState();
+  assert.equal(s.onboarding?.step, "ai");
+  assert.equal(s.onboardingOpen, true);
+
+  // A step that no longer exists resumes at the beginning rather than a blank screen.
+  const before = useApp.getState().onboarding?.step;
+  useApp.getState().goToOnboardingStep("nonsense" as never);
+  assert.equal(useApp.getState().onboarding?.step, before, "an unknown step is refused rather than stored");
+});
+
+test("Start reading finishes setup and Run setup again brings it back at the first step", async () => {
+  const { useApp } = await import("./store");
+  onboardingRow = { step: "done", done: false, clientsPath: "/tmp/oauth-clients.json" };
+  useApp.setState({ status: { accounts, configPath: "", configError: null } });
+  await useApp.getState().loadOnboarding();
+  assert.equal(useApp.getState().onboardingOpen, true);
+
+  useApp.getState().finishOnboarding();
+  await settle();
+  let s = useApp.getState();
+  assert.equal(s.onboardingOpen, false, "the flow gives the window back");
+  assert.equal(onboardingRow.done, true);
+  assert.notEqual(s.scope, "setup");
+
+  // A launch after that never reopens the flow.
+  useApp.setState({ onboarding: null, onboardingOpen: false });
+  await useApp.getState().loadOnboarding();
+  assert.equal(useApp.getState().onboardingOpen, false);
+  assert.equal(useApp.getState().onboarding?.step, "done");
+
+  useApp.getState().openSettings();
+  useApp.getState().reopenOnboarding();
+  await settle();
+  s = useApp.getState();
+  assert.equal(s.onboardingOpen, true);
+  assert.equal(s.settingsOpen, false, "Settings closes so the flow is not behind an overlay");
+  assert.equal(s.onboarding?.step, "welcome");
+  assert.equal(onboardingRow.done, false);
+  assert.equal(onboardingRow.step, "welcome");
+});
+
+test("adding an account sends the credentials once and gets an accounts status back, never the secret", async () => {
+  const { useApp } = await import("./store");
+  addedAccounts.length = 0;
+  useApp.setState({ onboarding: { step: "accounts", done: false, clientsPath: "/tmp/oauth-clients.json" }, onboardingOpen: true });
+  const ok = await useApp.getState().addOnboardingAccount({ email: "you@example.com", consent: "internal", clientId: "123456789012-abc.apps.googleusercontent.com", clientSecret: "a-secret" });
+  assert.deepEqual(ok, { ok: true });
+  assert.equal(addedAccounts.length, 1);
+  assert.equal(addedAccounts[0]?.["clientSecret"], "a-secret");
+  assert.equal(JSON.stringify(useApp.getState().status).includes("a-secret"), false, "nothing that came back carries the secret");
+
+  failNext.set("onboarding:addAccount", "that client id is already used by another account here");
+  const bad = await useApp.getState().addOnboardingAccount({ email: "two@example.com", consent: "external", clientId: "123456789012-abc.apps.googleusercontent.com", clientSecret: "b" });
+  assert.deepEqual(bad, { ok: false, error: "that client id is already used by another account here" });
+  const after = useApp.getState();
+  assert.equal(after.onboardingOpen, true, "a refused account never closes the flow");
+  assert.equal(after.onboarding?.step, "accounts", "and never advances it on its own");
 });

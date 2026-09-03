@@ -1,5 +1,7 @@
 /**
- * Claude through the Claude Code login. No API key anywhere.
+ * Claude through the Claude Code login, or an Anthropic API key when one is
+ * configured. The login is the default and needs no key; the key exists for
+ * people who have no Claude subscription, and onboarding writes it.
  *
  * Runs `claude -p` as a subprocess, one turn, JSON output, no tools. Pattern
  * lifted from aeo-check/bridge/claude-bridge.mjs with two fixes learned on
@@ -48,10 +50,11 @@ export function credentialsFileToken(file = path.join(os.homedir(), ".claude", "
 
 export class ClaudeRunner {
   /**
-   * @param {{bin?: string, modelChain?: string[], timeoutMs?: number, concurrency?: number, env?: Record<string,string>, oauthToken?: string, credentialsFile?: string}} [opts]
+   * @param {{bin?: string, modelChain?: string[], timeoutMs?: number, concurrency?: number, env?: Record<string,string>, oauthToken?: string, apiKey?: string, credentialsFile?: string}} [opts]
    */
   constructor(opts = {}) {
     this.oauthToken = opts.oauthToken ?? null;
+    this.apiKey = opts.apiKey ?? null;
     this.credentialsFile = opts.credentialsFile;
     this.bin = opts.bin ?? process.env.ARCFORMA_CLAUDE_BIN ?? `${os.homedir()}/.local/bin/claude`;
     this.modelChain = opts.modelChain ?? DEFAULT_MODEL_CHAIN;
@@ -70,9 +73,11 @@ export class ClaudeRunner {
 
   get model() { return this.modelChain[this.modelIndex]; }
 
-  /** Environment for a child: keychain login by default, explicit token when the keychain is stale. */
+  /** Environment for a child: keychain login by default, explicit token when the keychain is stale, an API key when one is configured. */
   get env() {
     if (this.oauthToken) { this.authSource = "config_token"; return { ...this.baseEnv, CLAUDE_CODE_OAUTH_TOKEN: this.oauthToken }; }
+    // An API key is a credential of its own: the CLI bills it instead of a subscription login.
+    if (this.apiKey) { this.authSource = "api_key"; return { ...this.baseEnv, ANTHROPIC_API_KEY: this.apiKey }; }
     if (this.authSource === "file_token") {
       const t = credentialsFileToken(this.credentialsFile);
       if (t) return { ...this.baseEnv, CLAUDE_CODE_OAUTH_TOKEN: t };
@@ -81,8 +86,17 @@ export class ClaudeRunner {
     return this.baseEnv;
   }
 
-  /** `claude auth status` as JSON, cached for a minute when positive. */
+  /**
+   * `claude auth status` as JSON, cached for a minute when positive.
+   *
+   * An API key is reported as signed in without asking the CLI: `auth status`
+   * answers about the subscription login only, so a machine with a key and no
+   * login would otherwise show the "sign in to Claude Code" eyebrow while every
+   * request worked. The key itself is proved by the first completion, whose
+   * failure comes back as a plain claude_error.
+   */
   async authStatus() {
+    if (this.apiKey) return { loggedIn: true, email: null, authSource: "api_key", raw: null };
     if (Date.now() < this.authOkUntil && this.authCache) return this.authCache;
     let status = await this._authOnce();
     if (!status.loggedIn && !this.oauthToken && this.authSource !== "file_token" && credentialsFileToken(this.credentialsFile)) {

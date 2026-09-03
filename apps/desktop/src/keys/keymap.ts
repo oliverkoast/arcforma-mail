@@ -2,7 +2,7 @@
 // dispatcher adds "global" to whatever scope is active. Inside "compose",
 // "ask", "settings", and the command palette plain letters never reach list actions.
 
-export type Scope = "global" | "list" | "thread" | "compose" | "sendLater" | "popover" | "sidebar" | "search" | "ask" | "settings" | "snippets" | "palette";
+export type Scope = "global" | "list" | "thread" | "compose" | "sendLater" | "popover" | "sidebar" | "search" | "ask" | "settings" | "snippets" | "palette" | "setup";
 
 export interface Binding {
   key: string;
@@ -15,7 +15,7 @@ export interface Binding {
 }
 
 /** Scopes where the user is typing: only Cmd chords, Escape, Tab, and Enter bindings apply. */
-export const TYPING_SCOPES: ReadonlySet<Scope> = new Set<Scope>(["compose", "ask", "settings", "search", "snippets", "palette"]);
+export const TYPING_SCOPES: ReadonlySet<Scope> = new Set<Scope>(["compose", "ask", "settings", "search", "snippets", "palette", "setup"]);
 
 export const KEYMAP: Binding[] = [
   { key: "j", scope: "list", action: "next", label: "Next thread" },

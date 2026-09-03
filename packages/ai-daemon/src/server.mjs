@@ -21,7 +21,7 @@ const log = (...a) => console.log(new Date().toISOString(), ...a);
 
 export function createDaemon(cfg, deps = {}) {
   const service = deps.service ?? new AiService({
-    claude: { bin: cfg.claudeBin, modelChain: cfg.modelChain, concurrency: cfg.concurrency, oauthToken: cfg.claudeOAuthToken || null },
+    claude: { bin: cfg.claudeBin, modelChain: cfg.modelChain, concurrency: cfg.concurrency, oauthToken: cfg.claudeOAuthToken || null, apiKey: cfg.claudeApiKey || null },
     local: cfg.local,
     routes: cfg.routes,
     log,

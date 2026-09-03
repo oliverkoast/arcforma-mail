@@ -97,6 +97,31 @@ function AccountsSection() {
   );
 }
 
+/** The way back into the six setup screens, for a machine that skipped half of them. */
+function SetupSection() {
+  const reopen = useApp((s) => s.reopenOnboarding);
+  const clientsPath = useApp((s) => s.onboarding?.clientsPath ?? s.status.configPath);
+  return (
+    <section className="settings-section">
+      <span className="af-mono">Setup</span>
+      <div className="settings-item">
+        <div className="settings-item-main">
+          <span className="settings-item-name">First-run setup</span>
+          <span className="settings-item-text">
+            Six screens: what the app is, adding a Gmail account with its own OAuth client, how AI works, the local model, the text tool, and the keys. Every step can be skipped and nothing already set up is undone by walking it again.
+          </span>
+          <span className="settings-help">OAuth clients live in {clientsPath}.</span>
+        </div>
+        <div className="settings-item-actions">
+          <button className="btn btn-nav btn-compact" data-tip="Closes Settings and reopens the six setup screens, starting at the first one." onClick={reopen}>
+            Run setup again
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function StartupSection() {
   const showToast = useApp((s) => s.showToast);
   const [info, setInfo] = useState<LoginItemInfo | null>(null);
@@ -131,15 +156,17 @@ function StartupSection() {
 function useRouteAfterAllConnected() {
   const accounts = useApp((s) => s.status.accounts);
   const openSettings = useApp((s) => s.openSettings);
+  const onboardingOpen = useApp((s) => s.onboardingOpen);
   const lastOk = useRef<number | null>(null);
   useEffect(() => {
     // The first populated status only records where things stand; a launch with
-    // every account already connected must not open Settings on its own.
-    if (accounts.length === 0) return;
+    // every account already connected must not open Settings on its own. During
+    // setup the flow owns the window, so nothing may open over it either.
+    if (accounts.length === 0 || onboardingOpen) return;
     const ok = accounts.filter((a) => a.authState === "ok").length;
     if (lastOk.current !== null && ok === accounts.length && ok > lastOk.current) openSettings();
     lastOk.current = ok;
-  }, [accounts, openSettings]);
+  }, [accounts, openSettings, onboardingOpen]);
 }
 
 function SendingSection() {
@@ -404,6 +431,7 @@ export function Settings() {
           <span className="settings-help">{aiStatus?.ok ? `Local model ${aiStatus.local}; Claude ${aiStatus.claude}${aiStatus.cliVersion ? ` (${aiStatus.cliVersion})` : ""}.` : "Background sorting and Claude features wait until the daemon runs."}</span>
         </div>
         <AccountsSection />
+        <SetupSection />
         <SendingSection />
         <FollowUpsSection />
         <StartupSection />

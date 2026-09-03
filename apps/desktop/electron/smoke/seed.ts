@@ -208,6 +208,9 @@ export function seedFixture(db: Db, file: string, now = Date.now()): { threads: 
     );
   }
   scoreSeededThreads(db, now);
+  // A seeded mailbox stands for a machine that is already set up, so the
+  // first-run flow must not cover the screens this walk is here to photograph.
+  setSetting(db, "onboardingDone", true);
   return { threads: fx.threads.length, events: (fx.calendar ?? []).length };
 }
 

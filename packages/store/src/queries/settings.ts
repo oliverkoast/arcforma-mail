@@ -22,6 +22,10 @@ export interface Settings {
   remindClientsAfterDays: number;
   /** Category ids or names whose threads and correspondents count as clients for that rule. */
   remindScope: string[];
+  /** The first-run onboarding step that was on screen when the app last quit, so a resume lands there. */
+  onboardingStep: string;
+  /** True once someone pressed Start reading at the end of onboarding. Until then the flow owns the window. */
+  onboardingDone: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -35,6 +39,8 @@ export const DEFAULT_SETTINGS: Settings = {
   weekStartAt: 0,
   remindClientsAfterDays: 3,
   remindScope: ["Clients"],
+  onboardingStep: "welcome",
+  onboardingDone: false,
 };
 
 export function getSetting<K extends keyof Settings>(db: Db, key: K): Settings[K] {
@@ -67,6 +73,8 @@ export function getSettings(db: Db): Settings {
     weekStartAt: getSetting(db, "weekStartAt"),
     remindClientsAfterDays: getSetting(db, "remindClientsAfterDays"),
     remindScope: getSetting(db, "remindScope"),
+    onboardingStep: getSetting(db, "onboardingStep"),
+    onboardingDone: getSetting(db, "onboardingDone"),
   };
 }
 

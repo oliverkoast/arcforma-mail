@@ -13,6 +13,7 @@ import { emit } from "./events.js";
 import { applyLoginItem, registerAccountIpc } from "./ipc/accounts.js";
 import { registerAiIpc } from "./ipc/ai.js";
 import { registerCalendarIpc } from "./ipc/calendar.js";
+import { registerOnboardingIpc } from "./ipc/onboarding.js";
 import { registerComposeIpc } from "./ipc/compose.js";
 import { registerContactIpc } from "./ipc/contacts.js";
 import { registerSchedulerIpc } from "./ipc/scheduler.js";
@@ -34,6 +35,9 @@ const DEV_URL = process.env["VITE_DEV_SERVER_URL"];
 // the given folder, print the renderer console, exit.
 const SMOKE_DIR = process.env["ARCMAIL_SMOKE"];
 const SMOKE_FIXTURE = process.env["ARCMAIL_FIXTURE"];
+// Which walk the smoke run takes: the seeded mailbox by default, or the
+// first-run setup flow on a machine with nothing configured.
+const SMOKE_FLOW = process.env["ARCMAIL_SMOKE_FLOW"] === "onboarding" ? "onboarding" : "app";
 
 // The package is named "desktop"; without this the data folder would be Application Support/desktop.
 app.setName("Arcforma Mail");
@@ -222,6 +226,7 @@ async function boot(): Promise<void> {
   registerAiIpc(db, ai, SMOKE_DIR ? null : classifier, sync);
   registerCalendarIpc(db, SMOKE_DIR ? null : calendar);
   registerContactIpc(contacts);
+  registerOnboardingIpc(db, accounts, sync, ai);
   const login = applyLoginItem(db);
   log("app", `login item ${login.supported ? (login.openAtLogin ? "on" : "off") : "not managed in this run"}`);
 
@@ -297,7 +302,15 @@ function fakeBackfill(ctx: SmokeContext, done: number, total: number): void {
   emit("sync:progress", { accountId: "arcforma", state: "backfill", done, total, finished: false });
 }
 
-const SMOKE_STEPS: Array<{ name: string; script: string | null; main?: (ctx: SmokeContext) => void; hover?: string; waitMs: number }> = [
+interface SmokeStep {
+  name: string;
+  script: string | null;
+  main?: (ctx: SmokeContext) => void;
+  hover?: string;
+  waitMs: number;
+}
+
+const SMOKE_STEPS: SmokeStep[] = [
   { name: "inbox", script: null, waitMs: 2500 },
   // Cmd+K with "sno" typed: the snooze commands rank first, their keys in mono on the right.
   { name: "palette", script: "window.__arcmail.openPalette(); await new Promise((r) => setTimeout(r, 300)); window.__arcmail.setPaletteQuery('sno');", waitMs: 900 },
@@ -353,6 +366,35 @@ const SMOKE_STEPS: Array<{ name: string; script: string | null; main?: (ctx: Smo
 ];
 
 /**
+ * The first-run flow on a machine with nothing set up: every step, plus the
+ * account form answering a client id that is not one. Nothing here presses a
+ * button that would reach Google, run an installer, or start a download.
+ */
+const ONBOARDING_SMOKE_STEPS: SmokeStep[] = [
+  { name: "onboarding-welcome", script: null, waitMs: 1200 },
+  { name: "onboarding-account-empty", script: "window.__arcmail.goToOnboardingStep('accounts');", waitMs: 900 },
+  // A client id pasted into the wrong box: the field says what is wrong and nothing is written.
+  {
+    name: "onboarding-account-error",
+    script: `
+      const set = (el, v) => { Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(el, v); el.dispatchEvent(new Event('input', { bubbles: true })); };
+      const fields = document.querySelectorAll('.setup-card .setup-field input');
+      set(fields[0], 'you@example.com');
+      set(fields[2], 'this-is-the-secret-not-the-id');
+      await new Promise((r) => setTimeout(r, 200));
+      [...document.querySelectorAll('.setup-actions .btn')].find((b) => b.textContent.startsWith('Save and sign in')).click();
+      await new Promise((r) => setTimeout(r, 200));
+      document.querySelector('.setup-error').scrollIntoView({ block: 'center' });
+    `,
+    waitMs: 900,
+  },
+  { name: "onboarding-ai", script: "window.__arcmail.goToOnboardingStep('ai');", waitMs: 1500 },
+  { name: "onboarding-model", script: "window.__arcmail.goToOnboardingStep('model');", waitMs: 1500 },
+  { name: "onboarding-text", script: "window.__arcmail.goToOnboardingStep('text');", waitMs: 1500 },
+  { name: "onboarding-done", script: "window.__arcmail.goToOnboardingStep('done');", waitMs: 1200 },
+];
+
+/**
  * capturePage resolves with the next presented frame. When nothing presents (the window is covered, or the compositor
  * idles after the resize nudge) it never resolves, so each attempt is bounded: bring the window forward, force a repaint,
  * and try again before giving the step up.
@@ -380,7 +422,7 @@ function runSmoke(win: BrowserWindow, dir: string, ctx: SmokeContext): void {
   win.webContents.once("did-finish-load", () => {
     void (async () => {
       let failed = false;
-      for (const step of SMOKE_STEPS) {
+      for (const step of SMOKE_FLOW === "onboarding" ? ONBOARDING_SMOKE_STEPS : SMOKE_STEPS) {
         try {
           if (step.script) await win.webContents.executeJavaScript(`(async () => { ${step.script} })()`, true);
           if (step.hover) {

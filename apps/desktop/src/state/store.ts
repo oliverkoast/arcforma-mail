@@ -21,6 +21,8 @@ import {
   type SidebarCounts,
   type SidebarGroupId,
   type SidebarLayout,
+  type AddAccountRequest,
+  type OnboardingInfo,
   type SnippetInfo,
   type SummaryResult,
   type SyncProgress,
@@ -28,6 +30,7 @@ import {
   type ThreadView,
   type ToastEvent,
 } from "../../shared/types";
+import { ONBOARDING_STEPS, type OnboardingStepId } from "../../shared/onboarding";
 import { TYPING_SCOPES, type Scope } from "../keys/keymap";
 import { scopeFor } from "../keys/scope";
 import { installActivityTracker } from "../lib/activity";
@@ -114,6 +117,10 @@ export interface AppState {
 
   settings: SettingsInfo;
   settingsOpen: boolean;
+  /** Where first-run setup stands, or null before the main process has been asked. */
+  onboarding: OnboardingInfo | null;
+  /** True while the setup flow owns the window: first run, or Run setup again from Settings. */
+  onboardingOpen: boolean;
   snippets: SnippetInfo[];
   drafts: DraftInfo[];
   aiStatus: AiStatus | null;
@@ -226,6 +233,15 @@ export interface AppState {
 
   openSettings: () => void;
   closeSettings: () => void;
+  /** Reads the stored step and decides whether setup owns the window. */
+  loadOnboarding: () => Promise<void>;
+  /** Moves to a step and records it, so a quit halfway comes back to the same screen. */
+  goToOnboardingStep: (step: OnboardingStepId) => void;
+  finishOnboarding: () => void;
+  /** Settings, Run setup again: the flow starts at the first step. */
+  reopenOnboarding: () => void;
+  /** Writes one OAuth client through the main process and runs its sign-in. Never resolves with the secret. */
+  addOnboardingAccount: (req: AddAccountRequest) => Promise<{ ok: true } | { ok: false; error: string }>;
 
   /** Cmd+K. Opens from every non-typing scope and from the compose editor; a no-op while Settings, Ask, the search field, or the snippet picker has the keys. */
   openPalette: () => void;
@@ -345,6 +361,8 @@ export const useApp = create<AppState>((set, get) => ({
 
   settings: DEFAULT_SETTINGS,
   settingsOpen: false,
+  onboarding: null,
+  onboardingOpen: false,
   snippets: [],
   drafts: [],
   aiStatus: null,
@@ -380,6 +398,7 @@ export const useApp = create<AppState>((set, get) => ({
       invoke("sidebar:getLayout").catch(() => null),
     ]);
     set({ categories, settings, snippets, savedSearches, sidebarLayout, smoke: Boolean(info.smoke), userArt: info.userArt ?? [], ready: true });
+    await get().loadOnboarding();
     // Throttled activity drives the Daily 0 day boundary in the main process.
     activityUninstall ??= installActivityTracker((at) => void invoke("app:activity", at).catch(() => undefined));
     await get().loadThreads(true);
@@ -1240,6 +1259,56 @@ export const useApp = create<AppState>((set, get) => ({
   closeSettings() {
     set({ settingsOpen: false });
     get().syncScope();
+  },
+
+  // ---- first-run setup ----------------------------------------------------------------
+
+  async loadOnboarding() {
+    try {
+      const onboarding = await invoke("onboarding:get");
+      set({ onboarding, onboardingOpen: !onboarding.done });
+    } catch {
+      // No handler (the browser preview) means no setup flow; the app renders the way it always did.
+      set({ onboarding: null, onboardingOpen: false });
+    }
+    get().syncScope();
+  },
+
+  goToOnboardingStep(step) {
+    if (!ONBOARDING_STEPS.includes(step)) return;
+    set((s) => ({ onboarding: s.onboarding ? { ...s.onboarding, step } : s.onboarding }));
+    void invoke("onboarding:setStep", step).catch(() => undefined);
+  },
+
+  finishOnboarding() {
+    set({ onboardingOpen: false });
+    void invoke("onboarding:setDone", true)
+      .then((onboarding) => set({ onboarding }))
+      .catch(() => undefined);
+    get().syncScope();
+    void get().refreshStatus();
+    void get().loadThreads(true);
+  },
+
+  reopenOnboarding() {
+    set((s) => ({ settingsOpen: false, onboardingOpen: true, onboarding: s.onboarding ? { ...s.onboarding, step: "welcome", done: false } : s.onboarding }));
+    void invoke("onboarding:setDone", false)
+      .then((onboarding) => set({ onboarding }))
+      .catch(() => undefined);
+    get().syncScope();
+  },
+
+  async addOnboardingAccount(req) {
+    try {
+      const status = await invoke("onboarding:addAccount", req);
+      set({ status });
+      void get().loadThreads(true);
+      return { ok: true as const };
+    } catch (err) {
+      // The clients file may already hold the entry: the message says which half failed.
+      void get().refreshStatus();
+      return { ok: false as const, error: (err as Error).message };
+    }
   },
 
   // ---- command palette --------------------------------------------------------------

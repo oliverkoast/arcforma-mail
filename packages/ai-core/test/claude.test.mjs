@@ -113,3 +113,23 @@ test("a spent model allowance falls back down the chain and retries the preferre
   await c.complete({ system: "s", user: "u" });
   assert.equal(c.modelIndex, 1, "it steps down again while the allowance is still spent");
 });
+
+test("an Anthropic API key becomes the child's credential and is reported as signed in without asking the CLI", async () => {
+  const c = runner("signed_out", { apiKey: "sk-ant-example" });
+  assert.equal(c.env.ANTHROPIC_API_KEY, "sk-ant-example");
+  assert.equal(c.env.CLAUDE_CODE_OAUTH_TOKEN, undefined, "a key and a login token are never sent together");
+  assert.equal(c.authSource, "api_key");
+  // `claude auth status` answers about the subscription login only, so a key is not put to it.
+  const a = await c.authStatus();
+  assert.equal(a.loggedIn, true);
+  assert.equal(a.authSource, "api_key");
+});
+
+test("a configured login token still wins over an API key, and neither leaks into a plain run", async () => {
+  const withToken = runner("ok", { oauthToken: "a-long-lived-token", apiKey: "sk-ant-example" });
+  assert.equal(withToken.env.CLAUDE_CODE_OAUTH_TOKEN, "a-long-lived-token");
+  assert.equal(withToken.env.ANTHROPIC_API_KEY, undefined);
+  const plain = runner("ok");
+  assert.equal(plain.env.ANTHROPIC_API_KEY, undefined);
+  assert.equal(plain.env.CLAUDE_CODE_OAUTH_TOKEN, undefined);
+});

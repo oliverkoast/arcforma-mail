@@ -5,6 +5,12 @@
 // renderer console, exit. Electron never outlives this script.
 //
 //   node scripts/smoke.mjs [outDir]     ARCMAIL_SMOKE_SKIP_BUILD=1 to reuse dist/
+//   node scripts/smoke.mjs [outDir] --onboarding
+//
+// --onboarding walks the first-run setup flow instead: no fixture, an empty
+// user-data folder, a clients file that does not exist, and an AI daemon
+// config and text tool log that point nowhere, so the run sees the machine a
+// stranger would have.
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -17,7 +23,9 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
 const require = createRequire(import.meta.url);
 const electronBinary = require("electron");
-const outDir = path.resolve(process.argv[2] || path.join(os.tmpdir(), `arcmail-smoke-${Date.now()}`));
+const onboarding = process.argv.includes("--onboarding");
+const positional = process.argv.slice(2).find((a) => !a.startsWith("--"));
+const outDir = path.resolve(positional || path.join(os.tmpdir(), `arcmail-smoke-${Date.now()}`));
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), "arcmail-smoke-data-"));
 const fixture = process.env.ARCMAIL_FIXTURE || path.join(here, "fixtures", "threads.json");
 
@@ -49,9 +57,17 @@ try {
     env: {
       ...process.env,
       ARCMAIL_SMOKE: outDir,
-      ARCMAIL_FIXTURE: fixture,
+      ...(onboarding ? {} : { ARCMAIL_FIXTURE: fixture }),
+      ARCMAIL_SMOKE_FLOW: onboarding ? "onboarding" : "app",
       ARCMAIL_USER_DATA: userData,
       ARCMAIL_OAUTH_CLIENTS: process.env.ARCMAIL_OAUTH_CLIENTS || path.join(userData, "none.json"),
+      // Setup must see a machine with nothing on it, not this one's daemon and text tool.
+      ...(onboarding
+        ? {
+            ARCMAIL_AI_CONFIG: path.join(userData, "arcforma", "ai-daemon.json"),
+            ARCMAIL_TEXT_LOG: path.join(userData, "arcforma-text.log"),
+          }
+        : {}),
     },
     timeoutMs: 90_000,
   });

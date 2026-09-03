@@ -1814,3 +1814,257 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .message-from span {
   margin-left: 6px;
 }
+
+/* ---- first-run setup: the rail on the left, one step at a time on the right ----
+   It sits above the shell rather than inside the grid, because until it finishes
+   there is nothing behind it worth showing. */
+.setup {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--af-bg);
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  overflow: hidden;
+}
+.setup-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 0 20px 24px;
+  border-right: 1px solid var(--af-rule);
+  background: var(--af-bg-alt);
+  overflow-y: auto;
+}
+.setup-top {
+  height: 38px;
+  flex: none;
+}
+.setup-rail .wordmark {
+  align-self: flex-start;
+  margin-bottom: 6px;
+}
+.setup-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.setup-step {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 8px;
+  color: var(--af-text-soft);
+  transition: color .24s ease, background-color .24s ease;
+}
+.setup-step:hover:not(:disabled) {
+  color: var(--af-text);
+  background: var(--af-bg);
+}
+.setup-step:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.setup-step.is-done {
+  color: var(--af-text-body);
+}
+.setup-step.is-here {
+  color: var(--af-text);
+  background: var(--af-bg);
+}
+.setup-step.is-here .setup-step-name {
+  font-weight: 600;
+}
+.setup-step-n {
+  flex: none;
+  min-width: 14px;
+}
+.setup-step.is-here .setup-step-n,
+.setup-step.is-done .setup-step-n {
+  color: var(--af-accent);
+}
+.setup-step-name {
+  flex: 1;
+}
+.setup-rail-note {
+  margin: auto 0 0;
+  font-size: 12px;
+  color: var(--af-text-soft);
+}
+.setup-main {
+  overflow-y: auto;
+  padding: 56px 48px 64px;
+  display: flex;
+  justify-content: center;
+}
+.setup-card {
+  width: 100%;
+  max-width: 660px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: max-content;
+}
+.setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.setup-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--af-text-soft);
+}
+.setup-note .af-mono {
+  margin-right: 6px;
+}
+.setup-error {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--af-accent);
+}
+.setup-hint {
+  font-size: 12px;
+  color: var(--af-text-soft);
+}
+
+/* ---- setup: fields ---- */
+.setup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.setup-field input {
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid var(--af-rule);
+  border-radius: 10px;
+  background: var(--af-bg);
+  transition: border-color .24s ease;
+}
+.setup-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---- setup: facts about the machine, and the accounts already added ---- */
+.setup-facts,
+.setup-accounts {
+  display: flex;
+  flex-direction: column;
+}
+.setup-fact,
+.setup-account {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 0;
+  border-top: 1px solid var(--af-rule);
+}
+.setup-facts .setup-fact:last-child,
+.setup-accounts .setup-account:last-child {
+  border-bottom: 1px solid var(--af-rule);
+}
+.setup-fact-name {
+  font-weight: 600;
+  color: var(--af-text);
+}
+.setup-fact-detail {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--af-text-soft);
+}
+
+/* ---- setup: the AI choices and the Workspace or personal pair ---- */
+.setup-choice {
+  border: 1px solid var(--af-rule);
+  border-radius: var(--af-radius-card);
+  padding: 4px;
+  transition: border-color .24s ease;
+}
+.setup-choice.is-on {
+  background: var(--af-bg-alt);
+}
+.setup-choice.is-on .setup-choice-name,
+.setup-radio.is-on .setup-choice-name {
+  color: var(--af-accent);
+}
+.setup-choice-mark {
+  color: var(--af-accent);
+}
+.setup-choice-head,
+.setup-radio {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 13px 14px;
+  border-radius: 10px;
+  transition: background-color .24s ease;
+}
+.setup-choice-head:hover,
+.setup-radio:hover {
+  background: var(--af-bg-alt);
+}
+.setup-choice-name {
+  font-weight: 600;
+  color: var(--af-text);
+}
+.setup-choice-line {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--af-text-soft);
+}
+.setup-choice-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 14px 14px;
+}
+.setup-radios {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.setup-radio {
+  border: 1px solid var(--af-rule);
+  border-radius: var(--af-radius-card);
+}
+.setup-radio.is-on {
+  background: var(--af-bg-alt);
+}
+
+/* ---- setup: the download bar and the installer output ---- */
+.setup-bar {
+  height: 6px;
+  border-radius: var(--af-radius-pill);
+  background: var(--af-bg-alt);
+  overflow: hidden;
+}
+.setup-bar-fill {
+  height: 100%;
+  background: var(--af-accent);
+  transition: width .24s ease;
+}
+.setup-log {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--af-rule);
+  border-radius: var(--af-radius-card);
+  background: var(--af-bg-alt);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--af-text-body);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

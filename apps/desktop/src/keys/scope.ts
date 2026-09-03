@@ -2,6 +2,8 @@ import type { Scope } from "./keymap";
 
 /** The surfaces that decide the key scope, from the app state. */
 export interface ScopeState {
+  /** First-run setup owns the whole window, so no app shortcut fires behind it. */
+  onboardingOpen?: boolean;
   /** The command palette (Cmd+K). It sits above everything, so Escape closes it before anything under it. */
   paletteOpen: boolean;
   settingsOpen: boolean;
@@ -23,9 +25,12 @@ export interface ScopeState {
  * settings, then Ask, then the compose panel and its own overlays, then the
  * reading pane back to the list.
  * An inline reply collapsed to its strip hands the keys back to the thread:
- * J and K move, R reopens the draft.
+ * J and K move, R reopens the draft. Setup sits above all of it: while it is
+ * open no shortcut resolves at all, so nothing behind it can be archived by a
+ * stray keystroke.
  */
 export function scopeFor(s: ScopeState): Scope {
+  if (s.onboardingOpen) return "setup";
   if (s.paletteOpen) return "palette";
   if (s.popover) return "popover";
   if (s.sidebarMenu) return "sidebar";

@@ -13,6 +13,7 @@ const DEFAULTS = () => ({
   token: crypto.randomBytes(24).toString("hex"),
   claudeBin: path.join(os.homedir(), ".local", "bin", "claude"),
   claudeOAuthToken: "",
+  claudeApiKey: "",
   modelChain: ["claude-fable-5-1", "opus", "sonnet"],
   concurrency: 2,
   local: {

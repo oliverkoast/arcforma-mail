@@ -38,6 +38,8 @@ const PASSTHROUGH = new Set(["Escape", "Tab", "Enter"]);
  * letter never resolves to anything, only Cmd chords, Escape, Tab, and Enter.
  */
 export function resolveBinding(scope: Scope, e: KeyLike, editable: boolean): Binding | null {
+  // First-run setup is its own window. Nothing behind it may be reached, not even a global chord.
+  if (scope === "setup") return null;
   const typing = editable || TYPING_SCOPES.has(scope);
   for (const b of KEYMAP) {
     if (b.scope !== scope && b.scope !== "global") continue;
