@@ -54,6 +54,9 @@ export const KEYMAP: Binding[] = [
   { key: "z", scope: "thread", action: "undo", label: "Undo" },
   { key: "z", scope: "popover", action: "undo", label: "Undo" },
   { key: "Enter", scope: "list", action: "open", label: "Open thread" },
+  // Also while reading: hovering a row selects it, so Enter has something to open even with a
+  // thread already on the right.
+  { key: "Enter", scope: "thread", action: "open", label: "Open thread" },
   { key: "Escape", scope: "thread", action: "close", label: "Back to list" },
   { key: "Escape", scope: "popover", action: "closePopover", label: "Close" },
   // The sidebar's add and row menus: only Escape, so T, W, D, R never snooze a thread while the menu is up.

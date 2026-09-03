@@ -222,12 +222,9 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .row.selected {
   background: var(--af-bg-alt);
 }
-/* Hover says "clicking here would do something". The cursor, which the keys act on, is the darker
-   fill above and moves only on J, K, or a click. They are deliberately different weights: when
-   hover also moved the cursor the two were the same thing, and where the mouse happened to be
-   resting decided what E archived. */
-.row:not(.selected):hover {
-  background: var(--af-bg);
+/* Pointing at a row selects it, so .row.selected above is what hover looks like and no second fill
+   is needed. The pointer is the only thing hover adds on its own. */
+.row:hover {
   cursor: pointer;
 }
 .dot {

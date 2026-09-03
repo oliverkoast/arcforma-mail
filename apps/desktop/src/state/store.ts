@@ -345,15 +345,18 @@ let openSeq = 0;
 let listSeq = 0;
 
 /**
- * What a triage key acts on: the thread you have open, or the row the cursor is on.
+ * What a triage key acts on: the row the cursor is on, and only failing that the open thread.
  *
- * Hovering the list moves the cursor, so while a thread is open on the right the cursor can sit on a
- * different row entirely. Reading these actions off the cursor meant E archived whatever the mouse
- * happened to rest over rather than the thread on screen, which reads as "E is not working". What
- * you are looking at wins. moveToInbox already did this; every other triage action does now too.
+ * The cursor follows the pointer, because hovering a row selects it. That is deliberate: pointing at
+ * a thread and pressing E is the whole point of having both hands available, and it is what was
+ * asked for. So the cursor wins, and the open thread is the fallback for the case where there is no
+ * cursor to read: a thread reached from search or a notification with no list behind it.
+ *
+ * This is not what made E look broken. That was a stale threads:list landing after the keypress and
+ * writing the archived row back, which listSeq now prevents.
  */
 function actionTarget(s: AppState): ThreadSummary | undefined {
-  return s.open?.thread ?? s.rows[s.selected];
+  return s.rows[s.selected] ?? s.open?.thread;
 }
 
 /** How many list reads are running. The spinner belongs to the set, not to any one of them. */

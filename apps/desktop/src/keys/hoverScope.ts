@@ -1,21 +1,17 @@
 import type { Scope } from "./keymap";
 
 /**
- * The pointer does not decide what the keys do.
+ * The pointer moves the cursor, never the scope.
  *
- * This used to move the key scope to "list" whenever the mouse was over a row. It was written to
- * pair with the list moving its cursor on hover, and both are gone for the same reason: where a
- * mouse happens to be resting is not a statement of intent, and reading intent off it made the
- * keyboard unpredictable. Two concrete faults it caused:
+ * Hovering a row selects it, which is how the triage keys reach what the mouse is pointing at. That
+ * is in ThreadList and is deliberate. What used to be here as well was a second rule moving the key
+ * scope to "list" whenever the pointer was over a row, and that one was a mistake: Escape, O and the
+ * instant replies 1, 2 and 3 are bound in "thread" and not in "list", so a pointer left over the
+ * list while reading took those keys away with nothing on screen to say why.
  *
- *   E archived whatever the pointer was over rather than the thread on screen.
- *
- *   While reading a thread, a pointer left over the list put the scope in "list", where Escape, O
- *   and the instant-reply keys 1, 2 and 3 are not bound at all. Those keys silently stopped
- *   working, with nothing on screen to say why.
- *
- * The scope now follows what is open, which is the thing the person is looking at. Every triage key
- * is bound in both scopes, so nothing was lost by no longer switching between them.
+ * Nothing was lost by dropping it. Every triage key is bound in both scopes, so hovering a row and
+ * pressing E works with the scope left alone, and Enter is now bound in "thread" as well so the row
+ * under the pointer can be opened while another thread is on the right.
  *
  * Kept as a named function rather than deleted so the rule has somewhere to be stated and tested.
  */

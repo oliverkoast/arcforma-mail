@@ -1044,20 +1044,31 @@ test("a refresh that started before E leaves the list usable, not stuck loading"
   useApp.getState().showToast(null);
 });
 
-test("with a thread open, E archives what is on screen and not whatever the mouse is resting over", async () => {
-  // Hover moves the list cursor, so while reading a thread the cursor can sit on a different row.
-  // Reading the target off the cursor archived the wrong thread, which reads as "E is not working".
+test("E acts on the row under the cursor, even while another thread is open", async () => {
+  // Pointing at a row selects it, so a thread can be open on the right while the cursor sits on a
+  // different row. E acts on the cursor: pointing at a thread and pressing E is the point of it.
   const { useApp } = await import("./store");
   const reading = summary("t-kickoff", "Kickoff next week");
-  const hovered = summary("t-other", "Something else");
-  useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [reading, hovered], selected: 1, open: null, toast: null, view: "inbox", readingPane: true, categories: [] });
+  const pointed = summary("t-other", "Something else");
+  useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [reading, pointed], selected: 1, open: null, toast: null, view: "inbox", readingPane: true, categories: [] });
   await useApp.getState().openThreadById("arcforma", "t-kickoff");
   await settle();
   useApp.setState({ selected: 1 });
   calls.length = 0;
   await useApp.getState().archiveSelected();
-  const archived = calls.find((c) => c.channel === "threads:archive");
-  assert.equal(archived?.args[1], "t-kickoff", "the open thread is what E acts on");
+  assert.equal(calls.find((c) => c.channel === "threads:archive")?.args[1], "t-other", "the pointed row, not the open thread");
+  useApp.getState().showToast(null);
+});
+
+test("a thread open with no list behind it is still what E acts on", async () => {
+  // Reached from search or a notification: there is no cursor to read, so the open thread is it.
+  const { useApp } = await import("./store");
+  useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [], selected: 0, open: null, toast: null, view: "inbox", readingPane: true, categories: [] });
+  await useApp.getState().openThreadById("arcforma", "t-kickoff");
+  await settle();
+  calls.length = 0;
+  await useApp.getState().archiveSelected();
+  assert.equal(calls.find((c) => c.channel === "threads:archive")?.args[1], "t-kickoff");
   useApp.getState().showToast(null);
 });
 
