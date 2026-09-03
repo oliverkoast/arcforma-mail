@@ -730,6 +730,391 @@
         "source": "local",
         "confidence": 0.9
       }
+    },
+    {
+      "accountId": "arcforma",
+      "id": "t-history",
+      "classification": {
+        "split": "important",
+        "source": "local",
+        "confidence": 0.86
+      },
+      "messages": [
+        {
+          "id": "m-hy1",
+          "from": "Dana Reyes <dana@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Run of show, Northwind launch",
+          "hoursAgo": 400,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>The venue wants the deposit before they will hold the date.</p>"
+        },
+        {
+          "id": "m-hy2",
+          "from": "Priya Natarajan <priya@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 389,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>Confirmed. I have put the invoice in the folder.</p>"
+        },
+        {
+          "id": "m-hy3",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "sam@harbor.example",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 378,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>Can we move the walkthrough to the morning?</p>"
+        },
+        {
+          "id": "m-hy4",
+          "from": "Dana Reyes <dana@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 367,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>Morning works. I will let the team know.</p>"
+        },
+        {
+          "id": "m-hy5",
+          "from": "Priya Natarajan <priya@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 356,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>One more thing: parking is on the north side, not the west.</p>"
+        },
+        {
+          "id": "m-hy6",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "sam@harbor.example",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 345,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>Noted. I have updated the run of show.</p>"
+        },
+        {
+          "id": "m-hy7",
+          "from": "Dana Reyes <dana@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 333,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>The florist came back with a revised quote.</p>"
+        },
+        {
+          "id": "m-hy8",
+          "from": "Priya Natarajan <priya@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 322,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>That is within budget. Approve it.</p>"
+        },
+        {
+          "id": "m-hy9",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "sam@harbor.example",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 311,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>Sound check is booked for four o'clock.</p>"
+        },
+        {
+          "id": "m-hy10",
+          "from": "Dana Reyes <dana@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 300,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>Good. Who is meeting the crew at the door?</p>"
+        },
+        {
+          "id": "m-hy11",
+          "from": "Priya Natarajan <priya@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 289,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>I will be there from three.</p>"
+        },
+        {
+          "id": "m-hy12",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "sam@harbor.example",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 278,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>The photographer asked for a shot list.</p>"
+        },
+        {
+          "id": "m-hy13",
+          "from": "Dana Reyes <dana@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 267,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>The venue wants the deposit before they will hold the date.</p>"
+        },
+        {
+          "id": "m-hy14",
+          "from": "Priya Natarajan <priya@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 256,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>Confirmed. I have put the invoice in the folder.</p>"
+        },
+        {
+          "id": "m-hy15",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "sam@harbor.example",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 245,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>Can we move the walkthrough to the morning?</p>"
+        },
+        {
+          "id": "m-hy16",
+          "from": "Dana Reyes <dana@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 234,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>Morning works. I will let the team know.</p>"
+        },
+        {
+          "id": "m-hy17",
+          "from": "Priya Natarajan <priya@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 223,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>One more thing: parking is on the north side, not the west.</p>"
+        },
+        {
+          "id": "m-hy18",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "sam@harbor.example",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 211,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>Noted. I have updated the run of show.</p>"
+        },
+        {
+          "id": "m-hy19",
+          "from": "Dana Reyes <dana@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 200,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>The florist came back with a revised quote.</p>"
+        },
+        {
+          "id": "m-hy20",
+          "from": "Priya Natarajan <priya@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 189,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>That is within budget. Approve it.</p>"
+        },
+        {
+          "id": "m-hy21",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "sam@harbor.example",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 178,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>Sound check is booked for four o'clock.</p>"
+        },
+        {
+          "id": "m-hy22",
+          "from": "Dana Reyes <dana@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 167,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>Good. Who is meeting the crew at the door?</p>"
+        },
+        {
+          "id": "m-hy23",
+          "from": "Priya Natarajan <priya@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 156,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>I will be there from three.</p>"
+        },
+        {
+          "id": "m-hy24",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "sam@harbor.example",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 145,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>The photographer asked for a shot list.</p>"
+        },
+        {
+          "id": "m-hy25",
+          "from": "Dana Reyes <dana@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 134,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>The venue wants the deposit before they will hold the date.</p>"
+        },
+        {
+          "id": "m-hy26",
+          "from": "Priya Natarajan <priya@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 123,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>Confirmed. I have put the invoice in the folder.</p>"
+        },
+        {
+          "id": "m-hy27",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "sam@harbor.example",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 112,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>Can we move the walkthrough to the morning?</p>"
+        },
+        {
+          "id": "m-hy28",
+          "from": "Dana Reyes <dana@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 101,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>Morning works. I will let the team know.</p>"
+        },
+        {
+          "id": "m-hy29",
+          "from": "Priya Natarajan <priya@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 89,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>One more thing: parking is on the north side, not the west.</p>"
+        },
+        {
+          "id": "m-hy30",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "sam@harbor.example",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 78,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>Noted. I have updated the run of show.</p>"
+        },
+        {
+          "id": "m-hy31",
+          "from": "Dana Reyes <dana@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 67,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>The florist came back with a revised quote.</p>"
+        },
+        {
+          "id": "m-hy32",
+          "from": "Priya Natarajan <priya@northwind.example>",
+          "to": "you@example.com",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 56,
+          "labels": [
+            "INBOX"
+          ],
+          "html": "<p>That is within budget. Approve it.</p>"
+        },
+        {
+          "id": "m-hy33",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "sam@harbor.example",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 45,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>Sound check is booked for four o'clock.</p>"
+        },
+        {
+          "id": "m-hy34",
+          "from": "Oliver Korzen <you@example.com>",
+          "to": "dana@northwind.example",
+          "subject": "Re: Run of show, Northwind launch",
+          "hoursAgo": 34,
+          "labels": [
+            "SENT"
+          ],
+          "html": "<p>That is everything from my side. See you Thursday.</p>"
+        }
+      ]
     }
   ],
   "calendar": [

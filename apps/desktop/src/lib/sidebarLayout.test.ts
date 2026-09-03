@@ -171,3 +171,25 @@ test("the active row follows view, split, and category exactly; the list title c
   assert.equal(viewTitle(rows, { view: "attachments", split: null, category: null }), "With attachments");
   assert.equal(viewTitle(rows, { view: "all", split: null, category: null }), null);
 });
+
+test("Archive became Done in the interface only: a layout that hid or reordered it keeps exactly that", () => {
+  // What the row is called changed; its stored id did not, so nothing saved has to be migrated.
+  assert.equal(rows.find((r) => r.id === "archive")?.label, "Done");
+  assert.deepEqual(rows.find((r) => r.id === "archive")?.view, { view: "archive" });
+  assert.equal(rows.find((r) => r.id === "archive")?.hiddenByDefault, undefined, "it shows unless someone hid it");
+  assert.ok(ids(defaultLayout(rows), "folders").includes("archive"), "and it is in Folders out of the box");
+
+  // Someone who hid the row back when it read Archive still has it hidden.
+  const hidden = reconcileLayout({ version: 1, groups: [{ id: "folders", rows: [{ id: "archive", hidden: true }, { id: "starred", hidden: false }] }] }, rows);
+  const archiveRow = hidden.groups.find((g) => g.id === "folders")!.rows.find((r) => r.id === "archive");
+  assert.equal(archiveRow?.hidden, true);
+  assert.ok(!visibleRows(hidden, "folders", rows).some((r) => r.id === "archive"), "a hidden row does not come back under a new name");
+  assert.ok(hiddenRows(hidden, rows).some((r) => r.label === "Done"), "and it offers itself as Done when shown again");
+
+  // Someone who dragged it to the top of Folders, or into another group, still has it there.
+  const reordered = reconcileLayout({ version: 1, groups: [{ id: "folders", rows: [{ id: "archive", hidden: false }, { id: "snoozed", hidden: false }, { id: "starred", hidden: false }] }] }, rows);
+  assert.equal(ids(reordered, "folders")[0], "archive", "still first");
+  const moved = reconcileLayout({ version: 1, groups: [{ id: "queues", rows: [{ id: "archive", hidden: false }, { id: "daily", hidden: false }] }] }, rows);
+  assert.equal(groupOf(moved, "archive"), "queues");
+  assert.ok(visibleRows(moved, "queues", rows).some((r) => r.label === "Done"), "and it shows there, as Done");
+});

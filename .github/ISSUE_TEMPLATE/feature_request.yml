@@ -1,0 +1,31 @@
+name: Feature request
+description: Something the app should do and does not
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The bar is simplicity, not feature count. A request that removes a step is more likely to land than one that adds a surface.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do, and what stops you
+      description: Describe the situation, not the solution you have in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: How you handle it today
+    validations:
+      required: true
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: House rules
+      description: These are in CONTRIBUTING.md and are product decisions, not preferences.
+      options:
+        - label: This does not add automatic sending. The app may draft, it does not speak for you.
+          required: true
+        - label: This does not call a hosted model from the sync path.
+          required: true

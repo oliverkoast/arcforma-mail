@@ -1,0 +1,65 @@
+name: Bug report
+description: Something behaves wrongly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not paste message contents or real addresses. A redacted excerpt is enough, and this is a public repository.
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Arcforma Mail > About, or the commit you built from.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "26.5.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: account
+    attributes:
+      label: Which account type
+      description: Workspace and personal Gmail differ in consent screen and token lifetime, and that difference causes real bugs.
+      options:
+        - Google Workspace (Internal consent screen)
+        - Personal Gmail (External, Testing)
+        - Both
+        - Not account related
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where
+      options:
+        - Reading mail
+        - Composing or sending
+        - Drafts
+        - Sync
+        - Sorting and Needs you
+        - Search
+        - Calendar or contacts
+        - Attachments
+        - Arcforma Text (Cmd+J)
+        - AI daemon
+        - Setup
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you did, what happened, what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log excerpt
+      description: "~/Library/Logs/arcforma-ai-daemon.log or arcforma-text.log where relevant. Redact addresses and subjects."
+      render: text

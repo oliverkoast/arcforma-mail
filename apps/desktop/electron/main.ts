@@ -456,7 +456,8 @@ const SMOKE_STEPS: SmokeStep[] = [
   // previews, with a Download glyph that appears under the pointer.
   {
     name: "attachments",
-    script: "window.__arcmail.setView('inbox'); await new Promise((r) => setTimeout(r, 600)); await window.__arcmail.openThreadById('arcforma', 't-kickoff'); await new Promise((r) => setTimeout(r, 1500)); document.querySelector('.attachments').scrollIntoView({ block: 'center' });",
+    // The files hang off a message in the middle of the thread, which now opens folded; opening it is what a reader would do.
+    script: "window.__arcmail.setView('inbox'); await new Promise((r) => setTimeout(r, 600)); await window.__arcmail.openThreadById('arcforma', 't-kickoff'); await new Promise((r) => setTimeout(r, 1500)); window.__arcmail.toggleMessage('m-k4'); await new Promise((r) => setTimeout(r, 800)); document.querySelector('.attachments').scrollIntoView({ block: 'center' });",
     hover: ".attachments .attachment",
     waitMs: 1200,
   },
@@ -484,6 +485,19 @@ const SMOKE_STEPS: SmokeStep[] = [
   { name: "footer-folded", script: "await window.__arcmail.openThreadById('formai', 't-vendor'); await new Promise((r) => setTimeout(r, 1500)); document.querySelector('.messages').scrollTop = 0;", waitMs: 1200 },
   // The same message with the footer open: nothing was deleted, it was one click away.
   { name: "footer-expanded", script: "document.querySelector('.message.is-last iframe').contentDocument.querySelector('details.quote-fold').open = true;", waitMs: 1000 },
+  // A 34 message thread as it opens: scrolled to the newest message, expanded,
+  // with the history above it folded to one row each and no frame behind them.
+  { name: "long-thread", script: "window.__arcmail.setView('inbox'); await new Promise((r) => setTimeout(r, 800)); await window.__arcmail.openThreadById('arcforma', 't-history');", waitMs: 3500 },
+  // The top of the same thread: the control says how many are folded, with its key.
+  { name: "long-thread-control", script: "document.querySelector('.messages').scrollTop = 0;", waitMs: 900 },
+  // The control pressed: every message open, in the same chronological order, and the control offering the way back.
+  { name: "long-thread-expanded", script: "document.querySelector('.messages-fold').click(); await new Promise((r) => setTimeout(r, 800)); document.querySelector('.messages').scrollTop = 0;", waitMs: 2500 },
+  // E on a thread: the confirmation lands bottom left, and the pointer resting on it reveals Undo with its key.
+  { name: "toast-undo", script: "window.__arcmail.closeThread(); window.__arcmail.setView('inbox'); await new Promise((r) => setTimeout(r, 900)); window.__arcmail.select(0); await window.__arcmail.archiveSelected();", hover: ".toast", waitMs: 1600 },
+  // The Done row in Folders and what it holds: everything E has taken out of the inbox, newest first.
+  { name: "done-view", script: "window.__arcmail.showToast(null); window.__arcmail.setView('archive'); await new Promise((r) => setTimeout(r, 700)); document.querySelector('.nav-row[data-row-id=\"archive\"]').scrollIntoView({ block: 'center' }); await new Promise((r) => setTimeout(r, 300));", hover: ".nav-row[data-row-id='archive'] .nav-item", waitMs: 2000 },
+  // A thread opened from Done: the mono DONE eyebrow says where it is, and the tray glyph puts it back.
+  { name: "done-thread", script: "window.__arcmail.select(0); await window.__arcmail.openSelected();", hover: ".reading-actions .icon-btn[data-glyph='inbox']", waitMs: 2500 },
 ];
 
 /**

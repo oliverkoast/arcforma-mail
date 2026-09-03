@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea
+    url: https://github.com/oliverkoast/arcforma-mail/discussions
+    about: Ask here first. Issues are for work that is already understood and actionable.
+  - name: Security vulnerability
+    url: https://github.com/oliverkoast/arcforma-mail/security/advisories/new
+    about: Report privately. Never in a public issue.

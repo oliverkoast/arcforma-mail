@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { resolveBinding, type KeyLike } from "./dispatcher";
 import { KEYMAP } from "./keymap";
+import { keyLabel } from "./keyLabel";
 
 function key(k: string, mods: Partial<KeyLike> = {}): KeyLike {
   return { key: k, metaKey: false, shiftKey: false, altKey: false, ctrlKey: false, ...mods };
@@ -87,4 +88,30 @@ test("popover and send-later scopes take their single letters", () => {
   assert.equal(resolveBinding("sendLater", key("w"), false)?.action, "sendNextMonday");
   assert.equal(resolveBinding("sendLater", key("Escape"), false)?.action, "closeSendLater");
   assert.equal(resolveBinding("sendLater", key("e"), false), null);
+});
+
+test("Shift+E moves a thread back to the inbox in the list and the thread; E alone still marks done", () => {
+  for (const scope of ["list", "thread"] as const) {
+    assert.equal(resolveBinding(scope, key("e"), false)?.action, "archive", scope);
+    assert.equal(resolveBinding(scope, key("E", { shiftKey: true }), false)?.action, "moveToInbox", scope);
+  }
+  assert.equal(resolveBinding("compose", key("E", { shiftKey: true }), true), null, "never while typing");
+  assert.equal(resolveBinding("popover", key("E", { shiftKey: true }), false), null, "never behind the snooze popover");
+  const back = KEYMAP.filter((b) => b.action === "moveToInbox");
+  assert.deepEqual(back.map((b) => b.scope), ["list", "thread"]);
+  for (const b of back) {
+    assert.equal(b.label, "Move back to inbox");
+    assert.equal(b.shift, true);
+  }
+  assert.equal(keyLabel("moveToInbox"), "Shift+E");
+});
+
+test("O folds and unfolds a thread's history, and only while a thread is open", () => {
+  assert.equal(resolveBinding("thread", key("o"), false)?.action, "toggleAllMessages");
+  assert.equal(resolveBinding("list", key("o"), false), null, "nothing to fold in a list");
+  assert.equal(resolveBinding("compose", key("o"), true), null, "an O typed into a reply is an O");
+  const fold = KEYMAP.filter((b) => b.action === "toggleAllMessages");
+  assert.equal(fold.length, 1);
+  assert.equal(fold[0]?.scope, "thread");
+  assert.equal(fold[0]?.label, "Expand or collapse the earlier messages");
 });

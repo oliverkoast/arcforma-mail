@@ -12,7 +12,9 @@ import {
   getSidebarLayout,
   listSavedSearches,
   listScheduledSends,
+  listOutbox,
   listThreads,
+  moveToInbox,
   openStore,
   savedSearchCount,
   setSidebarLayout,
@@ -161,4 +163,46 @@ test("the sidebar layout round-trips through the settings table as JSON and read
   assert.deepEqual(getSidebarLayout(db), { version: 1, groups: [] });
   db.prepare("UPDATE settings SET value_json = '{not json' WHERE key = 'sidebarLayout'").run();
   assert.equal(getSidebarLayout(db), null, "a corrupt row reads as unsaved rather than failing the sidebar");
+});
+
+test("Done lists what left the inbox and nothing else: no trash, no spam, nothing snoozed, no draft-only thread", () => {
+  const db = seed();
+  // A thread whose only message is a draft is out of the inbox too, and is not something anyone marked done.
+  upsertThreadFromGmail(db, "arcforma", thread("t-draft", [{ id: "m7", from: "Oliver Korzen <you@example.com>", subject: "Half written", date: T0 - 6 * HOUR, labels: ["DRAFT"] }]), { ownerAddresses: ["you@example.com"] });
+  assert.deepEqual(ids(db, "archive"), ["t-done"]);
+  assert.equal(sidebarCounts(db, undefined, T0).archive, 1);
+
+  // Newest first, and scoped by account like every other list.
+  archive(db, "personal", "t-sleep");
+  db.prepare("UPDATE snoozes SET status = 'cancelled' WHERE thread_id = 't-sleep'").run();
+  assert.deepEqual(ids(db, "archive"), ["t-done", "t-sleep"], "newest first");
+  assert.deepEqual(ids(db, "archive", ["personal"]), ["t-sleep"]);
+  assert.equal(sidebarCounts(db, ["arcforma"], T0).archive, 1);
+
+  // Trashing one takes it out of Done as well as out of the count.
+  trash(db, "arcforma", "t-done");
+  assert.deepEqual(ids(db, "archive"), ["t-sleep"]);
+  assert.equal(sidebarCounts(db, undefined, T0).archive, 1);
+});
+
+test("Move back to inbox puts INBOX back on every message and queues the modify for Gmail", () => {
+  const db = seed();
+  assert.deepEqual(ids(db, "archive"), ["t-done"]);
+  const before = listOutbox(db, "arcforma").length;
+
+  const outboxId = moveToInbox(db, "arcforma", "t-done");
+
+  assert.equal((db.prepare("SELECT in_inbox FROM threads WHERE account_id = ? AND id = ?").get("arcforma", "t-done") as { in_inbox: number }).in_inbox, 1);
+  assert.deepEqual(ids(db, "archive"), [], "it is not done any more");
+  assert.ok(ids(db, "inbox").includes("t-done"));
+  assert.equal(sidebarCounts(db, undefined, T0).archive, 0);
+
+  const rows = listOutbox(db, "arcforma");
+  assert.equal(rows.length, before + 1, "exactly one row, the same way archive queues one");
+  const row = rows.find((r) => r.id === outboxId)!;
+  assert.equal(row.op, "modifyLabels");
+  assert.equal(row.status, "pending");
+  assert.deepEqual(JSON.parse(row.payload_json), { threadId: "t-done", addLabelIds: ["INBOX"], removeLabelIds: [] });
+  // And the incoming history for that thread is masked until Gmail acknowledges the row, exactly as E does.
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM thread_labels_pending WHERE account_id = ? AND thread_id = ? AND outbox_id = ?").get("arcforma", "t-done", outboxId) as { n: number }).n, 1);
 });
