@@ -2,6 +2,7 @@ import type React from "react";
 import { useState, type ReactNode } from "react";
 import { fullDate } from "../lib/format";
 import { describeRecipients, initials, messageEyebrow, relativeTime, showSenderAddress } from "../lib/recipients";
+import { receiptLine } from "../lib/receipts";
 import type { MessageView } from "../../shared/types";
 
 /**
@@ -9,6 +10,11 @@ import type { MessageView } from "../../shared/types";
  * sender's initials; the recipient line reads as a sentence and opens to the
  * full list, grouped To, Cc, and Bcc, with the owner's own addresses shown as
  * "you". The eyebrow appears only when the addressing is worth knowing.
+ *
+ * A message you sent with a receipt armed also carries what the pixel service knows, under the date.
+ * It reads "Opened", "Possibly automatic" or "No signal" and never a count of opens, because one
+ * reader's client can fetch an image many times and a proxy can fetch it once for many people. The
+ * hover sentence carries the limit, which the three words alone cannot.
  */
 export function MessageHeader({ message, owners, repeatSender, actions, onCollapse }: { message: MessageView; owners: string[]; repeatSender: boolean; actions?: ReactNode; onCollapse?: () => void }) {
   const [expanded, setExpanded] = useState(false);
@@ -74,6 +80,11 @@ export function MessageHeader({ message, owners, repeatSender, actions, onCollap
         <div className="message-date" data-tip={when}>
           {relativeTime(message.internalDate)}
         </div>
+        {message.receipt ? (
+          <div className={`af-mono message-receipt is-${message.receipt.status === "opened" ? "opened" : "quiet"}`} data-tip={message.receipt.tip}>
+            {receiptLine(message.receipt)}
+          </div>
+        ) : null}
         {actions}
       </div>
     </div>

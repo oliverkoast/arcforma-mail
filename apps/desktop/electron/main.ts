@@ -424,6 +424,15 @@ interface SmokeStep {
 
 const SMOKE_STEPS: SmokeStep[] = [
   { name: "inbox", script: null, waitMs: 2500 },
+  // Settings, scrolled to read receipts: the only place the feature can be turned on, and so the
+  // only place that has to say what a receipt cannot tell you.
+  {
+    name: "settings-receipts",
+    script:
+      "window.__arcmail.openSettings(); await new Promise((r) => setTimeout(r, 500)); const h = [...document.querySelectorAll('.settings-section .af-mono')].find((e) => e.textContent === 'Read receipts'); h?.closest('.settings-section')?.scrollIntoView({ block: 'center' });",
+    waitMs: 700,
+  },
+  { name: "settings-closed", script: "window.__arcmail.closeSettings();", waitMs: 400 },
   // Cmd+K with "sno" typed: the snooze commands rank first, their keys in mono on the right.
   { name: "palette", script: "window.__arcmail.openPalette(); await new Promise((r) => setTimeout(r, 300)); window.__arcmail.setPaletteQuery('sno');", waitMs: 900 },
   // An empty focused search field shows the operator hint under it. The smoke window has no OS focus, so focus events never fire; the scope is set the way onFocus would.

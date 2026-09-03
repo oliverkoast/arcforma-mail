@@ -337,6 +337,18 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .message-date {
   white-space: nowrap;
 }
+/* What the pixel service knows about a message you sent, under its date. Deliberately quiet: it is
+   evidence about software, not news about a person, and the three states are not a scale to rank.
+   "Opened" gets body ink because it is the one that says something happened; the other two stay
+   soft, because "no signal" is the absence of evidence and must never read as a verdict. */
+.message-receipt {
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--af-text-soft);
+}
+.message-receipt.is-opened {
+  color: var(--af-text-body);
+}
 .message-body iframe {
   width: 100%;
   border: 0;
@@ -904,6 +916,8 @@ body.is-resizing { cursor: col-resize; user-select: none; }
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  /* Same reason as the checkbox below: the field and its button keep their size, the label wraps. */
+  flex: none;
 }
 .settings-row-control input,
 .settings-row input[type="number"] {
@@ -1287,6 +1301,9 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .settings-row input[type="checkbox"] {
   width: auto;
   accent-color: var(--af-accent);
+  /* A flex item shrinks by default, so a row whose explanation ran long squeezed its checkbox down
+     to a sliver against the right edge. The control is the point of the row; the words wrap. */
+  flex: none;
 }
 
 /* A pill that cannot act yet reads as such. */

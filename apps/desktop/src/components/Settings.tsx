@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 import { invoke } from "../bridge";
 import { useApp } from "../state/store";
-import type { AccountInfo, LoginItemInfo, SnippetInfo } from "../../shared/types";
+import type { AccountInfo, LoginItemInfo, ReceiptCheckResult, SnippetInfo } from "../../shared/types";
 import { keyLabel } from "../keys/keyLabel";
 import { SNIPPET_VARIABLES } from "../lib/snippets";
+import { RECEIPT_HONESTY } from "../lib/receipts";
 
 function accountEyebrow(a: AccountInfo): string {
   if (a.authState === "ok") return "Signed in";
@@ -204,6 +205,119 @@ function SendingSection() {
         </span>
         <input type="checkbox" checked={settings.autoDraft} data-tip="When on, R asks Claude to prefill a reply in your voice. Tab accepts it; typing ignores it." onChange={(e) => void saveSettings({ autoDraft: e.target.checked })} />
       </label>
+    </section>
+  );
+}
+
+/** Read receipts: the switch, the service they need, and the plain limits of what one can tell you.
+ *
+ * This section is the only place the feature can be turned on, so it is also the only place that has
+ * to say what it cannot do. The honesty line is not decoration: a receipt reports a fetch, and a
+ * message with no fetch is not unread. Anyone reading a receipt without that sentence will read it
+ * as "they saw it and ignored me", which is a claim the data does not support.
+ *
+ * The token is write-only by design. It goes down to the main process and never comes back: the
+ * renderer is told whether one is stored, never what it is. */
+function ReceiptsSection() {
+  const settings = useApp((s) => s.settings);
+  const saveSettings = useApp((s) => s.saveSettings);
+  const [url, setUrl] = useState(settings.readReceiptsUrl);
+  const [token, setToken] = useState("");
+  const [check, setCheck] = useState<ReceiptCheckResult | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    setUrl(settings.readReceiptsUrl);
+  }, [settings.readReceiptsUrl]);
+
+  // A saved address or a new token invalidates whatever the last check said about the old ones.
+  const saveUrl = async () => {
+    setCheck(null);
+    await saveSettings({ readReceiptsUrl: url.trim() });
+  };
+  const saveToken = async () => {
+    if (!token) return;
+    setCheck(null);
+    // The handler answers with the settings, including the flag saying a token is now stored.
+    useApp.setState({ settings: await invoke("receipts:setToken", token) });
+    setToken("");
+  };
+  const runCheck = async () => {
+    setChecking(true);
+    try {
+      setCheck(await invoke("receipts:check"));
+    } catch (err) {
+      setCheck({ ok: false, text: (err as Error).message });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const ready = settings.readReceiptsUrl.trim().length > 0 && settings.readReceiptsTokenSet;
+  return (
+    <section className="settings-section">
+      <span className="af-mono">Read receipts</span>
+      <label className="settings-row">
+        <span>
+          Offer read receipts
+          <span className="settings-help">
+            Turning this on arms nothing. It puts a control in the compose footer so you can ask for a receipt on one message at a time. {RECEIPT_HONESTY}
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={settings.readReceipts}
+          data-tip="Shows the receipt control in the compose footer. Every message is still chosen one at a time."
+          onChange={(e) => void saveSettings({ readReceipts: e.target.checked })}
+        />
+      </label>
+      <label className="settings-row">
+        <span>
+          Pixel service address
+          <span className="settings-help">A service you deploy yourself; packages/pixel-service/README.md walks through it. Nothing about your mail passes through it except the fact that an image was fetched.</span>
+        </span>
+        <span className="settings-row-control">
+          <input type="url" placeholder="https://" value={url} data-tip="Where the tracking image is served from and where fetches are recorded." onChange={(e) => setUrl(e.target.value)} />
+          <button className="btn btn-nav btn-compact" data-tip="Saves the service address." onClick={() => void saveUrl()}>
+            Save
+          </button>
+        </span>
+      </label>
+      <label className="settings-row">
+        <span>
+          Service token
+          <span className="settings-help">{settings.readReceiptsTokenSet ? "A token is stored. It is never read back out, so replacing it is the only way to change it." : "No token stored yet."}</span>
+        </span>
+        <span className="settings-row-control">
+          <input
+            type="password"
+            placeholder={settings.readReceiptsTokenSet ? "Replace the stored token" : "Bearer token"}
+            value={token}
+            autoComplete="off"
+            data-tip="Sent to the pixel service as a bearer token. Stored in the main process and never handed back to this window."
+            onChange={(e) => setToken(e.target.value)}
+          />
+          <button className="btn btn-nav btn-compact" disabled={!token} data-tip="Stores the token in the main process." onClick={() => void saveToken()}>
+            Store
+          </button>
+        </span>
+      </label>
+      <div className="settings-row">
+        <span>
+          Connection
+          <span className="settings-help">{ready ? "Asks the service for events. A yes means the address and the token are both right." : "Needs an address and a token first."}</span>
+        </span>
+        <span className="settings-row-control">
+          <button className="btn btn-nav btn-compact" disabled={!ready || checking} data-tip="Asks the service for recent events, to prove the address and token work." onClick={() => void runCheck()}>
+            {checking ? "Checking" : "Test the connection"}
+          </button>
+        </span>
+      </div>
+      {check ? (
+        <p className="settings-help">
+          <span className="af-mono">{check.ok ? "REACHED" : "NO ANSWER"}</span> {check.text}
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -433,6 +547,7 @@ export function Settings() {
         <AccountsSection />
         <SetupSection />
         <SendingSection />
+        <ReceiptsSection />
         <FollowUpsSection />
         <StartupSection />
         <SnippetsSection />
