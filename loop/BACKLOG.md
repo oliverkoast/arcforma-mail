@@ -16,17 +16,30 @@ re-check.
 
 ## Queue
 
-### L-001 The sidebar counts freeze the app for half a second
+### L-001 Every sidebar count reads the whole mailbox
 Area: speed. Size: M. Bar: 1. Status: open.
-Verified 2026-09-04 by measurement: `pnpm perf` reports `sidebar:counts` at a median of 524 ms and a
-p95 of 541 ms over 60,000 threads on node 22. `docs/AUDIT.md:952` measured 140 ms and called it the
-thing that will make the app feel broken on a real mailbox; it is worse than that.
+Verified 2026-09-04 by measurement, after L-012 removed the snooze scan: `sidebar:counts` is a
+median of 308 ms at 60,000 threads. It splits into `queueCounts` 96 ms, the rest of `threadCounts`
+65 ms, and the folder and group aggregates about 137 ms. All four read every row in `threads`,
+whether or not the row can possibly contribute.
 Why it matters: `refreshCounts` runs after archive, snooze, star, re-file, move to inbox and eight
-other actions, synchronously on the Electron main thread. Half a second of frozen window after
-pressing E is the single loudest contradiction of the bar in the product.
+other actions, synchronously on the Electron main thread.
 Done when: `sidebar:counts` median is under 32 ms at 60,000 threads, the accepted ceiling in
-`packages/store/scripts/perf.ts` is lowered to the new number, and no count changes value. Prove the
-last part by asserting the whole `sidebarCounts` result is unchanged on the existing fixtures.
+`packages/store/scripts/perf.ts` is lowered to match, and no count changes value. Prove the last
+part with a test that compares every field of `sidebarCounts` against the counts computed the naive
+way, on a fixture that includes the awkward overlaps: a thread both snoozed and holding a draft, a
+thread labelled both spam and trash, a queued thread that was then archived.
+Shape of the fix, from the measurement: drive each count from the small set rather than the big one.
+Queue counts from `queue_items` plus the inbox, not the whole table. Snoozed from `snoozes`. Spam
+and trash from `thread_labels`. Done as arithmetic over those, since it is the only count that is
+genuinely most of the mailbox.
+
+### L-011 Daily 0 reads the whole mailbox to find the threads in it
+Area: speed. Size: S. Bar: 1. Status: open.
+Verified 2026-09-04 by measurement: `list:daily` is a median of 12.9 ms at 60,000 threads, against a
+16 ms budget, and it is the queue the product is built around. The queue expression is evaluated for
+every thread in the table because `listThreads` puts it in the WHERE clause. Same shape as the
+`queueCounts` half of L-001 and probably the same fix.
 
 ### L-002 The sanitiser tests assert a configuration array and never sanitise anything
 Area: security. Size: M. Bar: 7. Status: open.
@@ -125,7 +138,18 @@ rather than fixing it in the same pass.
 
 ## Done
 
-Nothing yet. Items move here with the commit that closed them and the measurement that proves it.
+### L-012 Nothing indexed the question every list and every count asks
+Area: speed. Bar: 1. Closed 2026-09-04.
+Found by the speed budget on the first run against a fixture shaped like a real mailbox rather than
+one where every thread sits in the inbox. `snoozes` carried an index on `(status, wake_at)` and
+none on the thread, so `PENDING_SNOOZE`, which every list and every count evaluates once per thread,
+seeked on status alone and then walked every pending snooze. The cost was the product of the two
+numbers: 60,000 threads by 300 sleeping threads.
+Before: `sidebar:counts` 5,389 ms, `list:needsyou` 19.45 ms, `needsYouCount` 114 ms.
+After: `sidebar:counts` 308 ms, `list:needsyou` 3.28 ms, `needsYouCount` 9.30 ms.
+The fix is one index, migration 17. The regression test is `packages/store/src/plans.test.ts`, which
+asserts the plan rather than the time, so it gives the same answer on a loaded CI runner as on a
+laptop; without the migration it fails, because SQLite falls back to `snoozes_due`.
 
 ## Dropped
 

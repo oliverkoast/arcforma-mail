@@ -184,6 +184,9 @@ CREATE TABLE IF NOT EXISTS snoozes (
   woken_at   INTEGER
 );
 CREATE INDEX IF NOT EXISTS snoozes_due ON snoozes(status, wake_at);
+-- Is this thread asleep. Asked once per thread by every list and every count, so without this it is
+-- a scan of the whole snooze table per row: 5.4 s of sidebar counts at 60k threads and 300 snoozes.
+CREATE INDEX IF NOT EXISTS snoozes_thread ON snoozes(account_id, thread_id, status);
 
 CREATE TABLE IF NOT EXISTS reminders (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,

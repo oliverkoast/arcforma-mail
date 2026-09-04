@@ -39,3 +39,32 @@ Gate: `typecheck`, `tests`, `brand`, `secrets`, `speed` and `audit` run on Linux
 Noticed: the sanitiser suites assert that a configuration array contains certain strings and never
 invoke DOMPurify, so deleting the sanitiser call would leave them green. Filed as L-002.
 Commit: see the commit that adds this file.
+
+## 2026-09-04  L-012  Nothing indexed the question every list and every count asks
+Before: the first CI run of the speed budget failed on a GitHub macOS runner: `sidebar:counts` at a
+median of 678 ms and a p95 of 966 ms, over an accepted ceiling of 600 ms set from one measurement on
+one machine. Two problems, not one. The ceiling was calibrated too tightly for hardware that varies
+by more than the thing being measured. And the fixture was wrong: it put all 60,000 threads in the
+inbox and gave the mailbox no sleeping threads at all, which is not a mailbox anyone has.
+Change: the fixture now looks like a real mailbox of that size. About 4 threads in 100 still in the
+inbox, 1 in 89 spam, 1 in 97 trashed, 1 in 200 holding a draft, 1 in 50 starred, 1 in 7 carrying a
+file, a third unread, and 300 asleep. Re-measured on that, `sidebar:counts` was 5,389 ms, ten times
+worse than the number that had failed CI, and `list:needsyou` went from 2.74 ms to 19.45 ms.
+The cause is one missing index. `snoozes` carried `(status, wake_at)` and nothing on the thread, so
+`PENDING_SNOOZE`, which every list and every count evaluates once per thread row, seeked on status
+and then walked every pending snooze. The cost is the product of the two numbers: 60,000 threads by
+300 sleeping ones. Migration 17 adds `snoozes_thread ON snoozes(account_id, thread_id, status)`.
+After, on the same realistic fixture: `sidebar:counts` 326.79 ms, `list:needsyou` 3.34 ms,
+`needsYouCount` 114 ms to 9.30 ms, `list:inbox` 1.11 ms. The counts are seventeen times faster and
+still eleven times over the bar, so L-001 stays open with its measurement updated and the shape of
+the fix written down.
+The accepted ceilings are now set at roughly twice the median measured here, with the reason written
+at the top of the harness, and the half of the check that does not depend on the clock is new:
+`packages/store/src/plans.test.ts` asserts the query plans, so it gives the same answer on a loaded
+runner as on a laptop. Without migration 17 it fails, because SQLite falls back to `snoozes_due`.
+Gate: `typecheck`, `tests` (86 in the store package, 0 failures), `brand`, `secrets` and `speed` ran
+here. `build` and `smoke` need macOS and did not run; CI runs them.
+Noticed: `list:daily` is 13.45 ms against a 16 ms budget, because the queue expression is evaluated
+for every thread in the table. Same shape as the queue half of L-001. Filed as L-011, not fixed
+here.
+Commit: see the commit that adds migration 17.
