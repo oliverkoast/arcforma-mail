@@ -11,8 +11,9 @@
   "files": ["dist", "src/schema.sql"],
   "scripts": {
     "build": "tsc -p tsconfig.json && cp src/schema.sql dist/schema.sql",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --disable-warning=ExperimentalWarning --import tsx --test \"src/**/*.test.ts\""
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json",
+    "test": "node --disable-warning=ExperimentalWarning --import tsx --test \"src/**/*.test.ts\"",
+    "perf": "node --disable-warning=ExperimentalWarning --import tsx scripts/perf.ts"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

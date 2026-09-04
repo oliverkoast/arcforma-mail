@@ -10,7 +10,7 @@ export type Db = DatabaseSync;
 
 /** The schema every opened store is migrated up to. Exported so tests assert against this rather
  *  than a copy of the number, which went stale on every bump and failed four suites at once. */
-export const SCHEMA_VERSION = 16;
+export const SCHEMA_VERSION = 17;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
@@ -292,6 +292,10 @@ function loadSchemaSql(): string {
 }
 
 /** Applies migrations in order. Version 1 is schema.sql; later versions append here. Each step runs in one transaction, SQL first, then any data fix-up. */
+const MIGRATION_17 = `
+CREATE INDEX IF NOT EXISTS snoozes_thread ON snoozes(account_id, thread_id, status);
+`;
+
 export function migrate(db: Db): void {
   const current = schemaVersion(db);
   const steps: Array<{ version: number; sql: () => string; after?: (db: Db) => void }> = [
@@ -317,6 +321,10 @@ export function migrate(db: Db): void {
     // Every attachment Gmail stamped a Content-ID on was stored as inline and never rendered. The
     // files are in the database already, so this re-decides them in place rather than refetching.
     { version: 16, sql: () => "SELECT 1", after: (d) => repairInlineAttachments(d) },
+    // Every list and every count asks whether a thread is asleep, and nothing indexed the answer.
+    // With three hundred pending snoozes that question was a scan of the snooze table per thread
+    // row, so the sidebar counts took 5.4 s at 60k threads. Measured by packages/store/scripts/perf.ts.
+    { version: 17, sql: () => MIGRATION_17 },
   ];
   for (const step of steps) {
     if (step.version <= current) continue;

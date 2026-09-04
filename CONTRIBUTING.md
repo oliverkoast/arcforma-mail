@@ -14,7 +14,13 @@ pnpm --filter desktop dev
 
 ## What a change has to pass
 
-Every change runs `pnpm -r typecheck`, `pnpm -r test`, `node scripts/brand-check.mjs`, and `pnpm --filter desktop smoke` with zero console errors. A bug found in use becomes a regression test in the same change.
+`pnpm gate` runs the lot in one go and prints one table: typecheck, tests, the brand check, the secret scan, the speed budget, the desktop build, the smoke walk with zero console errors, and `pnpm audit`. It is honest about what did not run: `build` and `smoke` need macOS and are reported as skipped rather than passed anywhere else. A bug found in use becomes a regression test in the same change.
+
+`pnpm perf` on its own seeds a synthetic 60,000 thread mailbox and times the reads that run while someone is holding a key down. Budgets and accepted ceilings live in `packages/store/scripts/perf.ts` and ratchet down only: making a check pass by raising one is not a fix.
+
+## Improving it on purpose
+
+`loop/BAR.md` says what the product has to feel like, one clause at a time, each marked checked or judged. `loop/BACKLOG.md` is the ranked queue, where every item carries the check that proves it is still real. `loop/JOURNAL.md` is the record, one entry per iteration, each with a before and an after. `.claude/skills/improve/SKILL.md` is the procedure: verify the top item is still real, change one thing, prove it with the gate, record the measurement, commit.
 
 ## House rules that are product, not preference
 
