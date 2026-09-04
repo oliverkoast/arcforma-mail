@@ -115,6 +115,27 @@ Area: build. Size: S. Status: open.
 Claimed by `docs/AUDIT.md:456`, verified by reading `.github/workflows/ci.yml`: nothing builds or
 tests `packages/text-tools`.
 
+### L-013 Nobody but Oliver can run `pnpm build`, and CI has never run it
+Area: build. Size: S. Bar: none, this is a plain defect. Status: open, blocked on a decision.
+Verified 2026-09-04 by measurement: every one of the last ten CI runs on `main` failed, and each
+failed at `pnpm --filter desktop build` with `sync-brand: brand repo not found`. The desktop package
+runs `scripts/sync-brand.mjs` in its `prebuild`, and that script exits 1 when the brand repo is not
+on the machine. `apps/desktop/public/brand/` is gitignored, so no checkout of this repository can
+ever have it. The workflow already says what it wants (`pnpm sync-brand || echo "brand assets are
+not in this checkout; skipping"`) and then the prebuild overrides it.
+Why it matters: the build and the smoke walk are the only checks that cross the renderer to IPC to
+store seam, `CONTRIBUTING.md` calls them mandatory, and `docs/AUDIT.md` made putting them in CI item
+four of ten. They have been in CI since it was written and have never run. A stranger cloning this
+repository cannot build it either, which blocks the whole of roadmap phase 3.
+Measured 2026-09-04 on Linux with no brand assets: the renderer builds, the Electron bundle builds,
+the electron typecheck passes, and the smoke walk completes 41 screenshots with one console error,
+which is a headless capture limit for the PDF preview window and not brand related. So the only
+thing failing is the hard exit.
+The decision, which is Oliver's because it touches the brand rules: either CI builds unbranded (the
+screenshots then prove the app runs and prove nothing about how it looks), or CI is given the brand
+repo through a deploy key and `ARCFORMA_BRAND_DIR`, which a fork or an outside contributor still
+will not have. The first is needed anyway for anyone else to build this.
+
 ---
 
 ## Standing passes
