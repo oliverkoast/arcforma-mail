@@ -22,6 +22,9 @@ jobs:
       - run: node scripts/brand-check.mjs
       - name: No secrets in the tree
         run: node scripts/secret-scan.mjs
+      # The reads that run while someone is holding a key down, at 60k threads. Budgets ratchet
+      # down only, so this catches the change that made the list slow on the day it lands.
+      - run: pnpm perf
       # CONTRIBUTING says a change has to pass the build and the smoke walk. Saying it and not
       # checking it means the rule only applies to whoever remembers it.
       - run: pnpm --filter desktop build
