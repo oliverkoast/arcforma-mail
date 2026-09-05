@@ -10,7 +10,7 @@ export type Db = DatabaseSync;
 
 /** The schema every opened store is migrated up to. Exported so tests assert against this rather
  *  than a copy of the number, which went stale on every bump and failed four suites at once. */
-export const SCHEMA_VERSION = 18;
+export const SCHEMA_VERSION = 19;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
@@ -322,6 +322,12 @@ export function migrate(db: Db): void {
     { version: 17, sql: () => "SELECT 1", after: (d) => addCalendarColumn(d) },
     // Files chosen for a draft, so parking one with Esc does not quietly drop what was attached.
     { version: 18, sql: () => "SELECT 1", after: (d) => addDraftAttachments(d) },
+    // Every list and every count asks whether a thread is asleep, and nothing indexed the answer, so
+    // the question was a scan of the snooze table per row. Harmless with an empty snooze table and
+    // costly once it is not. Taken from the Loop branch, which numbered it 17; that number was
+    // already spent here twice over, and merging it as written would have left two version 17 steps
+    // and skipped the index outright on any store that had run ours.
+    { version: 19, sql: () => "CREATE INDEX IF NOT EXISTS snoozes_thread ON snoozes(account_id, thread_id, status);" },
   ];
   for (const step of steps) {
     if (step.version <= current) continue;

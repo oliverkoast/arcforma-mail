@@ -14,6 +14,8 @@
     "pack": "pnpm --filter desktop run pack",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck",
-    "dist": "pnpm --filter desktop run pack"
+    "dist": "pnpm --filter desktop run pack",
+    "gate": "node scripts/gate.mjs",
+    "perf": "pnpm --filter @arcforma/store perf"
   }
 }
