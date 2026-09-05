@@ -16,6 +16,8 @@ const threadDelays = new Map<string, number>();
 let saveDelay = 0;
 /** Delay on the attachment channels, so a test can look at the chip while the fetch is still running. */
 let attachmentDelay = 0;
+/** What the native file picker answers with, for the tests that attach something. */
+let pickedFiles: Array<{ path: string; name: string; size: number; mimeType: string }> = [];
 /** Makes compose:send answer with an older, receipt-less shape, to prove a sent message stays sent. */
 let sendResultOmitsReceipt = false;
 /** Rows the next threads:list answers with, and how long it takes, to overlap a refresh with an action. */
@@ -63,6 +65,8 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
         case "drafts:delete":
           draftRows.delete(args[0] as number);
           return undefined;
+        case "compose:pickFiles":
+          return pickedFiles;
         case "compose:send": {
           const r = { id: nextSendId++, sendAt: Date.now() + 10_000, undoUntil: Date.now() + 10_000, receipt: { requested: false, armed: false } };
           if (sendResultOmitsReceipt) delete (r as { receipt?: unknown }).receipt;
@@ -426,6 +430,26 @@ test("Send replaces the inline box with the message appended to the thread; Z ta
   await useApp.getState().sendCompose(Date.now() + 3_600_000);
   assert.equal(useApp.getState().open?.messages.length, 4);
   useApp.getState().showToast(null);
+});
+
+test("a file too large for Gmail is refused before it is attached, not at send", async () => {
+  // Learning about the limit from a bounce costs the send. The message keeps whatever it already had.
+  const useApp = await freshKickoff();
+  useApp.getState().openCompose("reply");
+  pickedFiles = [{ path: "/tmp/huge.pdf", name: "huge.pdf", size: 30 * 1024 * 1024, mimeType: "application/pdf" }];
+  await useApp.getState().attachFiles();
+  assert.equal(useApp.getState().compose?.attachments?.length ?? 0, 0, "nothing was attached");
+  assert.equal(useApp.getState().toast?.eyebrow, "TOO LARGE");
+  assert.match(useApp.getState().toast?.text ?? "", /send a link instead/);
+  useApp.getState().showToast(null);
+
+  // A reasonable one goes on, and comes back off by path.
+  pickedFiles = [{ path: "/tmp/deck.pdf", name: "deck.pdf", size: 2 * 1024 * 1024, mimeType: "application/pdf" }];
+  await useApp.getState().attachFiles();
+  assert.deepEqual(useApp.getState().compose?.attachments?.map((f) => f.name), ["deck.pdf"]);
+  useApp.getState().removeAttachment("/tmp/deck.pdf");
+  assert.equal(useApp.getState().compose?.attachments?.length, 0);
+  await useApp.getState().closeCompose(false);
 });
 
 test("a message that has left is never reported as not sent, whatever fails afterwards", async () => {

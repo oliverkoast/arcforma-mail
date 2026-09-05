@@ -1,5 +1,6 @@
-import { ipcMain } from "electron";
+import { dialog, ipcMain, shell } from "electron";
 import fs from "node:fs";
+import path from "node:path";
 import { deleteSnippet, getSettings, hasReceiptAuthToken, listDrafts, listSnippets, saveDraft, setReceiptAuthToken, setSetting, updateSnippet, upsertSnippet, type Db, type DraftRow } from "@arcforma/store";
 import { signatureFor, undoSend } from "../compose/queue.js";
 import { discardDraft, restoreDraft, sendDraft, type DraftMirror } from "../drafts/mirror.js";
@@ -10,7 +11,7 @@ import type { ReceiptArmer } from "../receipts/arm.js";
 import type { ReceiptService } from "../receipts/service.js";
 import type { Scheduler } from "../scheduler.js";
 import type { SyncManager } from "../sync.js";
-import type { Address, ComposeDraft, DraftInfo, ReceiptCheckResult, SaveDraftOptions, SettingsInfo, SnippetInfo, UndoSendResult } from "../../shared/types.js";
+import type { Address, ComposeDraft, DraftInfo, ReceiptCheckResult, SaveDraftOptions, SettingsInfo, SnippetInfo, UndoSendResult, OutgoingAttachmentInfo } from "../../shared/types.js";
 
 export function toDraftInfo(row: DraftRow): DraftInfo {
   return {
@@ -28,6 +29,7 @@ export function toDraftInfo(row: DraftRow): DraftInfo {
     references: row.references_header,
     updatedAt: row.updated_at,
     readReceipt: row.read_receipt === 1,
+    attachments: filesOf(row.attachments_json),
     origin: row.origin,
     mirror: { state: row.mirror_state, error: row.mirror_error, at: row.mirrored_at },
   };
@@ -87,6 +89,33 @@ export function registerComposeIpc(db: Db, scheduler: Scheduler, mirror: DraftMi
     scheduler.wakeSoon(result.sendAt);
     return result;
   });
+  ipcMain.handle("compose:pickFiles", async (): Promise<OutgoingAttachmentInfo[]> => {
+    const picked = await dialog.showOpenDialog({ properties: ["openFile", "multiSelections"], buttonLabel: "Attach" });
+    if (picked.canceled) return [];
+    const out: OutgoingAttachmentInfo[] = [];
+    for (const file of picked.filePaths) {
+      try {
+        const stat = fs.statSync(file);
+        if (!stat.isFile()) continue;
+        out.push({ path: file, name: path.basename(file), size: stat.size, mimeType: mimeOf(file) });
+      } catch (err) {
+        // A file that cannot be read is not attached, and the others still are.
+        logError("compose", `could not read ${path.basename(file)}`, err);
+      }
+    }
+    return out;
+  });
+  // Only a path this draft is actually carrying may be opened, so a renderer bug cannot turn these
+  // into a way to open any file on the machine.
+  const inDraft = (p: unknown): p is string => typeof p === "string" && draftPaths(db).has(p);
+  ipcMain.handle("compose:openFile", async (_e, filePath: unknown): Promise<string | null> => {
+    if (!inDraft(filePath)) return "That file is not attached to a draft.";
+    const problem = await shell.openPath(filePath);
+    return problem || null;
+  });
+  ipcMain.handle("compose:revealFile", (_e, filePath: unknown): void => {
+    if (inDraft(filePath)) shell.showItemInFolder(filePath);
+  });
   ipcMain.handle("compose:signature", (_e, accountId: string) => signatureFor(db, accountId));
   ipcMain.handle("send:undo", async (_e, id: number): Promise<UndoSendResult> => {
     const r = undoSend(db, id);
@@ -113,6 +142,7 @@ export function registerComposeIpc(db: Db, scheduler: Scheduler, mirror: DraftMi
       inReplyTo: draft.inReplyTo ?? null,
       references: draft.references ?? null,
       readReceipt: draft.readReceipt === true,
+      attachments: draft.attachments ?? [],
     });
     mirror.touch(id, draft.accountId, Boolean(opts?.flush));
     return id;
@@ -173,4 +203,57 @@ export function receiptUrl(raw: string): string {
   if (!url) return "";
   if (!/^https?:\/\//i.test(url)) throw new Error("The pixel service address starts with https:// or http://.");
   return url;
+}
+
+/** A stored attachment list, or none. A draft written before schema 18 simply has no files. */
+function filesOf(json: string | null | undefined): OutgoingAttachmentInfo[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json) as OutgoingAttachmentInfo[];
+    return Array.isArray(parsed) ? parsed.filter((f) => typeof f?.path === "string" && typeof f?.name === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Every path any saved draft is carrying, plus the compose being edited, which saves as it is typed. */
+function draftPaths(db: Db): Set<string> {
+  const rows = db.prepare("SELECT attachments_json FROM drafts").all() as Array<{ attachments_json: string | null }>;
+  const out = new Set<string>();
+  for (const row of rows) {
+    try {
+      for (const f of JSON.parse(row.attachments_json ?? "[]") as Array<{ path?: unknown }>) {
+        if (typeof f.path === "string") out.add(f.path);
+      }
+    } catch {
+      // A draft with unreadable attachment JSON simply contributes nothing.
+    }
+  }
+  return out;
+}
+
+/** Enough of a guess for the part header; the recipient's client decides what to do with it anyway. */
+function mimeOf(file: string): string {
+  const ext = path.extname(file).toLowerCase();
+  const known: Record<string, string> = {
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".heic": "image/heic",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+    ".csv": "text/csv",
+    ".ics": "text/calendar",
+    ".zip": "application/zip",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  };
+  return known[ext] ?? "application/octet-stream";
 }

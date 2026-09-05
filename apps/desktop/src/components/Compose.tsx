@@ -1,6 +1,6 @@
 import { useApp } from "../state/store";
 import { ComposeEditor, MODE_LABEL } from "./ComposeEditor";
-import { ComposeFooter } from "./ComposeFooter";
+import { ComposeAttachments, ComposeFooter } from "./ComposeFooter";
 import { RecipientLine } from "./RecipientLine";
 import { hint } from "./IconButton";
 
@@ -32,6 +32,7 @@ export function Compose() {
         <input value={compose.subject} onChange={(e) => useApp.getState().updateCompose({ subject: e.target.value })} spellCheck={false} data-tip="The subject line." />
       </label>
       <ComposeEditor compose={compose} autofocus={compose.to.length > 0} />
+      <ComposeAttachments />
       <ComposeFooter />
     </section>
   );

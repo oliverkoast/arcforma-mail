@@ -2622,3 +2622,9 @@ button.message-from {
   white-space: pre-wrap;
   color: var(--af-text-body);
 }
+
+/* Files going out with a message. The same chips a received message uses, so the two read alike;
+   the extra control is the one that takes a file back off, which only an outgoing message has. */
+.compose-attachments {
+  margin: 8px 0 0;
+}

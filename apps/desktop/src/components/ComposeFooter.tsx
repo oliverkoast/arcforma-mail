@@ -2,7 +2,62 @@ import { useMemo, useState } from "react";
 import { SEND_LATER, useApp } from "../state/store";
 import { filterSnippets } from "../lib/snippets";
 import { RECEIPT_COMPOSE_TIP, RECEIPT_NO_SERVICE_TIP } from "../lib/receipts";
-import { IconButton, hint } from "./IconButton";
+import { IconButton, Icon, hint } from "./IconButton";
+import { invoke } from "../bridge";
+import { formatBytes } from "../lib/outgoingAttachments";
+
+/** Puts a file on the message. Files are read at send, so this only records where they are. */
+function AttachButton() {
+  const attachFiles = useApp((s) => s.attachFiles);
+  return (
+    <button className="btn btn-ghost btn-compact" data-tip="Attach a file. Gmail will not send more than 25 MB in total." onClick={() => void attachFiles()}>
+      <Icon glyph="paperclip" />
+      Attach
+    </button>
+  );
+}
+
+/**
+ * The files going out with this message.
+ *
+ * Each chip behaves like the ones on a received message: the name opens the file, and the small
+ * button beside it shows it in Finder. The difference is the third control, which takes the file
+ * off the message, because that is the thing a writer actually needs here.
+ */
+export function ComposeAttachments() {
+  const files = useApp((s) => s.compose?.attachments ?? EMPTY);
+  const removeFile = useApp((s) => s.removeAttachment);
+  const showToast = useApp((s) => s.showToast);
+  if (files.length === 0) return null;
+  const open = async (path: string) => {
+    const problem = await invoke("compose:openFile", path);
+    if (problem) showToast({ eyebrow: "NOT OPENED", text: problem });
+  };
+  return (
+    <div className="attachments compose-attachments">
+      {files.map((f) => (
+        <span className="attachment" key={f.path}>
+          <button type="button" className="attachment-open" data-tip={`${f.name}, ${formatBytes(f.size)}. Opens it here on your Mac.`} onClick={() => void open(f.path)}>
+            <span className="attachment-name">{f.name}</span>
+            <span className="af-mono attachment-size">{formatBytes(f.size)}</span>
+          </button>
+          <button type="button" className="attachment-get" aria-label={`Show ${f.name} in Finder`} data-tip="Show this file in Finder." onClick={() => void invoke("compose:revealFile", f.path)}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M3 13h10" />
+            </svg>
+          </button>
+          <button type="button" className="attachment-get" aria-label={`Take ${f.name} off this message`} data-tip="Take this file off the message." onClick={() => removeFile(f.path)}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+const EMPTY: never[] = [];
 
 function SendLaterPopover() {
   const sendCompose = useApp((s) => s.sendCompose);
@@ -154,6 +209,7 @@ export function ComposeFooter() {
         <button className="btn btn-ghost btn-compact" data-tip="Insert a saved snippet at the cursor. Typing ;trigger then Space does the same inline." data-key={hint("snippets")} onClick={() => setSnippetPicker(true)}>
           Snippets
         </button>
+        <AttachButton />
         <ReadReceiptToggle />
         <IconButton glyph="trash" label="Discard draft" keyHint={hint("discardCompose")} tip="Discard this draft. It is deleted here and in Gmail." className="compose-trash" onClick={() => void closeCompose(false)} />
       </div>

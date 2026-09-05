@@ -1,3 +1,4 @@
+import fs from "node:fs";
 // Queues an outgoing message: builds the RFC 822 text with the account's
 // Gmail signature, inserts a send_queue row whose send_at is now plus the undo
 // window (or the chosen send-later time), and can hand the draft back when
@@ -114,6 +115,10 @@ export async function queueSend(db: Db, draft: ComposeDraft, opts: QueueOptions 
     date: later ? new Date(sendAt) : undefined,
     // Last of everything in the HTML part, and never in the plain text part.
     trackingPixelHtml: receipt.pixelHtml,
+    // Read here, at send, rather than when the file was chosen: a draft parked for a week sends
+    // what the file says now. A file that has moved or gone stops the send, with its name, while
+    // the compose can still be reopened; silently sending a message missing its deck is worse.
+    attachments: readAttachments(draft.attachments ?? []),
   });
   const row = enqueueSend(db, {
     accountId: draft.accountId,
@@ -142,4 +147,15 @@ export function undoSend(db: Db, id: number): UndoSendResult & { gmailDraftId: s
   deleteReceiptForSend(db, id);
   const meta = sendMeta(row);
   return { cancelled: true, draft: meta.draft ?? null, gmailDraftId: meta.gmailDraftId ?? null };
+}
+
+/** Loads each chosen file. Throws with the file's name, which is the only useful thing to say. */
+function readAttachments(files: Array<{ path: string; name: string; mimeType: string }>): Array<{ filename: string; content: Buffer; contentType: string }> {
+  return files.map((f) => {
+    try {
+      return { filename: f.name, content: fs.readFileSync(f.path), contentType: f.mimeType };
+    } catch {
+      throw new Error(`${f.name} could not be read. It may have been moved or renamed since it was attached.`);
+    }
+  });
 }

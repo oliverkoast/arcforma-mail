@@ -388,6 +388,19 @@ export interface ComposeDraft {
    * of the draft cannot quietly disarm or arm it.
    */
   readReceipt?: boolean;
+  /**
+   * Files going out with this message. Paths, not bytes: the file is read once, at send, so a
+   * draft parked for a week sends whatever the file says then rather than a stale copy of it.
+   */
+  attachments?: OutgoingAttachmentInfo[];
+}
+
+/** A file chosen to go out on a message. Mirrors lib/outgoingAttachments so both sides agree. */
+export interface OutgoingAttachmentInfo {
+  path: string;
+  name: string;
+  size: number;
+  mimeType: string;
 }
 
 export type DraftMirrorState = "pending" | "synced" | "failed";
@@ -696,6 +709,12 @@ export interface ArcmailInvoke {
   /** Reveals the log file in Finder, so a bug report can carry evidence instead of a memory. */
   "app:openLogFolder": () => void;
   "compose:send": (draft: ComposeDraft, sendAt?: number | null) => SendResult;
+  /** Opens the file picker and answers with what was chosen. Empty when the picker was cancelled. */
+  "compose:pickFiles": () => OutgoingAttachmentInfo[];
+  /** Opens one of this draft's own files in whatever the Mac opens it with. */
+  "compose:openFile": (path: string) => string | null;
+  /** Shows one of this draft's own files in Finder. */
+  "compose:revealFile": (path: string) => void;
   "compose:signature": (accountId: string) => string;
   "drafts:save": (draft: ComposeDraft, opts?: SaveDraftOptions) => number;
   "drafts:list": (accountIds?: string[]) => DraftInfo[];

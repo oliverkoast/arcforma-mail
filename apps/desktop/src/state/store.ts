@@ -35,6 +35,7 @@ import {
 } from "../../shared/types";
 import { ONBOARDING_STEPS, type OnboardingStepId } from "../../shared/onboarding";
 import { TYPING_SCOPES, type Scope } from "../keys/keymap";
+import { addAttachments, checkAttachments } from "../lib/outgoingAttachments";
 import { scopeFor } from "../keys/scope";
 import { installActivityTracker } from "../lib/activity";
 import { defaultExpanded } from "../lib/collapse";
@@ -258,6 +259,10 @@ export interface AppState {
    */
   refreshOpen: () => Promise<void>;
   sendCompose: (sendAt?: number | null) => Promise<void>;
+  /** Opens the file picker and puts what was chosen on the message. */
+  attachFiles: () => Promise<void>;
+  /** Takes one file back off, by the path that identifies it. */
+  removeAttachment: (path: string) => void;
   setSendLater: (open: boolean, pick?: boolean) => void;
   setSnippetPicker: (open: boolean) => void;
   insertSnippet: (s: SnippetInfo) => void;
@@ -1480,6 +1485,26 @@ export const useApp = create<AppState>((set, get) => ({
       get().closeThread();
       get().showToast({ eyebrow: "THREAD GONE", text: (err as Error).message });
     }
+  },
+
+  async attachFiles() {
+    if (!get().compose) return;
+    const picked = await invoke("compose:pickFiles");
+    if (picked.length === 0) return;
+    const next = addAttachments(get().compose?.attachments ?? [], picked);
+    // Refused here, before anything is attached, so the writer finds out while the message is still
+    // theirs to change rather than from a bounce.
+    const check = checkAttachments(next);
+    if (!check.ok) {
+      get().showToast({ eyebrow: "TOO LARGE", text: check.problem });
+      return;
+    }
+    get().updateCompose({ attachments: next });
+  },
+
+  removeAttachment(path) {
+    const files = get().compose?.attachments ?? [];
+    get().updateCompose({ attachments: files.filter((f) => f.path !== path) });
   },
 
   async sendCompose(sendAt = null) {

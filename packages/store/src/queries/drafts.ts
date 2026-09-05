@@ -19,6 +19,8 @@ export interface DraftInput {
   gmailDraftId?: string | null;
   /** The writer armed a read receipt for this message. Kept with the draft so Esc, park, and Gmail's copy do not disarm it. */
   readReceipt?: boolean;
+  /** Files chosen for this draft. Paths, not bytes, read again at send. */
+  attachments?: Array<{ path: string; name: string; size: number; mimeType: string }>;
 }
 
 /**
@@ -31,7 +33,7 @@ export function saveDraft(db: Db, d: DraftInput, now = Date.now()): number {
   if (d.id) {
     db.prepare(
       `UPDATE drafts SET account_id = ?, thread_id = ?, mode = ?, to_json = ?, cc_json = ?, bcc_json = ?, subject = ?, body_html = ?, quoted_html = ?,
-         in_reply_to = ?, references_header = ?, read_receipt = ?, updated_at = ?, local_edited_at = ?, mirror_state = 'pending', mirror_error = NULL WHERE id = ?`
+         in_reply_to = ?, references_header = ?, read_receipt = ?, attachments_json = ?, updated_at = ?, local_edited_at = ?, mirror_state = 'pending', mirror_error = NULL WHERE id = ?`
     ).run(
       d.accountId,
       d.threadId ?? null,
@@ -45,6 +47,7 @@ export function saveDraft(db: Db, d: DraftInput, now = Date.now()): number {
       d.inReplyTo ?? null,
       d.references ?? null,
       d.readReceipt ? 1 : 0,
+      JSON.stringify(d.attachments ?? []),
       now,
       now,
       d.id
@@ -53,9 +56,9 @@ export function saveDraft(db: Db, d: DraftInput, now = Date.now()): number {
   }
   const res = db
     .prepare(
-      `INSERT INTO drafts (account_id, thread_id, mode, to_json, cc_json, bcc_json, subject, body_html, quoted_html, in_reply_to, references_header, read_receipt, created_at, updated_at,
+      `INSERT INTO drafts (account_id, thread_id, mode, to_json, cc_json, bcc_json, subject, body_html, quoted_html, in_reply_to, references_header, read_receipt, attachments_json, created_at, updated_at,
          gmail_draft_id, mirror_state, origin, local_edited_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'local', ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'local', ?)`
     )
     .run(
       d.accountId,
@@ -70,6 +73,7 @@ export function saveDraft(db: Db, d: DraftInput, now = Date.now()): number {
       d.inReplyTo ?? null,
       d.references ?? null,
       d.readReceipt ? 1 : 0,
+      JSON.stringify(d.attachments ?? []),
       now,
       now,
       d.gmailDraftId ?? null,

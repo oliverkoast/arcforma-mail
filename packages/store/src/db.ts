@@ -10,7 +10,7 @@ export type Db = DatabaseSync;
 
 /** The schema every opened store is migrated up to. Exported so tests assert against this rather
  *  than a copy of the number, which went stale on every bump and failed four suites at once. */
-export const SCHEMA_VERSION = 17;
+export const SCHEMA_VERSION = 18;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
@@ -320,6 +320,8 @@ export function migrate(db: Db): void {
     // An invitation's own VEVENT, so the reading pane can show the event rather than Google's
     // picture of a table. Nothing is backfilled: the part is kept when a body is next fetched.
     { version: 17, sql: () => "SELECT 1", after: (d) => addCalendarColumn(d) },
+    // Files chosen for a draft, so parking one with Esc does not quietly drop what was attached.
+    { version: 18, sql: () => "SELECT 1", after: (d) => addDraftAttachments(d) },
   ];
   for (const step of steps) {
     if (step.version <= current) continue;
@@ -436,4 +438,10 @@ export function repairInlineAttachments(db: Db): number {
 function addCalendarColumn(db: Db): void {
   const have = new Set((db.prepare("PRAGMA table_info(message_bodies)").all() as Array<{ name: string }>).map((c) => c.name));
   if (!have.has("calendar_json")) db.exec("ALTER TABLE message_bodies ADD COLUMN calendar_json TEXT");
+}
+
+/** ALTER TABLE ADD COLUMN has no IF NOT EXISTS, so the column is checked first; the step can then rerun like the others. */
+function addDraftAttachments(db: Db): void {
+  const have = new Set((db.prepare("PRAGMA table_info(drafts)").all() as Array<{ name: string }>).map((c) => c.name));
+  if (!have.has("attachments_json")) db.exec("ALTER TABLE drafts ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'");
 }

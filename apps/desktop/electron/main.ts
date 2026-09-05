@@ -500,6 +500,21 @@ const SMOKE_STEPS: SmokeStep[] = [
       "console.log('SEND CHORD had a draft open:', before, 'and it closed:', window.__arcmail.compose === null);",
     waitMs: 700,
   },
+  // Files on an outgoing message: the chips, their sizes, and the controls beside them. The picker
+  // itself is a native dialog and cannot be driven here, so the files are put on the draft directly
+  // and what is checked is everything after that.
+  {
+    name: "compose-attachments",
+    script:
+      "window.__arcmail.openCompose('reply');" +
+      "await new Promise((r) => setTimeout(r, 500));" +
+      "window.__arcmail.updateCompose({ attachments: [" +
+      "{ path: '/tmp/arcmail-smoke-deck.pdf', name: 'Arcforma quick deck.pdf', size: 2411724, mimeType: 'application/pdf' }," +
+      "{ path: '/tmp/arcmail-smoke-notes.md', name: 'Meeting notes.md', size: 8312, mimeType: 'text/markdown' }] });" +
+      "await new Promise((r) => setTimeout(r, 400));" +
+      "console.log('COMPOSE ATTACHMENTS:', document.querySelectorAll('.compose-attachments .attachment').length, document.querySelector('.compose-attachments .attachment-size')?.textContent ?? '');",
+    waitMs: 600,
+  },
   // Typing a company name into Cc offers the people already written to at that domain.
   {
     name: "recipient-suggest",

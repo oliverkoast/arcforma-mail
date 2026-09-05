@@ -194,6 +194,8 @@ export interface ReminderRow {
 }
 
 export interface DraftRow {
+  /** JSON array of files chosen for this draft. Paths, not bytes. */
+  attachments_json: string;
   id: number;
   account_id: string;
   thread_id: string | null;

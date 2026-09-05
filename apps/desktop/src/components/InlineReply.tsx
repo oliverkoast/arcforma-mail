@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useApp } from "../state/store";
 import { draftPreview, hasBody } from "../lib/compose";
 import { ComposeEditor, MODE_LABEL } from "./ComposeEditor";
-import { ComposeFooter } from "./ComposeFooter";
+import { ComposeAttachments, ComposeFooter } from "./ComposeFooter";
 import { RecipientLine } from "./RecipientLine";
 import { ReplyIcons, hint } from "./IconButton";
 import type { ComposeDraft, DraftInfo, ThreadView } from "../../shared/types";
@@ -52,6 +52,7 @@ function InlineBox({ compose }: { compose: ComposeDraft }) {
         </label>
       ) : null}
       <ComposeEditor compose={compose} autofocus={compose.to.length > 0} />
+      <ComposeAttachments />
       <ComposeFooter />
     </section>
   );
