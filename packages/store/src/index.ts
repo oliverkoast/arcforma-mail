@@ -2,6 +2,7 @@ export { openStore, migrate, schemaVersion, SCHEMA_VERSION, repairInlineAttachme
 export * from "./types.js";
 export * from "./mail-headers.js";
 export * from "./queries/accounts.js";
+export * from "./queries/recipients.js";
 export * from "./queries/labels.js";
 export * from "./queries/messages.js";
 export * from "./queries/attachments.js";

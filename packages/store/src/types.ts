@@ -99,6 +99,8 @@ export interface MessageBodyRow {
   html: string | null;
   text: string | null;
   attachments_json: string;
+  /** The message's calendar part, parsed, as JSON. Null on the overwhelming majority of mail. */
+  calendar_json: string | null;
   fetched_at: number;
 }
 

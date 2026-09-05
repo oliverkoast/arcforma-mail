@@ -180,16 +180,21 @@ export interface BodyInput {
   html?: string | null;
   text?: string | null;
   attachments?: unknown[];
+  /** The parsed VEVENT of an invitation, when the message carried one. */
+  calendar?: unknown | null;
 }
 
 export function saveBody(db: Db, accountId: string, messageId: string, body: BodyInput): void {
   transaction(db, () => {
     db.prepare(
-      `INSERT INTO message_bodies (account_id, message_id, html, text, attachments_json, fetched_at) VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO message_bodies (account_id, message_id, html, text, attachments_json, calendar_json, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(account_id, message_id) DO UPDATE SET html = excluded.html, text = excluded.text,
-         attachments_json = excluded.attachments_json, fetched_at = excluded.fetched_at`
-    ).run(accountId, messageId, body.html ?? null, body.text ?? null, JSON.stringify(body.attachments ?? []), Date.now());
-    if ((body.attachments ?? []).length > 0) {
+         attachments_json = excluded.attachments_json, calendar_json = excluded.calendar_json, fetched_at = excluded.fetched_at`
+    ).run(accountId, messageId, body.html ?? null, body.text ?? null, JSON.stringify(body.attachments ?? []), body.calendar ? JSON.stringify(body.calendar) : null, Date.now());
+    // Only files someone could open count. Inline images are the message's own layout, and counting
+    // them lit the paperclip on mail with nothing to show for it.
+    const files = (body.attachments ?? []).filter((a) => (a as { inline?: boolean }).inline !== true);
+    if (files.length > 0) {
       db.prepare("UPDATE messages SET has_attachments = 1 WHERE account_id = ? AND id = ?").run(accountId, messageId);
     }
     indexMessage(db, accountId, messageId);

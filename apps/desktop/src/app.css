@@ -2501,3 +2501,124 @@ button.message-from {
   width: 13px;
   height: 13px;
 }
+
+/* The people already written to, offered under a recipient field. Anchored to the field rather than
+   the panel so it follows To and Cc without either knowing about the other. */
+.compose-field-input {
+  position: relative;
+  display: block;
+  flex: 1;
+  min-width: 0;
+}
+.compose-field-input input {
+  width: 100%;
+}
+.recipient-suggest {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  /* Above the compose footer, which paints at 40: the list opened over Send and the two drew on top
+     of each other. A combobox list has to cover what is under it or it cannot be read. */
+  z-index: 70;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 216px;
+  overflow-y: auto;
+  background: var(--af-paper);
+  border: 1px solid var(--af-rule);
+  border-radius: 10px;
+}
+.recipient-suggest-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--af-text-body);
+}
+.recipient-suggest-row.is-active {
+  background: var(--af-bg);
+  color: var(--af-text);
+}
+.recipient-suggest-name {
+  font-weight: 500;
+  white-space: nowrap;
+}
+.recipient-suggest-mail,
+.recipient-suggest-note {
+  color: var(--af-text-soft);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Says why this row is near the top at all: it is someone mail has actually gone to. */
+.recipient-suggest-note {
+  margin-left: auto;
+  font-size: 10px;
+  flex: none;
+}
+
+/* A calendar invitation, read out of its own .ics. Sits above the message body, because the body is
+   Google's picture of a table and this is the part worth reading. */
+.invite {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  margin: 4px 0 12px;
+  border: 1px solid var(--af-rule);
+  border-radius: 12px;
+  background: var(--af-bg-alt);
+}
+.invite-eyebrow {
+  color: var(--af-text-soft);
+}
+.invite.is-cancelled .invite-title {
+  text-decoration: line-through;
+}
+.invite-title {
+  font-size: 17px;
+  font-weight: 600;
+}
+.invite-when {
+  font-weight: 500;
+}
+.invite-where,
+.invite-org,
+.invite-repeat {
+  color: var(--af-text-body);
+}
+.invite-people {
+  margin-top: 6px;
+}
+.invite-people summary {
+  cursor: pointer;
+  color: var(--af-text-soft);
+}
+.invite-people ul {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.invite-people li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.invite-answer {
+  color: var(--af-text-soft);
+  font-size: 11px;
+}
+.invite-note {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  color: var(--af-text-body);
+}

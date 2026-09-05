@@ -4,6 +4,7 @@
 // and the Daily 0 / Weekly 0 / Later queues with their day and week start.
 
 import fs from "node:fs";
+import { parseIcs } from "@arcforma/gmail";
 import {
   attentionContext,
   attentionFactsFor,
@@ -192,7 +193,9 @@ export function seedFixture(db: Db, file: string, now = Date.now()): { threads: 
     for (const m of t.messages) {
       const files = (m.attachments ?? []).map(buildAttachment);
       const invite = m.calendar ? [{ partId: "ics", filename: "invite.ics", mimeType: "text/calendar", size: 1200, attachmentId: null, contentId: null, inline: false, data: null }] : [];
-      saveBody(db, t.accountId, m.id, { html: m.html ?? null, text: m.text ?? null, attachments: [...invite, ...files] });
+      // A real VEVENT, so the reading pane's invitation card is exercised rather than assumed.
+      const event = m.calendar ? parseIcs(fixtureIcs(m.subject ?? "Invitation", hoursFromNow(-(m.hoursAgo ?? 0)))) : null;
+      saveBody(db, t.accountId, m.id, { html: m.html ?? null, text: m.text ?? null, attachments: [...invite, ...files], calendar: event });
     }
     const last = t.messages[t.messages.length - 1]!;
     if (t.classification) {
@@ -266,4 +269,40 @@ function scoreSeededThreads(db: Db, now: number): void {
     const band = r.source === "manual" ? (split === "important" ? "important" : "other") : v.band;
     updateAttention(db, { accountId: r.account_id, threadId: r.thread_id, split, attention: v.score, band, reason: v.reason });
   }
+}
+
+/** Two days out at 09:00 local, which is inside the working hours the calendar grid shows. */
+function hoursFromNow(_h: number): Date {
+  const d = new Date();
+  d.setDate(d.getDate() + 2);
+  d.setHours(9, 0, 0, 0);
+  return d;
+}
+
+function stamp(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}T${p(d.getHours())}${p(d.getMinutes())}00`;
+}
+
+function fixtureIcs(summary: string, start: Date): string {
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  return [
+    "BEGIN:VCALENDAR",
+    "METHOD:REQUEST",
+    "BEGIN:VEVENT",
+    "UID:coach1@arcforma.ai",
+    "SEQUENCE:0",
+    `DTSTART:${stamp(start)}`,
+    `DTEND:${stamp(end)}`,
+    `SUMMARY:${summary.replace(/^Invitation:\s*/, "").replace(/\s*@.*$/, "")}`,
+    "LOCATION:Google Meet\\, meet.google.com/abc-defg-hij",
+    "DESCRIPTION:Bring the session plan.\\nWe will cover scope and pricing.",
+    "ORGANIZER;CN=Dana Reyes:mailto:dana@northwind-coaching.example",
+    "ATTENDEE;CN=Oliver Korzen;PARTSTAT=NEEDS-ACTION:mailto:you@example.com",
+    "ATTENDEE;CN=Dana Reyes;PARTSTAT=ACCEPTED:mailto:dana@northwind-coaching.example",
+    "ATTENDEE;CN=Priya Natarajan;PARTSTAT=TENTATIVE:mailto:priya@northwind.example",
+    "RRULE:FREQ=WEEKLY;BYDAY=TU",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
 }

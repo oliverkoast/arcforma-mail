@@ -1,7 +1,8 @@
 import { ipcMain, shell } from "electron";
 import { shouldLoadImages } from "../images.js";
-import { fetchThreadFull, findBody, listAttachments } from "@arcforma/gmail";
+import { decodeBody, fetchThreadFull, findBody, findCalendarText, listAttachments, parseIcs } from "@arcforma/gmail";
 import {
+  suggestRecipients,
   archive,
   cancelSnooze,
   createReminder,
@@ -47,7 +48,7 @@ import { scheduledSendId, scheduledSummary, scheduledView } from "../scheduled.j
 import type { Scheduler } from "../scheduler.js";
 import { unsubscribeThread } from "../unsubscribe.js";
 import type { SyncManager } from "../sync.js";
-import type { Address, AttachmentInfo, CategoryInfo, ListRequest, ListResponse, MessageView, ReceiptSummary, ThreadSummary, ThreadView, UnsubscribeResult } from "../../shared/types.js";
+import type { Address, AttachmentInfo, CategoryInfo, ListRequest, ListResponse, MessageView, ReceiptSummary, ThreadSummary, ThreadView, UnsubscribeResult, RecipientSuggestion, CalendarInvite } from "../../shared/types.js";
 
 export function toSummary(row: ThreadListRow): ThreadSummary {
   return {
@@ -113,6 +114,17 @@ function messageReceipt(db: Db, m: MessageRow): ReceiptSummary | null {
   return receiptSummary(receiptEvents(db, [row.token]));
 }
 
+/** The stored VEVENT as the renderer's shape. A row written before schema 17, or malformed JSON, is no invitation. */
+function inviteOf(json: string | null): CalendarInvite | null {
+  if (!json) return null;
+  try {
+    const e = JSON.parse(json) as CalendarInvite;
+    return e && typeof e.summary === "string" ? e : null;
+  } catch {
+    return null;
+  }
+}
+
 function toMessageView(db: Db, m: MessageRow): MessageView {
   const body = getBody(db, m.account_id, m.id);
   const contact = getContact(db, m.from_email);
@@ -149,6 +161,7 @@ function toMessageView(db: Db, m: MessageRow): MessageView {
     // attachment id and the inline base64 data stay in the main process: the
     // renderer asks for a part of a message, never for bytes or a path.
     body: body ? { html: body.html, text: body.text, attachments: attachmentInfos(body.attachments_json) } : null,
+    invite: inviteOf(body?.calendar_json ?? null),
     loadImages: shouldLoadImages(db, m, contact?.load_images ?? null),
     receipt: messageReceipt(db, m),
   };
@@ -230,7 +243,7 @@ export function registerThreadIpc(db: Db, accounts: AccountRegistry, sync: SyncM
             // Only messages the store knows: a body for a message the sync has not landed yet would violate the key.
             if (!known.has(m.id)) continue;
             const body = findBody(m.payload);
-            saveBody(db, accountId, m.id, { html: body.html, text: body.text, attachments: listAttachments(m.payload, [], body.html) });
+            saveBody(db, accountId, m.id, { html: body.html, text: body.text, attachments: listAttachments(m.payload, [], body.html), calendar: parseIcs(findCalendarText(m.payload, decodeBody) ?? "") });
           }
           messages = listThreadMessages(db, accountId, threadId);
           const still = listBodies(db, accountId, threadId).length;
@@ -296,5 +309,10 @@ export function registerThreadIpc(db: Db, accounts: AccountRegistry, sync: SyncM
     return toggleQueue(db, accountId, threadId, queue);
   });
   ipcMain.handle("categories:list", (): CategoryInfo[] => categoryInfos(db));
+  ipcMain.handle("recipients:suggest", (_e, query: unknown, exclude: unknown): RecipientSuggestion[] =>
+    suggestRecipients(db, typeof query === "string" ? query : "", {
+      exclude: Array.isArray(exclude) ? exclude.filter((x): x is string => typeof x === "string") : [],
+    }),
+  );
   ipcMain.handle("contacts:setLoadImages", (_e, email: string, load: boolean) => setLoadImages(db, requireEmail(email), Boolean(load)));
 }

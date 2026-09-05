@@ -11,6 +11,7 @@ import { InlineReply } from "./InlineReply";
 import { IconButton, ReplyIcons, hint } from "./IconButton";
 import { MessageBody } from "./MessageBody";
 import { MessageHeader } from "./MessageHeader";
+import { InviteCard } from "./InviteCard";
 import type { AttachmentInfo, MessageView, RefileTarget, ThreadSummary } from "../../shared/types";
 
 const NO_PRIORS: string[] = [];
@@ -311,6 +312,7 @@ export function ReadingPane() {
                       )
                     }
                   />
+                  {m.invite ? <InviteCard invite={m.invite} /> : null}
                   <MessageBody message={m} priorTexts={priorTexts[i] ?? NO_PRIORS} pending={open.bodiesPending} />
                   <Attachments message={m} />
                 </>

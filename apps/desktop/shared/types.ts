@@ -192,6 +192,8 @@ export interface MessageView {
   loadImages: boolean;
   /** What the pixel service knows about this message, when the sender armed a receipt on it. Null otherwise, which is almost always. */
   receipt?: ReceiptSummary | null;
+  /** The event this message is an invitation to, when it carried a calendar part. */
+  invite?: CalendarInvite | null;
 }
 
 export interface ThreadView {
@@ -320,6 +322,31 @@ export interface SnippetInfo {
   name: string;
   bodyHtml: string;
   bodyText: string;
+}
+
+/** A calendar invitation, read out of the message's own .ics rather than the picture Google draws of it. */
+export interface CalendarInvite {
+  method: string;
+  summary: string;
+  location: string;
+  description: string;
+  startsAt: number | null;
+  endsAt: number | null;
+  allDay: boolean;
+  recurrence: string;
+  organizer: { email: string; name: string; status: string } | null;
+  attendees: Array<{ email: string; name: string; status: string }>;
+  status: string;
+  sequence: number;
+}
+
+/** One row of the recipient autocomplete. */
+export interface RecipientSuggestion {
+  email: string;
+  name: string;
+  sent: number;
+  received: number;
+  lastAt: number;
 }
 
 export interface SettingsInfo {
@@ -656,6 +683,8 @@ export interface ArcmailInvoke {
   "attachments:saveAs": (accountId: string, messageId: string, key: string) => AttachmentSaveResult;
   /** What the preview window shows. Only answers for an attachment whose bytes are already cached. */
   "attachments:detail": (accountId: string, messageId: string, key: string) => AttachmentDetail;
+  /** Addresses worth offering while a recipient is being typed, best first. */
+  "recipients:suggest": (query: string, exclude: string[]) => RecipientSuggestion[];
   "contacts:setLoadImages": (email: string, load: boolean) => void;
   "search:query": (query: string, accountIds?: string[]) => SearchHitView[];
   "scheduler:status": () => SchedulerStatus;

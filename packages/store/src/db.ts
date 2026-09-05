@@ -10,7 +10,7 @@ export type Db = DatabaseSync;
 
 /** The schema every opened store is migrated up to. Exported so tests assert against this rather
  *  than a copy of the number, which went stale on every bump and failed four suites at once. */
-export const SCHEMA_VERSION = 16;
+export const SCHEMA_VERSION = 17;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
@@ -317,6 +317,9 @@ export function migrate(db: Db): void {
     // Every attachment Gmail stamped a Content-ID on was stored as inline and never rendered. The
     // files are in the database already, so this re-decides them in place rather than refetching.
     { version: 16, sql: () => "SELECT 1", after: (d) => repairInlineAttachments(d) },
+    // An invitation's own VEVENT, so the reading pane can show the event rather than Google's
+    // picture of a table. Nothing is backfilled: the part is kept when a body is next fetched.
+    { version: 17, sql: () => "SELECT 1", after: (d) => addCalendarColumn(d) },
   ];
   for (const step of steps) {
     if (step.version <= current) continue;
@@ -427,4 +430,10 @@ export function repairInlineAttachments(db: Db): number {
     )
   `);
   return changed;
+}
+
+/** ALTER TABLE ADD COLUMN has no IF NOT EXISTS, so the column is checked first; the step can then rerun like the others. */
+function addCalendarColumn(db: Db): void {
+  const have = new Set((db.prepare("PRAGMA table_info(message_bodies)").all() as Array<{ name: string }>).map((c) => c.name));
+  if (!have.has("calendar_json")) db.exec("ALTER TABLE message_bodies ADD COLUMN calendar_json TEXT");
 }

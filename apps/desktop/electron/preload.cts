@@ -40,6 +40,7 @@ const INVOKE_CHANNELS = new Set([
   "attachments:saveAs",
   "attachments:detail",
   "contacts:setLoadImages",
+  "recipients:suggest",
   "search:query",
   "scheduler:status",
   "send:undo",

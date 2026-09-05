@@ -500,6 +500,23 @@ const SMOKE_STEPS: SmokeStep[] = [
       "console.log('SEND CHORD had a draft open:', before, 'and it closed:', window.__arcmail.compose === null);",
     waitMs: 700,
   },
+  // Typing a company name into Cc offers the people already written to at that domain.
+  {
+    name: "recipient-suggest",
+    script:
+      "window.__arcmail.openCompose('reply');" +
+      "await new Promise((r) => setTimeout(r, 500));" +
+      "document.querySelector('.recipient-line')?.click();" +
+      "await new Promise((r) => setTimeout(r, 300));" +
+      "const cc = [...document.querySelectorAll('.compose-field')].find((f) => f.textContent.trim().startsWith('Cc'))?.querySelector('input');" +
+      "cc.focus();" +
+      "const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;" +
+      "set.call(cc, 'example'); cc.dispatchEvent(new Event('input', { bubbles: true }));" +
+      "await new Promise((r) => setTimeout(r, 500));" +
+      "const raw = await window.arcmail.invoke('recipients:suggest', 'example', []);" +
+      "console.log('RECIPIENT SUGGESTIONS: rows', document.querySelectorAll('.recipient-suggest-row').length, 'ipc', raw.length, JSON.stringify(raw.slice(0, 2)));",
+    waitMs: 700,
+  },
   { name: "inline-reply-mid", script: "window.__arcmail.openCompose('reply', { messageId: 'm-k6' }); await new Promise((r) => setTimeout(r, 400)); document.querySelector('.inline-reply').scrollIntoView({ block: 'center' });", waitMs: 1200 },
   // The pointer rests on the Mark done icon for longer than the tooltip delay: the card sits under it with the E hint.
   { name: "tooltip-mark-done", script: null, hover: ".reading-actions .icon-btn[data-glyph='done']", waitMs: 900 },
@@ -575,6 +592,18 @@ const SMOKE_STEPS: SmokeStep[] = [
   { name: "done-view", script: "window.__arcmail.showToast(null); window.__arcmail.setView('archive'); await new Promise((r) => setTimeout(r, 700)); document.querySelector('.nav-row[data-row-id=\"archive\"]').scrollIntoView({ block: 'center' }); await new Promise((r) => setTimeout(r, 300));", hover: ".nav-row[data-row-id='archive'] .nav-item", waitMs: 2000 },
   // A thread opened from Done: the mono DONE eyebrow says where it is, and the tray glyph puts it back.
   { name: "done-thread", script: "window.__arcmail.select(0); await window.__arcmail.openSelected();", hover: ".reading-actions .icon-btn[data-glyph='inbox']", waitMs: 2500 },
+  // The invitation card: the event out of the .ics, above the message that carried it.
+  {
+    name: "invite-card",
+    script:
+      "window.__arcmail.setView('inbox');" +
+      "await new Promise((r) => setTimeout(r, 900));" +
+      "const row = window.__arcmail.rows.findIndex((r) => r.subject.startsWith('Invitation:'));" +
+      "window.__arcmail.select(row); await window.__arcmail.openSelected();" +
+      "await new Promise((r) => setTimeout(r, 900));" +
+      "console.log('INVITE CARD:', document.querySelectorAll('.invite').length, document.querySelector('.invite-when')?.textContent ?? '');",
+    waitMs: 900,
+  },
 ];
 
 /**
