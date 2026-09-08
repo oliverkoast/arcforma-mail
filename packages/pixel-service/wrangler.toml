@@ -2,9 +2,15 @@ name = "arcforma-pixel"
 main = "src/cloudflare.mjs"
 compatibility_date = "2026-01-01"
 
-# Create with: wrangler kv namespace create EVENTS
-# [[kv_namespaces]]
-# binding = "EVENTS"
-# id = "<the id wrangler prints>"
+# Where fetches are recorded. Without this binding the worker deploys and answers, but records
+# nothing: the first deploy went out this way and every route worked except the one that matters.
+[[kv_namespaces]]
+binding = "EVENTS"
+id = "0df2053a9ac341ba948b3bfab36a693e"
+
+# The workers.dev address is the address; previews would mint extra public copies of a tracking
+# endpoint, which nobody asked for.
+workers_dev = true
+preview_urls = false
 
 # Set with: wrangler secret put PIXEL_AUTH_TOKEN
