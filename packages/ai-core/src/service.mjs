@@ -53,7 +53,7 @@ export class AiService {
    * Try a routed task on the local model. Returns a result on success, null to fall through.
    * @param {object} req  @param {object} route
    */
-  async _routeLocal(req, route) {
+  async _routeLocal(req, route, { strict = true } = {}) {
     if (!this.local.configured || this.local.status() === "missing") return null;
     if (typeof req.user !== "string" || req.user.length > route.maxChars) return null;
     let selected = null;
@@ -67,7 +67,11 @@ export class AiService {
       if (r.finish && r.finish !== "stop") { this.log(`local route ${req.task}: truncated (${r.finish}), falling back`); return null; }
       const text = unwrapLocal(r.text);
       const ratio = text.length / Math.max(1, selected.length);
-      if (!text.trim() || ratio < 0.6 || ratio > 1.6 || /—|–/.test(text)) {
+      // Truncated or empty is unusable either way. The rest of these are quality bars, and a quality
+      // bar is the wrong question once Claude is the thing that failed: the choice then is this
+      // answer or no answer.
+      if (!text.trim()) return null;
+      if (strict && (ratio < 0.6 || ratio > 1.6 || /—|–/.test(text))) {
         this.log(`local route ${req.task}: rejected (ratio ${ratio.toFixed(2)}), falling back`);
         return null;
       }
@@ -130,7 +134,21 @@ export class AiService {
     }
     if (!system) return { ok: false, code: "bad_request", error: "system or task required" };
     const r = await this.claude.complete({ system, user: req.user, model: req.model, timeoutMs: req.timeoutMs, requestId: req.requestId, allowedTools: req.allowedTools });
-    if (!r.ok) return { ...r, engine: "claude" };
+    if (!r.ok) {
+      // The fallback used to run one way only. A task routed to the local model fell through to
+      // Claude when the local answer was not good enough, and a signed-out Claude then failed the
+      // whole request with a healthy local model sitting idle: Cmd+J stopped working every time an
+      // OAuth token expired, which is often. Now the local model gets the last word too, with the
+      // quality bar dropped, because a merely adequate fix beats "sign in to Claude Code".
+      if (route?.engine === "local" && !req.model) {
+        const rescue = await this._routeLocal(req, route, { strict: false });
+        if (rescue) {
+          this.log(`claude ${r.code ?? "failed"}, answered ${req.task} on the local model instead`);
+          return { ...rescue, degraded: true };
+        }
+      }
+      return { ...r, engine: "claude" };
+    }
     let text = r.text;
     try { text = extractMarked(text, marker); } catch (e) { return { ok: false, code: e.code, error: e.message, engine: "claude", model: r.model }; }
     let json;
