@@ -32,6 +32,7 @@ import {
   type ThreadView,
   type ToastEvent,
   type ToastUndo,
+  type OutgoingAttachmentInfo,
 } from "../../shared/types";
 import { ONBOARDING_STEPS, type OnboardingStepId } from "../../shared/onboarding";
 import { TYPING_SCOPES, type Scope } from "../keys/keymap";
@@ -261,6 +262,8 @@ export interface AppState {
   sendCompose: (sendAt?: number | null) => Promise<void>;
   /** Opens the file picker and puts what was chosen on the message. */
   attachFiles: () => Promise<void>;
+  /** Files dropped onto the compose, as absolute paths. Same size rules as the picker. */
+  addFiles: (paths: string[]) => Promise<void>;
   /** Takes one file back off, by the path that identifies it. */
   removeAttachment: (path: string) => void;
   setSendLater: (open: boolean, pick?: boolean) => void;
@@ -362,6 +365,20 @@ let listSeq = 0;
  * This is not what made E look broken. That was a stale threads:list landing after the keypress and
  * writing the archived row back, which listSeq now prevents.
  */
+/** Attaches described files to the open compose, or refuses all of them with a reason. */
+function mergeOutgoing(get: () => AppState, picked: OutgoingAttachmentInfo[]): void {
+  if (picked.length === 0) return;
+  const next = addAttachments(get().compose?.attachments ?? [], picked);
+  // Refused here, before anything is attached, so the writer finds out while the message is still
+  // theirs to change rather than from a bounce.
+  const check = checkAttachments(next);
+  if (!check.ok) {
+    get().showToast({ eyebrow: "TOO LARGE", text: check.problem });
+    return;
+  }
+  get().updateCompose({ attachments: next });
+}
+
 function actionTarget(s: AppState): ThreadSummary | undefined {
   return s.rows[s.selected] ?? s.open?.thread;
 }
@@ -1489,17 +1506,12 @@ export const useApp = create<AppState>((set, get) => ({
 
   async attachFiles() {
     if (!get().compose) return;
-    const picked = await invoke("compose:pickFiles");
-    if (picked.length === 0) return;
-    const next = addAttachments(get().compose?.attachments ?? [], picked);
-    // Refused here, before anything is attached, so the writer finds out while the message is still
-    // theirs to change rather than from a bounce.
-    const check = checkAttachments(next);
-    if (!check.ok) {
-      get().showToast({ eyebrow: "TOO LARGE", text: check.problem });
-      return;
-    }
-    get().updateCompose({ attachments: next });
+    mergeOutgoing(get, await invoke("compose:pickFiles"));
+  },
+
+  async addFiles(paths) {
+    if (!get().compose || paths.length === 0) return;
+    mergeOutgoing(get, await invoke("compose:addFiles", paths));
   },
 
   removeAttachment(path) {

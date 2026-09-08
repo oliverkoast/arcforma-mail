@@ -2636,3 +2636,12 @@ button.message-from {
 .compose-attachments {
   margin: 8px 0 0;
 }
+
+/* A file is over the compose. One line of cobalt inside the edge, nothing else moves: the box is
+   saying "let go here", and it looks the same whether the compose is the panel or the inline
+   reply. */
+.compose.is-dropping,
+.inline-reply.is-dropping {
+  outline: 2px solid var(--af-accent);
+  outline-offset: -2px;
+}

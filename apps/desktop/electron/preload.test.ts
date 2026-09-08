@@ -24,11 +24,13 @@ test("the preload allows exactly the invoke channels the IPC contract declares",
   assert.deepEqual(setLiteral(preload, "EVENT_CHANNELS").sort(), [...EVENT_CHANNELS].sort());
 });
 
-test("the preload exposes only invoke, on, and platform, never ipcRenderer itself", () => {
+test("the preload exposes invoke, on, platform and pathsForFiles, never ipcRenderer itself", () => {
+  // pathsForFiles turns dropped File objects into absolute paths through webUtils. It hands the
+  // renderer strings, not a channel: the paths still go through compose:addFiles like any invoke.
   const exposed = /exposeInMainWorld\("arcmail",\s*\{([\s\S]*?)\n\}\);/.exec(preload);
   assert.ok(exposed, "exposeInMainWorld not found");
   const keys = [...exposed![1]!.matchAll(/^\s{2}(\w+):/gm)].map((m) => m[1]!).sort();
-  assert.deepEqual(keys, ["invoke", "on", "platform"]);
+  assert.deepEqual(keys, ["invoke", "on", "pathsForFiles", "platform"]);
   assert.equal(/ipcRenderer\s*[,}]/.test(exposed![1]!), false, "ipcRenderer is not handed to the renderer");
   assert.match(preload, /INVOKE_CHANNELS\.has\(channel\)/, "invoke checks the allowlist");
   assert.match(preload, /removeListener\(channel, listener\)/, "on returns an unsubscribe");

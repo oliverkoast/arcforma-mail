@@ -7,16 +7,6 @@ import { invoke } from "../bridge";
 import { formatBytes } from "../lib/outgoingAttachments";
 
 /** Puts a file on the message. Files are read at send, so this only records where they are. */
-function AttachButton() {
-  const attachFiles = useApp((s) => s.attachFiles);
-  return (
-    <button className="btn btn-ghost btn-compact" data-tip="Attach a file. Gmail will not send more than 25 MB in total." onClick={() => void attachFiles()}>
-      <Icon glyph="paperclip" />
-      Attach
-    </button>
-  );
-}
-
 /**
  * The files going out with this message.
  *
@@ -209,7 +199,6 @@ export function ComposeFooter() {
         <button className="btn btn-ghost btn-compact" data-tip="Insert a saved snippet at the cursor. Typing ;trigger then Space does the same inline." data-key={hint("snippets")} onClick={() => setSnippetPicker(true)}>
           Snippets
         </button>
-        <AttachButton />
         <ReadReceiptToggle />
         <IconButton glyph="trash" label="Discard draft" keyHint={hint("discardCompose")} tip="Discard this draft. It is deleted here and in Gmail." className="compose-trash" onClick={() => void closeCompose(false)} />
       </div>

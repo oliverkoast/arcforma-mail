@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useApp } from "../state/store";
+import { useFileDrop } from "../lib/useFileDrop";
 import { draftPreview, hasBody } from "../lib/compose";
 import { ComposeEditor, MODE_LABEL } from "./ComposeEditor";
 import { ComposeAttachments, ComposeFooter } from "./ComposeFooter";
@@ -23,6 +24,8 @@ function DraftStrip({ text, onOpen }: { text: string; onOpen: () => void }) {
 }
 
 function InlineBox({ compose }: { compose: ComposeDraft }) {
+  const addFiles = useApp((s) => s.addFiles);
+  const drop = useFileDrop(addFiles);
   const accounts = useApp((s) => s.status.accounts);
   const updateCompose = useApp((s) => s.updateCompose);
   const dismissCompose = useApp((s) => s.dismissCompose);
@@ -35,7 +38,7 @@ function InlineBox({ compose }: { compose: ComposeDraft }) {
   }, [key]);
   const withBody = hasBody(compose);
   return (
-    <section ref={ref} className="inline-reply" aria-label={MODE_LABEL[compose.mode]}>
+    <section ref={ref} className={`inline-reply${drop.dropping ? " is-dropping" : ""}`} {...drop.props} aria-label={MODE_LABEL[compose.mode]}>
       <div className="compose-head">
         <span className="af-mono">
           {MODE_LABEL[compose.mode]} · From {account?.email ?? compose.accountId}

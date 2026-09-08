@@ -78,6 +78,12 @@ const previewBridge: RawBridge = {
 
 const raw: RawBridge = window.arcmail ?? previewBridge;
 
+/** Absolute paths for files dropped onto the app. Empty for anything that has no path. */
+export function pathsForFiles(files: File[]): string[] {
+  const fn = (window.arcmail as { pathsForFiles?: (f: File[]) => string[] } | undefined)?.pathsForFiles;
+  return fn ? fn(files).filter((x) => typeof x === "string" && x.length > 0) : [];
+}
+
 export const isElectron = Boolean(window.arcmail);
 
 export function invoke<C extends InvokeChannel>(channel: C, ...args: Parameters<ArcmailInvoke[C]>): Promise<ReturnType<ArcmailInvoke[C]>> {

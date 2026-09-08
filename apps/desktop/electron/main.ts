@@ -492,6 +492,24 @@ const SMOKE_STEPS: SmokeStep[] = [
   // Esc: the box collapses to its one-line strip and the keys go back to the thread.
   { name: "inline-strip", script: "await window.__arcmail.dismissCompose();", waitMs: 800 },
   // Reply from a message in the middle of the thread: the box moves under it, recipients come from that message, the typed text comes along.
+  // A file dragged over the compose lights the edge, and letting go clears it. A synthetic File has
+  // no path in a sandboxed renderer, so nothing can attach here; what this proves is that the drop
+  // zone is wired on the open compose and that a drop with nothing usable in it is harmless.
+  {
+    name: "drop-zone",
+    script:
+      "window.__arcmail.openCompose('new'); await new Promise((r) => setTimeout(r, 500));" +
+      "const box = document.querySelector('.compose');" +
+      "const dt = new DataTransfer(); dt.items.add(new File(['x'], 'deck.pdf', { type: 'application/pdf' }));" +
+      "box.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: dt }));" +
+      "await new Promise((r) => setTimeout(r, 100));" +
+      "const armed = box.classList.contains('is-dropping');" +
+      "box.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));" +
+      "await new Promise((r) => setTimeout(r, 300));" +
+      "console.log('DROP ZONE armed:', armed, 'cleared:', !box.classList.contains('is-dropping'), 'attached:', (window.__arcmail.compose?.attachments ?? []).length);" +
+      "await window.__arcmail.closeCompose(false);",
+    waitMs: 300,
+  },
   // Cmd+Enter sends with the caret in the body. This is a step rather than a unit test because the
   // fault it guards against was invisible to one: the binding resolved correctly in isolation while
   // TipTap's own keymap, which sits below the window on the editor element, consumed the event

@@ -67,6 +67,9 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
           return undefined;
         case "compose:pickFiles":
           return pickedFiles;
+        case "compose:addFiles":
+          // The main process describes dropped paths the same way it describes picked ones.
+          return (args[0] as string[]).map((p) => ({ path: p, name: p.split("/").pop() ?? p, size: 1024, mimeType: "application/pdf" }));
         case "compose:send": {
           const r = { id: nextSendId++, sendAt: Date.now() + 10_000, undoUntil: Date.now() + 10_000, receipt: { requested: false, armed: false } };
           if (sendResultOmitsReceipt) delete (r as { receipt?: unknown }).receipt;
@@ -1131,6 +1134,23 @@ test("marking read or unread says nothing, because the row already shows it", as
   useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [summary("t-a", "A")], selected: 0, open: null, toast: null, view: "inbox", readingPane: false, categories: [] });
   await useApp.getState().toggleReadSelected();
   assert.equal(useApp.getState().toast, null, "a toast for a change you can see is noise");
+});
+
+test("addFiles attaches dropped files through the same door as the picker, and refuses the same way", async () => {
+  const { useApp } = await import("./store");
+  useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [summary("t-a", "A")], selected: 0, open: null, toast: null, view: "inbox", readingPane: false, categories: [] });
+  useApp.getState().openCompose("new");
+  calls.length = 0;
+  await useApp.getState().addFiles(["/Users/o/Desktop/deck.pdf"]);
+  const sent = calls.find((c) => c.channel === "compose:addFiles");
+  assert.deepEqual(sent?.args[0], ["/Users/o/Desktop/deck.pdf"], "the dropped path goes to the main process to be described");
+  assert.equal(useApp.getState().compose?.attachments?.length, 1, "and comes back attached");
+
+  // Nothing open: a drop lands nowhere and asks nothing.
+  await useApp.getState().closeCompose(false);
+  calls.length = 0;
+  await useApp.getState().addFiles(["/Users/o/Desktop/deck.pdf"]);
+  assert.equal(calls.some((c) => c.channel === "compose:addFiles"), false);
 });
 
 test("with nothing open, E still acts on the row the cursor is on", async () => {

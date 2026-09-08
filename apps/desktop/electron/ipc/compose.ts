@@ -89,11 +89,11 @@ export function registerComposeIpc(db: Db, scheduler: Scheduler, mirror: DraftMi
     scheduler.wakeSoon(result.sendAt);
     return result;
   });
-  ipcMain.handle("compose:pickFiles", async (): Promise<OutgoingAttachmentInfo[]> => {
-    const picked = await dialog.showOpenDialog({ properties: ["openFile", "multiSelections"], buttonLabel: "Attach" });
-    if (picked.canceled) return [];
+  // What a path becomes once it is going out on a message. Shared by the picker and by drag and
+  // drop, so the two doors cannot describe the same file differently.
+  const describeFiles = (files: string[]): OutgoingAttachmentInfo[] => {
     const out: OutgoingAttachmentInfo[] = [];
-    for (const file of picked.filePaths) {
+    for (const file of files) {
       try {
         const stat = fs.statSync(file);
         if (!stat.isFile()) continue;
@@ -104,6 +104,15 @@ export function registerComposeIpc(db: Db, scheduler: Scheduler, mirror: DraftMi
       }
     }
     return out;
+  };
+  ipcMain.handle("compose:pickFiles", async (): Promise<OutgoingAttachmentInfo[]> => {
+    const picked = await dialog.showOpenDialog({ properties: ["openFile", "multiSelections"], buttonLabel: "Attach" });
+    return picked.canceled ? [] : describeFiles(picked.filePaths);
+  });
+  ipcMain.handle("compose:addFiles", (_e, paths: unknown): OutgoingAttachmentInfo[] => {
+    // Dropped files arrive as absolute paths the preload resolved. Anything else is ignored.
+    const files = Array.isArray(paths) ? paths.filter((x): x is string => typeof x === "string" && path.isAbsolute(x)) : [];
+    return describeFiles(files);
   });
   // Only a path this draft is actually carrying may be opened, so a renderer bug cannot turn these
   // into a way to open any file on the machine.

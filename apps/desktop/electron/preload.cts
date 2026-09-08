@@ -4,7 +4,7 @@
 
 import electron = require("electron");
 
-const { contextBridge, ipcRenderer } = electron;
+const { contextBridge, ipcRenderer, webUtils } = electron;
 
 const EVENT_CHANNELS = new Set(["accounts:changed", "threads:changed", "sync:progress", "toast", "categories:changed", "calendar:changed", "drafts:changed", "onboarding:progress"]);
 
@@ -51,6 +51,7 @@ const INVOKE_CHANNELS = new Set([
   "compose:send",
   "compose:signature",
   "compose:pickFiles",
+  "compose:addFiles",
   "compose:openFile",
   "compose:revealFile",
   "drafts:save",
@@ -110,4 +111,8 @@ contextBridge.exposeInMainWorld("arcmail", {
     };
   },
   platform: process.platform,
+  // A dropped File carries no path in a sandboxed renderer. This is the one sanctioned way to get
+  // it, and it runs here so the renderer never needs Node. A synthetic File, or one dragged out of
+  // a browser, has no path and comes back empty; the caller drops those.
+  pathsForFiles: (files: File[]) => files.map((f) => { try { return webUtils.getPathForFile(f); } catch { return ""; } }),
 });

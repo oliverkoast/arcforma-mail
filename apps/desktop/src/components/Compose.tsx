@@ -1,4 +1,5 @@
 import { useApp } from "../state/store";
+import { useFileDrop } from "../lib/useFileDrop";
 import { ComposeEditor, MODE_LABEL } from "./ComposeEditor";
 import { ComposeAttachments, ComposeFooter } from "./ComposeFooter";
 import { RecipientLine } from "./RecipientLine";
@@ -9,6 +10,8 @@ export { insertComposeText } from "./ComposeEditor";
 /** The floating compose panel: C for a new message, and any draft that has no open thread to dock under. */
 export function Compose() {
   const compose = useApp((s) => s.compose);
+  const addFiles = useApp((s) => s.addFiles);
+  const drop = useFileDrop(addFiles);
   const placement = useApp((s) => s.composePlacement);
   const accounts = useApp((s) => s.status.accounts);
   const closeCompose = useApp((s) => s.closeCompose);
@@ -17,7 +20,7 @@ export function Compose() {
   const account = accounts.find((a) => a.id === compose.accountId);
 
   return (
-    <section className="compose" role="dialog" aria-label={MODE_LABEL[compose.mode]}>
+    <section className={`compose${drop.dropping ? " is-dropping" : ""}`} {...drop.props} role="dialog" aria-label={MODE_LABEL[compose.mode]}>
       <div className="compose-head">
         <span className="af-mono">
           {MODE_LABEL[compose.mode]} · {account?.email ?? compose.accountId}

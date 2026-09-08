@@ -711,6 +711,8 @@ export interface ArcmailInvoke {
   "compose:send": (draft: ComposeDraft, sendAt?: number | null) => SendResult;
   /** Opens the file picker and answers with what was chosen. Empty when the picker was cancelled. */
   "compose:pickFiles": () => OutgoingAttachmentInfo[];
+  /** Files arriving by drag and drop, already on disk. Same shape back as the picker gives. */
+  "compose:addFiles": (paths: string[]) => OutgoingAttachmentInfo[];
   /** Opens one of this draft's own files in whatever the Mac opens it with. */
   "compose:openFile": (path: string) => string | null;
   /** Shows one of this draft's own files in Finder. */
