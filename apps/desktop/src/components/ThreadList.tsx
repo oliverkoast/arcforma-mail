@@ -163,7 +163,25 @@ export function ThreadList() {
 
   const parentRef = useRef<HTMLDivElement>(null);
   const lastPointer = useRef<{ x: number; y: number } | null>(null);
-  const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => parentRef.current, estimateSize: () => 74, overscan: 8 });
+  /** True for one selection change that the mouse caused, so the scroll effect leaves the viewport alone. */
+  const viaPointer = useRef(false);
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => parentRef.current,
+    // Measurements are cached by key, and the key is the thread, not the slot. Without this the
+    // cache was by index: a sync or a classify sweep that inserted or removed one row shifted every
+    // thread below it into a slot measured for a different thread, so a row with an eyebrow was
+    // given a shorter row's height and drew over its neighbours. The list churns every few seconds,
+    // so this was not rare.
+    getItemKey: (i) => `${rows[i]?.accountId}:${rows[i]?.id}`,
+    // The first guess for a row not yet measured. Rows carrying an eyebrow are one line taller; a
+    // guess that already knows that keeps the layout right on the first paint, not just the second.
+    estimateSize: (i) => {
+      const r = rows[i];
+      return r && ((r.band === "needs_you" && r.attentionReason) || r.noReplyBy || r.wakeAt) ? 91 : 74;
+    },
+    overscan: 8,
+  });
 
   // Rows are measured as they mount. A webfont arriving afterwards changes their height, and the
   // stale measurements leave rows overlapping, so measure again once the fonts have settled.
@@ -175,8 +193,15 @@ export function ThreadList() {
   }, [virtualizer]);
 
   useEffect(() => {
+    // Only the keyboard earns a scroll. This used to run on rows.length too, so every sync that
+    // added or removed a thread pulled the viewport back to the selection a few seconds after you
+    // had scrolled away from it. And the pointer never earns one: you are already looking at the row
+    // you are pointing at, and a row half off the edge would nudge the list by a few pixels under
+    // your hand.
+    if (viaPointer.current) { viaPointer.current = false; return; }
     if (rows.length) virtualizer.scrollToIndex(selected, { align: "auto" });
-  }, [selected, rows.length, virtualizer]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, virtualizer]);
 
   const owners = useMemo(() => new Set(accounts.map((a) => a.email)), [accounts]);
   const accountLabels = useMemo(() => new Map(accounts.map((a) => [a.id, a.email.split("@")[1] ?? a.id])), [accounts]);
@@ -303,6 +328,7 @@ export function ThreadList() {
                     accountEmail={accounts.find((a) => a.id === row.accountId)?.email ?? null}
                     highlight={searchHits?.[item.index]?.highlight ?? null}
                     onClick={() => {
+                      viaPointer.current = true;
                       select(item.index);
                       void openSelected();
                     }}
@@ -313,7 +339,10 @@ export function ThreadList() {
                       const last = lastPointer.current;
                       if (last && last.x === e.clientX && last.y === e.clientY) return;
                       lastPointer.current = { x: e.clientX, y: e.clientY };
-                      if (item.index !== selected) select(item.index);
+                      if (item.index !== selected) {
+                        viaPointer.current = true;
+                        select(item.index);
+                      }
                     }}
                   />
                 </div>

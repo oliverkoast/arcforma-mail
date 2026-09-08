@@ -603,6 +603,19 @@ const SMOKE_STEPS: SmokeStep[] = [
   { name: "long-thread-expanded", script: "document.querySelector('.messages-fold').click(); await new Promise((r) => setTimeout(r, 800)); document.querySelector('.messages').scrollTop = 0;", waitMs: 2500 },
   // E on a thread: the confirmation lands bottom left, and the pointer resting on it reveals Undo with its key.
   { name: "toast-undo", script: "window.__arcmail.closeThread(); window.__arcmail.setView('inbox'); await new Promise((r) => setTimeout(r, 900)); window.__arcmail.select(0); await window.__arcmail.archiveSelected();", hover: ".toast", waitMs: 1600 },
+  // Every rendered row must sit below the one before it. The archive just above shifted every row up
+  // one slot, which is exactly when a height cached by index gets applied to the wrong thread and a
+  // row with an eyebrow draws over its neighbours. Measured off the DOM, not the virtualizer's own
+  // bookkeeping, because the bookkeeping is the thing under suspicion.
+  {
+    name: "list-overlap",
+    script:
+      "await new Promise((r) => setTimeout(r, 600));" +
+      "const items = [...document.querySelectorAll('.rows [data-index]')].map((el) => ({ i: Number(el.dataset.index), top: el.getBoundingClientRect().top, bottom: el.getBoundingClientRect().bottom })).sort((a, b) => a.i - b.i);" +
+      "let overlaps = 0; for (let k = 1; k < items.length; k++) if (items[k].top < items[k - 1].bottom - 1) overlaps++;" +
+      "console.log('LIST OVERLAP rows:', items.length, 'overlapping:', overlaps);",
+    waitMs: 200,
+  },
   // The Done row in Folders and what it holds: everything E has taken out of the inbox, newest first.
   { name: "done-view", script: "window.__arcmail.showToast(null); window.__arcmail.setView('archive'); await new Promise((r) => setTimeout(r, 700)); document.querySelector('.nav-row[data-row-id=\"archive\"]').scrollIntoView({ block: 'center' }); await new Promise((r) => setTimeout(r, 300));", hover: ".nav-row[data-row-id='archive'] .nav-item", waitMs: 2000 },
   // A thread opened from Done: the mono DONE eyebrow says where it is, and the tray glyph puts it back.
