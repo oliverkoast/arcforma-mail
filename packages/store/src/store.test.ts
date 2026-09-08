@@ -9,6 +9,7 @@ import {
   schemaVersion,
   SCHEMA_VERSION,
   repairInlineAttachments,
+  repairRecipientNames,
   upsertAccount,
   upsertThreadFromGmail,
   listThreads,
@@ -259,6 +260,19 @@ test("the repair leaves an attachment with no Content-ID exactly as it was", () 
     .run("arcforma", "m1", "<p>No images.</p>", null, JSON.stringify([sig]), Date.now());
   assert.equal(repairInlineAttachments(db), 0, "nothing to change");
   assert.equal((JSON.parse((db.prepare("SELECT attachments_json AS j FROM message_bodies WHERE message_id = 'm1'").get() as { j: string }).j) as Array<{ inline: boolean }>)[0]?.inline, true);
+});
+
+test("schema 20 cleans recipient names stored by the old parser, and leaves good ones alone", () => {
+  const { db } = tempDb();
+  seed(db);
+  db.prepare("UPDATE messages SET to_json = ?, from_name = ? WHERE account_id = 'arcforma' AND id = 'm1'").run(
+    JSON.stringify([{ email: "aliki@bookkeeperla.com", name: ", Aliki Papadeas" }, { email: "oliver@arcforma.ai", name: "ericalwinograd@gmail.com, Oliver Korzen" }, { email: "dana@northwind-coaching.example", name: "Dana Reyes" }]),
+    "Dana Reyes",
+  );
+  assert.equal(repairRecipientNames(db), 1);
+  const to = JSON.parse((db.prepare("SELECT to_json AS j FROM messages WHERE id = 'm1'").get() as { j: string }).j) as Array<{ email: string; name: string }>;
+  assert.deepEqual(to.map((a) => a.name), ["Aliki Papadeas", "", "Dana Reyes"], "the stray comma goes, the address-as-name goes, the real name stays");
+  assert.equal(repairRecipientNames(db), 0, "and a second run changes nothing");
 });
 
 test("search answers newest first, whatever the text match scores", () => {

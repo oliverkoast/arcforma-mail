@@ -9,6 +9,7 @@
 // The contacts table is not the source. It is filled lazily when a contact panel opens, so it knows
 // about a handful of people, while the messages hold every address that has ever been used.
 
+import { cleanName } from "../mail-headers.js";
 import type { Db } from "../db.js";
 
 export interface RecipientSuggestion {
@@ -73,7 +74,9 @@ export function suggestRecipients(db: Db, query: string, opts: { limit?: number;
   for (const row of rows) {
     const email = (row.email ?? "").trim();
     if (!email || exclude.has(email)) continue;
-    const name = (row.name ?? "").trim();
+    // Stored rows from before the parser fix carry another address or a stray comma inside the
+    // name. Those are not names; the email is shown instead.
+    const name = cleanName(row.name ?? "", email);
     let hit = byEmail.get(email);
     if (!hit) {
       hit = { email, name, sent: 0, received: 0, lastAt: 0 };

@@ -87,3 +87,15 @@ test("an empty query offers the people written to most, so the field is useful b
   const d = seed(db());
   assert.equal(suggestRecipients(d, "")[0]?.email, "zach.elin@equinox.com");
 });
+
+
+test("a polluted name already in the store is shown as the address, never as a group", () => {
+  // Rows written by the old parser carry another address, or a stray comma, inside the name. The
+  // suggester must not present those as people, whatever the store holds.
+  const d = db();
+  upsertThreadFromGmail(d, "arcforma", thread("t1", { id: "m1", from: "Oliver <oliver@arcforma.ai>", to: "Aliki Papadeas <aliki@bookkeeperla.com>", labels: ["SENT"] }));
+  d.prepare("UPDATE messages SET to_json = ? WHERE id = 'm1'").run(JSON.stringify([{ email: "aliki@bookkeeperla.com", name: "ericalwinograd@gmail.com, Aliki Papadeas" }]));
+  const hit = suggestRecipients(d, "ali").find((h) => h.email === "aliki@bookkeeperla.com");
+  assert.ok(hit, "the person is still suggested");
+  assert.equal(hit!.name, "", "but the address-laden name is not shown as a name");
+});

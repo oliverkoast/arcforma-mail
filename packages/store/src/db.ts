@@ -5,12 +5,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { reindexAllMessages } from "./queries/messages.js";
+import { cleanName } from "./mail-headers.js";
 
 export type Db = DatabaseSync;
 
 /** The schema every opened store is migrated up to. Exported so tests assert against this rather
  *  than a copy of the number, which went stale on every bump and failed four suites at once. */
-export const SCHEMA_VERSION = 19;
+export const SCHEMA_VERSION = 20;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
@@ -328,6 +329,8 @@ export function migrate(db: Db): void {
     // already spent here twice over, and merging it as written would have left two version 17 steps
     // and skipped the index outright on any store that had run ours.
     { version: 19, sql: () => "CREATE INDEX IF NOT EXISTS snoozes_thread ON snoozes(account_id, thread_id, status);" },
+    // Recipient names that carried another address or a stray comma, from the old header parser.
+    { version: 20, sql: () => "SELECT 1", after: (d) => repairRecipientNames(d) },
   ];
   for (const step of steps) {
     if (step.version <= current) continue;
@@ -450,4 +453,39 @@ function addCalendarColumn(db: Db): void {
 function addDraftAttachments(db: Db): void {
   const have = new Set((db.prepare("PRAGMA table_info(drafts)").all() as Array<{ name: string }>).map((c) => c.name));
   if (!have.has("attachments_json")) db.exec("ALTER TABLE drafts ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'");
+}
+
+/**
+ * Cleans recipient names stored by the old address parser, which let a name run across commas.
+ * The raw header is not kept, so this cannot re-split anything; it drops what is provably not a
+ * name (another address, a leading comma) and leaves the email to stand for the person.
+ */
+export function repairRecipientNames(db: Db): number {
+  const rows = db.prepare("SELECT account_id, id, to_json, cc_json, bcc_json, from_name, from_email FROM messages").all() as Array<{
+    account_id: string; id: string; to_json: string | null; cc_json: string | null; bcc_json: string | null; from_name: string | null; from_email: string;
+  }>;
+  const fix = (json: string | null): { text: string | null; changed: boolean } => {
+    if (!json) return { text: json, changed: false };
+    let list: Array<{ email?: string; name?: string }>;
+    try { list = JSON.parse(json) as typeof list; } catch { return { text: json, changed: false }; }
+    if (!Array.isArray(list)) return { text: json, changed: false };
+    let changed = false;
+    for (const a of list) {
+      const email = String(a.email ?? "").toLowerCase();
+      const clean = cleanName(String(a.name ?? ""), email);
+      if (clean !== (a.name ?? "")) { a.name = clean; changed = true; }
+    }
+    return { text: changed ? JSON.stringify(list) : json, changed };
+  };
+  const upd = db.prepare("UPDATE messages SET to_json = ?, cc_json = ?, bcc_json = ?, from_name = ? WHERE account_id = ? AND id = ?");
+  let n = 0;
+  for (const m of rows) {
+    const to = fix(m.to_json), cc = fix(m.cc_json), bcc = fix(m.bcc_json);
+    const from = cleanName(m.from_name ?? "", m.from_email.toLowerCase());
+    const fromChanged = from !== (m.from_name ?? "");
+    if (!to.changed && !cc.changed && !bcc.changed && !fromChanged) continue;
+    upd.run(to.text, cc.text, bcc.text, from, m.account_id, m.id);
+    n++;
+  }
+  return n;
 }

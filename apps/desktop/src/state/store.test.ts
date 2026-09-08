@@ -20,6 +20,8 @@ let attachmentDelay = 0;
 let pickedFiles: Array<{ path: string; name: string; size: number; mimeType: string }> = [];
 /** Makes compose:send answer with an older, receipt-less shape, to prove a sent message stays sent. */
 let sendResultOmitsReceipt = false;
+/** Per-query delay for search:query, so a slow earlier search can be raced against a newer one. */
+let searchDelay: (q: string) => number = () => 0;
 /** Rows the next threads:list answers with, and how long it takes, to overlap a refresh with an action. */
 let listRows: ThreadSummary[] = [];
 let listDelay = 0;
@@ -67,6 +69,12 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
           return undefined;
         case "compose:pickFiles":
           return pickedFiles;
+        case "search:query": {
+          const q = String(args[0]);
+          const d = searchDelay(q);
+          if (d) await wait(d);
+          return [{ thread: summary(`hit:${q}`, q), messageId: `m:${q}` }];
+        }
         case "compose:addFiles":
           // The main process describes dropped paths the same way it describes picked ones.
           return (args[0] as string[]).map((p) => ({ path: p, name: p.split("/").pop() ?? p, size: 1024, mimeType: "application/pdf" }));
@@ -1151,6 +1159,49 @@ test("addFiles attaches dropped files through the same door as the picker, and r
   calls.length = 0;
   await useApp.getState().addFiles(["/Users/o/Desktop/deck.pdf"]);
   assert.equal(calls.some((c) => c.channel === "compose:addFiles"), false);
+});
+
+test("search runs on its own a second after typing stops, and Enter does not wait", async () => {
+  const { useApp, SEARCH_DEBOUNCE_MS } = await import("./store");
+  useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [summary("t-a", "A")], selected: 0, open: null, toast: null, view: "inbox", readingPane: false, categories: [], searchQuery: "", searchHits: null });
+  const searches = () => calls.filter((c) => c.channel === "search:query").map((c) => c.args[0]);
+  calls.length = 0;
+  useApp.getState().setSearchQuery("mar");
+  await new Promise((r) => setTimeout(r, SEARCH_DEBOUNCE_MS - 400));
+  assert.deepEqual(searches(), [], "still typing: nothing has run");
+  useApp.getState().setSearchQuery("marqeta");
+  await new Promise((r) => setTimeout(r, SEARCH_DEBOUNCE_MS - 400));
+  assert.deepEqual(searches(), [], "the clock restarted on the second keystroke");
+  await new Promise((r) => setTimeout(r, 500));
+  assert.deepEqual(searches(), ["marqeta"], "one search, for what was there when typing stopped");
+
+  // Enter runs at once and the pending timer does not fire a second time.
+  calls.length = 0;
+  useApp.getState().setSearchQuery("marqeta ai");
+  await useApp.getState().runSearch();
+  assert.deepEqual(searches(), ["marqeta ai"]);
+  await new Promise((r) => setTimeout(r, SEARCH_DEBOUNCE_MS + 100));
+  assert.deepEqual(searches(), ["marqeta ai"], "no duplicate from the timer");
+  useApp.getState().leaveSearch();
+});
+
+test("a slower earlier search never overwrites a newer one", async () => {
+  const { useApp } = await import("./store");
+  useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [], selected: 0, open: null, toast: null, view: "inbox", readingPane: false, categories: [], searchQuery: "", searchHits: null });
+  const slowFirst = searchDelay;
+  searchDelay = (q) => (q === "old" ? 150 : 0);
+  try {
+    useApp.setState({ searchQuery: "old" });
+    const first = useApp.getState().runSearch();
+    useApp.setState({ searchQuery: "new" });
+    await useApp.getState().runSearch();
+    await first;
+    assert.equal(useApp.getState().searchQuery, "new");
+    assert.equal(useApp.getState().rows[0]?.id, "hit:new", "the late result for \"old\" was discarded");
+  } finally {
+    searchDelay = slowFirst;
+  }
+  useApp.getState().leaveSearch();
 });
 
 test("with nothing open, E still acts on the row the cursor is on", async () => {

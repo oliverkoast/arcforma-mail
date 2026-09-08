@@ -330,6 +330,11 @@ function clearToastTimer(): void {
 }
 /** Autosave runs this long after the last keystroke; the main process mirrors to Gmail on the same cadence. */
 export const AUTOSAVE_MS = 2000;
+/** How long typing has to pause before the search runs on its own. Enter does not wait. */
+export const SEARCH_DEBOUNCE_MS = 1000;
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
+/** The newest search wins: a slower earlier query must not land after a newer one and overwrite it. */
+let searchSeq = 0;
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 /** The autosave in flight, so a close or send waits for its row id instead of racing it. */
 let autosaveInflight: Promise<void> | null = null;
@@ -1060,30 +1065,42 @@ export const useApp = create<AppState>((set, get) => ({
 
   setSearchQuery(q) {
     set({ searchQuery: q });
+    // Stop typing and the search runs; keep typing and the clock restarts. Enter runs it at once.
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      searchTimer = null;
+      if (get().searchQuery === q && q.trim()) void get().runSearch();
+    }, SEARCH_DEBOUNCE_MS);
   },
 
   async runSearch() {
+    if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
     const s = get();
     const q = s.searchQuery.trim();
     if (!q) {
       s.leaveSearch();
       return;
     }
+    const seq = ++searchSeq;
     try {
       const hits = await invoke("search:query", q, selectedAccountIds(s));
+      if (seq !== searchSeq) return;
       set({ searchHits: hits, rows: hits.map((h) => h.thread), nextCursor: null, selected: 0, open: null });
       get().syncScope();
     } catch (err) {
-      set({ error: (err as Error).message });
+      if (seq === searchSeq) set({ error: (err as Error).message });
     }
   },
 
   leaveSearch() {
+    if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
+    searchSeq++;
     const had = get().searchHits;
     set({ searchQuery: "", searchHits: null });
     get().syncScope();
     if (had) void get().loadThreads(true);
-    (document.activeElement as HTMLElement | null)?.blur();
+    // The store runs under Node in tests, where there is no document to blur.
+    if (typeof document !== "undefined") (document.activeElement as HTMLElement | null)?.blur();
   },
 
   async signIn(id) {

@@ -13,19 +13,57 @@ export function headerValue(headers: GmailHeaderInput[] | undefined, name: strin
   return headers?.find((h) => h.name.toLowerCase() === lower)?.value ?? "";
 }
 
-const ADDR_RE = /(?:"?([^"<]*)"?\s*)?<([^>]+)>|([^\s,<>]+@[^\s,<>]+)/g;
-
 /** Parses a To/From style header into address objects. Names are unquoted; emails lowercased. */
+/**
+ * A header's addresses, one entry per person.
+ *
+ * The old regex let a name run across commas. "a@b.com, Jane Roe <jane@x.com>" came out as one
+ * entry named "a@b.com, Jane Roe", and "x@y.com, Aliki" as a name of ", Aliki": a sixth of the
+ * stored recipients carried another address, or a stray comma, inside their name, and the
+ * recipient suggester then showed rows that looked like group chats. The header is split on the
+ * commas that sit outside quotes and angle brackets first, and each piece is parsed on its own. A
+ * name that contains an address is not a name and is dropped.
+ */
 export function parseAddressList(value: string): Address[] {
   const out: Address[] = [];
   if (!value) return out;
-  for (const m of value.matchAll(ADDR_RE)) {
-    const email = (m[2] ?? m[3] ?? "").trim().toLowerCase();
-    if (!email) continue;
-    const name = (m[1] ?? "").trim().replace(/^"|"$/g, "");
-    out.push({ email, name });
+  for (const piece of splitAddresses(value)) {
+    const m = /^(?:"?([^"<]*?)"?\s*)?<([^>]+)>$/.exec(piece) ?? /^([^\s<>]+@[^\s<>]+)$/.exec(piece);
+    if (!m) continue;
+    const email = (m[2] ?? m[1] ?? "").trim().toLowerCase();
+    if (!email.includes("@")) continue;
+    const rawName = m[2] ? (m[1] ?? "") : "";
+    out.push({ email, name: cleanName(rawName, email) });
   }
   return out;
+}
+
+/** Splits on commas that separate addresses, never on ones inside quotes or angle brackets. */
+function splitAddresses(value: string): string[] {
+  const pieces: string[] = [];
+  let cur = "";
+  let quoted = false;
+  let depth = 0;
+  for (const ch of value) {
+    if (ch === '"') quoted = !quoted;
+    else if (!quoted && ch === "<") depth++;
+    else if (!quoted && ch === ">") depth = Math.max(0, depth - 1);
+    if (ch === "," && !quoted && depth === 0) {
+      pieces.push(cur);
+      cur = "";
+      continue;
+    }
+    cur += ch;
+  }
+  pieces.push(cur);
+  return pieces.map((p) => p.trim()).filter(Boolean);
+}
+
+/** A display name, or nothing: never an address, never a leftover comma, never the email again. */
+export function cleanName(raw: string, email: string): string {
+  const name = raw.trim().replace(/^"|"$/g, "").replace(/^[\s,;]+|[\s,;]+$/g, "").trim();
+  if (!name || name.includes("@") || name.toLowerCase() === email) return "";
+  return name;
 }
 
 const REPLY_PREFIX = /^\s*((re|fwd?|aw|sv)\s*:\s*)+/i;

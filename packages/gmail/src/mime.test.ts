@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decodeBody, findBody, hasCalendarPart, listAttachments, parseAddressList, header, type GmailMessage } from "./mime.js";
+import { decodeBody, findBody, hasCalendarPart, listAttachments, parseAddressList, cleanName, header, type GmailMessage } from "./mime.js";
 import { fixtureJson } from "../test/helpers.js";
 
 const msg = fixtureJson<GmailMessage>("nested-message.json");
@@ -87,4 +87,35 @@ test("without the HTML, a Content-ID part is treated as a real attachment", () =
   // lost candidate.
   const payload = { parts: [{ partId: "1", filename: "cv.pdf", mimeType: "application/pdf", body: { attachmentId: "A5", size: 90 }, headers: [{ name: "Content-ID", value: "<x>" }] }] };
   assert.equal(listAttachments(payload as never, [], null)[0]?.inline, false);
+});
+
+// ---- names never run across commas ----------------------------------------------------------------
+
+test("a bare address followed by a named one is two people, not one with a strange name", () => {
+  // The exact shape that filled a sixth of stored recipients with another address in the name.
+  const out = parseAddressList("ericalwinograd@gmail.com, Oliver Korzen <oliver@arcforma.ai>");
+  assert.deepEqual(out, [
+    { email: "ericalwinograd@gmail.com", name: "" },
+    { email: "oliver@arcforma.ai", name: "Oliver Korzen" },
+  ]);
+});
+
+test("a stray leading comma never becomes part of a name", () => {
+  const out = parseAddressList("x@y.com, Aliki Papadeas <aliki@bookkeeperla.com>");
+  assert.equal(out[1]?.name, "Aliki Papadeas");
+});
+
+test("a comma inside a quoted name stays inside the name", () => {
+  const out = parseAddressList('"Roe, Jane" <jane@x.com>, bob@x.com');
+  assert.deepEqual(out, [
+    { email: "jane@x.com", name: "Roe, Jane" },
+    { email: "bob@x.com", name: "" },
+  ]);
+});
+
+test("a name that is an address, or the email again, is dropped", () => {
+  assert.equal(cleanName("someone@else.com", "me@x.com"), "");
+  assert.equal(cleanName("me@x.com", "me@x.com"), "");
+  assert.equal(cleanName("  , Karla Samano ", "karla@kjtravel.com"), "Karla Samano");
+  assert.equal(cleanName("Oliver (last name not verified)", "jobs@arcforma.ai"), "Oliver (last name not verified)");
 });
