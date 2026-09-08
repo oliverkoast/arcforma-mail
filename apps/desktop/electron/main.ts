@@ -510,6 +510,20 @@ const SMOKE_STEPS: SmokeStep[] = [
       "await window.__arcmail.closeCompose(false);",
     waitMs: 300,
   },
+  // Stop typing and the search runs on its own. Typed through the store the way the input does,
+  // then a wait a little longer than the debounce, then the hits have to be there.
+  {
+    name: "search-idle",
+    script:
+      "window.__arcmail.setSearchQuery('kickoff');" +
+      "await new Promise((r) => setTimeout(r, 300));" +
+      "const early = window.__arcmail.searchHits !== null;" +
+      "await new Promise((r) => setTimeout(r, 1200));" +
+      "const hits = window.__arcmail.searchHits;" +
+      "console.log('SEARCH IDLE ran early:', early, 'ran after a pause:', hits !== null, 'hits:', hits ? hits.length : 0);" +
+      "window.__arcmail.leaveSearch();",
+    waitMs: 300,
+  },
   // Cmd+Enter sends with the caret in the body. This is a step rather than a unit test because the
   // fault it guards against was invisible to one: the binding resolved correctly in isolation while
   // TipTap's own keymap, which sits below the window on the editor element, consumed the event
