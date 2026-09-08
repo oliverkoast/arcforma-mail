@@ -14,7 +14,10 @@ const DEFAULTS = () => ({
   claudeBin: path.join(os.homedir(), ".local", "bin", "claude"),
   claudeOAuthToken: "",
   claudeApiKey: "",
-  modelChain: ["claude-fable-5-1", "opus", "sonnet"],
+  // Sonnet, and nothing above or below it. Fable is quick and it is the wrong trade for anything
+  // that goes out under someone's name; opus is not asked for. Cmd+J does not depend on this chain
+  // any more, because text.fix answers on the local model and falls back to it when Claude cannot.
+  modelChain: ["sonnet"],
   concurrency: 2,
   local: {
     binary: fs.existsSync(path.join(OPENWHISPR_BIN, "llama-server-darwin-arm64")) ? path.join(OPENWHISPR_BIN, "llama-server-darwin-arm64") : null,

@@ -33,7 +33,7 @@ test("reads the daemon config and sends the bearer token except on health", asyn
   const c = await ai.complete({ task: "summarize", user: "hi" });
   assert.equal(c.text, "Summary.");
   assert.equal(calls[1]!.headers["authorization"], "Bearer secret");
-  assert.deepEqual(JSON.parse(calls[1]!.body!), { task: "summarize", user: "hi" });
+  assert.deepEqual(JSON.parse(calls[1]!.body!), { task: "summarize", user: "hi", model: "sonnet" });
 });
 
 test("503 not_logged_in and other daemon failures become typed AiErrors", async () => {
@@ -64,4 +64,23 @@ test("a missing config or a refused connection is daemon_down, and status never 
   const s = await refused.status();
   assert.equal(s.ok, false);
   assert.equal(s.claude, "daemon_down");
+});
+
+test("every mail request asks for sonnet, and never the daemon's smaller default", async () => {
+  // Summaries, drafts, instant replies and Ask all write in Oliver's voice to people who know him.
+  // The daemon's chain starts at fable, which is the wrong trade for that, and the model is set in
+  // one place so a feature added later cannot quietly forget it.
+  const { fetch, calls } = fake(() => ({ status: 200, body: { ok: true, text: "Summary.", model: "claude-sonnet-5", latencyMs: 5, engine: "claude" } }));
+  const ai = new AiClient({ configFile: configFile(), fetch });
+  for (const task of ["summarize", "instant_replies", "draft_reply", "ask_inbox"]) {
+    await ai.complete({ task, user: "text" });
+    assert.equal(JSON.parse(calls.at(-1)!.body!).model, "sonnet", task);
+  }
+});
+
+test("a caller that names its own model still gets it", async () => {
+  const { fetch, calls } = fake(() => ({ status: 200, body: { ok: true, text: "x", model: "m", latencyMs: 1, engine: "claude" } }));
+  const ai = new AiClient({ configFile: configFile(), fetch });
+  await ai.complete({ task: "summarize", user: "text", model: "opus" });
+  assert.equal(JSON.parse(calls.at(-1)!.body!).model, "opus");
 });

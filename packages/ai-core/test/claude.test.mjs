@@ -6,6 +6,10 @@ import { ClaudeRunner, parseResult } from "../src/claude.mjs";
 
 const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "fake-claude.sh");
 const runner = (mode, opts = {}) => new ClaudeRunner({ bin: FAKE, env: { FAKE_CLAUDE_MODE: mode }, ...opts });
+// The default chain is one model on purpose, so the step-down tests below name their own. Testing a
+// fallback through whatever the default happens to be made the feature's tests break when the
+// default changed, which says nothing about the feature.
+const chained = (mode) => runner(mode, { modelChain: ["claude-fable-5-1", "opus", "sonnet"] });
 
 test("parseResult handles success, error kinds, and stdout warnings", () => {
   assert.equal(parseResult('{"result":"hi","is_error":false,"modelUsage":{"m":{}}}', "", 0).text, "hi");
@@ -19,7 +23,7 @@ test("completes with the fake CLI and reports the model", async () => {
   const r = await runner("ok").complete({ system: "s", user: "hello" });
   assert.equal(r.ok, true);
   assert.match(r.text, /^fixed:hello/);
-  assert.equal(r.model, "claude-fable-5-1");
+  assert.equal(r.model, "sonnet", "the default chain asks for sonnet and nothing smaller");
   assert.ok(r.latencyMs >= 0);
 });
 
@@ -38,7 +42,7 @@ test("not logged in surfaces as a typed code", async () => {
 });
 
 test("model chain steps down on an unsupported model", async () => {
-  const c = runner("unsupported");
+  const c = chained("unsupported");
   const r = await c.complete({ system: "s", user: "u" });
   assert.equal(r.ok, true);
   assert.equal(r.model, "opus");
@@ -104,7 +108,7 @@ test("a spent model allowance falls back down the chain and retries the preferre
   assert.equal(isOutOfAllowance("You've reached your Fable limit. Switch to another model"), true);
   assert.equal(isOutOfAllowance("exceeded your usage limit for today"), true);
   assert.equal(isOutOfAllowance("something else entirely"), false);
-  const c = runner("limited");
+  const c = chained("limited");
   const r = await c.complete({ system: "s", user: "u" });
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.equal(r.model, "opus");

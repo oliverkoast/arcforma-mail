@@ -95,6 +95,9 @@ const CODE_MAP: Record<string, AiErrorCode> = {
 
 export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal }) => Promise<{ status: number; text: () => Promise<string> }>;
 
+/** What every mail feature asks Claude for. The daemon's chain starts smaller; mail does not use it. */
+export const MAIL_MODEL = "sonnet";
+
 export class AiClient {
   private config: DaemonConfig | null = null;
   private readonly configFile: string;
@@ -168,9 +171,13 @@ export class AiClient {
   }
 
   async complete(req: CompleteRequest): Promise<CompleteResponse> {
+    // Mail asks for sonnet and does not take what the daemon's chain would otherwise start with,
+    // which is fable. Set here rather than at each call site so a feature added later cannot forget
+    // it and quietly get a smaller model: summaries, drafts, instant replies and Ask are all writing
+    // in someone's own voice to people who know them, and that is not the place to save a second.
     const r = await this.call<{ ok: true; text: string; json?: unknown; model: string; latencyMs: number; engine: string }>("/v1/complete", {
       method: "POST",
-      body: req,
+      body: { ...req, model: req.model ?? MAIL_MODEL },
       timeoutMs: (req.timeoutMs ?? 90_000) + 5000,
     });
     if (typeof r.text !== "string") throw new AiError("bad_response", "The AI daemon returned no text.");

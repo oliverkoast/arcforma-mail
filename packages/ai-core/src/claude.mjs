@@ -19,7 +19,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-export const DEFAULT_MODEL_CHAIN = ["claude-fable-5-1", "opus", "sonnet"];
+export const DEFAULT_MODEL_CHAIN = ["sonnet"];
 
 export function childEnv(extra = {}) {
   const home = process.env.HOME ?? os.homedir();
