@@ -185,7 +185,17 @@ export function seedFixture(db: Db, file: string, now = Date.now()): { threads: 
           snippet: (m.text ?? m.html ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120),
           internalDate: String(date),
           historyId: "1",
-          payload: { mimeType: m.calendar ? "multipart/mixed" : "text/html", headers, parts: m.calendar ? [{ mimeType: "text/calendar", filename: "invite.ics", body: { attachmentId: "att-1", size: 1200 } }] : [] },
+          payload: {
+            mimeType: m.calendar || m.attachments?.length ? "multipart/mixed" : "text/html",
+            headers,
+            parts: [
+              ...(m.calendar ? [{ mimeType: "text/calendar", filename: "invite.ics", body: { attachmentId: "att-1", size: 1200 } }] : []),
+              // Files as Gmail metadata lists them: a named part with an attachment id and an explicit
+              // disposition. This is what sets has_attachments on the thread; the saved body alone
+              // never did, so a fixture thread with files showed no paperclip in the list.
+              ...(m.attachments ?? []).map((a, i) => ({ mimeType: a.generate === "png" ? "image/png" : "application/pdf", filename: a.filename, body: { attachmentId: `att-${m.id}-${i}`, size: 1024 }, headers: [{ name: "Content-Disposition", value: `attachment; filename="${a.filename}"` }] })),
+            ],
+          },
         };
       }),
     };
