@@ -82,16 +82,20 @@ function Row({ row, selected, owners, onClick, onHover, accountLabel, accountEma
       </div>
       <div className="row-meta">
         <span>{row.scheduled ? `Sends ${sendsAt(row.scheduled.sendAt)}` : listDate(row.lastMessageAt)}</span>
-        {row.hasAttachments ? (
-          <span className="row-clip" data-tip="This thread has files attached.">
-            <Icon glyph="paperclip" />
-          </span>
-        ) : null}
-        {row.starred ? (
-          <span className="star" data-tip="Starred. S removes the star.">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-              <path d="M8 1.5l1.9 4.1 4.5.5-3.3 3.1.9 4.4L8 11.4l-4 2.2.9-4.4L1.6 6.1l4.5-.5L8 1.5z" />
-            </svg>
+        {row.hasAttachments || row.starred ? (
+          <span className="row-glyphs">
+            {row.hasAttachments ? (
+              <span className="row-clip" data-tip="This thread has files attached.">
+                <Icon glyph="paperclip" />
+              </span>
+            ) : null}
+            {row.starred ? (
+              <span className="star" data-tip="Starred. S removes the star.">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                  <path d="M8 1.5l1.9 4.1 4.5.5-3.3 3.1.9 4.4L8 11.4l-4 2.2.9-4.4L1.6 6.1l4.5-.5L8 1.5z" />
+                </svg>
+              </span>
+            ) : null}
           </span>
         ) : null}
         {accountLabel ? <span className="af-mono row-account">{accountLabel}</span> : null}

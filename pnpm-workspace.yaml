@@ -5,6 +5,8 @@ allowBuilds:
   electron: true
   esbuild: true
   electron-winstaller: false
+  # wrangler's runtime; a native binary fetched at install, needed only to deploy packages/pixel-service.
+  workerd: true
 minimumReleaseAgeExclude:
   - nodemailer@9.1.1
   - '@tiptap/core@3.31.0'

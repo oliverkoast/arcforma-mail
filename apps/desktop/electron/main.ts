@@ -453,8 +453,18 @@ interface SmokeStep {
   closePreviews?: boolean;
 }
 
+const OVERLAP_AUDIT =
+  "await new Promise((r) => setTimeout(r, 600));" +
+  "const items = [...document.querySelectorAll('.rows [data-index]')].map((el) => ({ i: Number(el.dataset.index), top: el.getBoundingClientRect().top, bottom: el.getBoundingClientRect().bottom })).sort((a, b) => a.i - b.i);" +
+  "let overlaps = 0; for (let k = 1; k < items.length; k++) if (items[k].top < items[k - 1].bottom - 1) overlaps++;" +
+  "console.log('LIST OVERLAP rows:', items.length, 'overlapping:', overlaps);";
+
 const SMOKE_STEPS: SmokeStep[] = [
   { name: "inbox", script: null, waitMs: 2500 },
+  // The same audit as list-overlap below, at first paint: a row whose right column stacks a time, a
+  // paperclip, a star and an account label is the tallest a row gets, and it has to fit its slot
+  // before anything has moved.
+  { name: "list-overlap-first", script: OVERLAP_AUDIT, waitMs: 200 },
   // Settings, scrolled to read receipts: the only place the feature can be turned on, and so the
   // only place that has to say what a receipt cannot tell you.
   {
@@ -607,15 +617,7 @@ const SMOKE_STEPS: SmokeStep[] = [
   // one slot, which is exactly when a height cached by index gets applied to the wrong thread and a
   // row with an eyebrow draws over its neighbours. Measured off the DOM, not the virtualizer's own
   // bookkeeping, because the bookkeeping is the thing under suspicion.
-  {
-    name: "list-overlap",
-    script:
-      "await new Promise((r) => setTimeout(r, 600));" +
-      "const items = [...document.querySelectorAll('.rows [data-index]')].map((el) => ({ i: Number(el.dataset.index), top: el.getBoundingClientRect().top, bottom: el.getBoundingClientRect().bottom })).sort((a, b) => a.i - b.i);" +
-      "let overlaps = 0; for (let k = 1; k < items.length; k++) if (items[k].top < items[k - 1].bottom - 1) overlaps++;" +
-      "console.log('LIST OVERLAP rows:', items.length, 'overlapping:', overlaps);",
-    waitMs: 200,
-  },
+  { name: "list-overlap", script: OVERLAP_AUDIT, waitMs: 200 },
   // The Done row in Folders and what it holds: everything E has taken out of the inbox, newest first.
   { name: "done-view", script: "window.__arcmail.showToast(null); window.__arcmail.setView('archive'); await new Promise((r) => setTimeout(r, 700)); document.querySelector('.nav-row[data-row-id=\"archive\"]').scrollIntoView({ block: 'center' }); await new Promise((r) => setTimeout(r, 300));", hover: ".nav-row[data-row-id='archive'] .nav-item", waitMs: 2000 },
   // A thread opened from Done: the mono DONE eyebrow says where it is, and the tray glyph puts it back.

@@ -19,5 +19,8 @@
   "types": "./src/index.d.mts",
   "files": [
     "src"
-  ]
+  ],
+  "devDependencies": {
+    "wrangler": "^4.129.1"
+  }
 }

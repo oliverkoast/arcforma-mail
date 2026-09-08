@@ -275,6 +275,14 @@ body.is-resizing { cursor: col-resize; user-select: none; }
   white-space: nowrap;
   padding-top: 2px;
 }
+/* The paperclip and the star share a line. Stacked, a thread that had both plus an account label
+   put four things in this column and stood taller than its slot, and the row below drew over it.
+   Three lines is the ceiling now: the time, the glyphs, the account. */
+.row-glyphs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .row-account {
   font-size: 10px;
 }
