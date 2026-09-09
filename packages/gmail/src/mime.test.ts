@@ -119,3 +119,8 @@ test("a name that is an address, or the email again, is dropped", () => {
   assert.equal(cleanName("  , Karla Samano ", "karla@kjtravel.com"), "Karla Samano");
   assert.equal(cleanName("Oliver (last name not verified)", "jobs@arcforma.ai"), "Oliver (last name not verified)");
 });
+
+test("single quotes around a name are the header's, not the person's", () => {
+  assert.equal(cleanName("'Maya Glenn'", "maya@arcforma.ai"), "Maya Glenn");
+  assert.deepEqual(parseAddressList("'Maya Glenn' <maya@arcforma.ai>")[0], { email: "maya@arcforma.ai", name: "Maya Glenn" });
+});

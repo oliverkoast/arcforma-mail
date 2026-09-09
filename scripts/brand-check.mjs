@@ -57,3 +57,21 @@ if (hits) {
   process.exit(1);
 }
 console.log(`brand-check: clean (${files.length} files)`);
+
+// ---- every --af-* token the app uses has to exist ---------------------------------------------
+// var(--af-paper) painted the recipient dropdown, and nothing defined --af-paper, so the list was
+// transparent and the editor showed through it. A token that is not in the brand file is not a
+// colour; it is nothing, and CSS says nothing about it. Defined here means declared in the synced
+// brand stylesheet or in app.css itself.
+{
+  const fs = await import("node:fs");
+  const brand = fs.readFileSync("apps/desktop/public/brand/styles.css", "utf8");
+  const app = fs.readFileSync("apps/desktop/src/app.css", "utf8");
+  const defined = new Set([...(brand + app).matchAll(/(--af-[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
+  const used = new Set([...app.matchAll(/var\((--af-[a-z0-9-]+)/g)].map((m) => m[1]));
+  const missing = [...used].filter((t) => !defined.has(t)).sort();
+  if (missing.length) {
+    console.error(`brand-check: undefined token(s) used in app.css: ${missing.join(", ")}`);
+    process.exit(1);
+  }
+}

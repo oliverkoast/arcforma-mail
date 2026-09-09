@@ -230,7 +230,8 @@ function splitAddresses(value: string): string[] {
 
 /** A display name, or nothing: never an address, never a leftover comma, never the email again. */
 export function cleanName(raw: string, email: string): string {
-  const name = raw.trim().replace(/^"|"$/g, "").replace(/^[\s,;]+|[\s,;]+$/g, "").trim();
+  // Double or single quotes around a name are the header's, not the person's.
+  const name = raw.trim().replace(/^["']|["']$/g, "").replace(/^[\s,;]+|[\s,;]+$/g, "").trim();
   if (!name || name.includes("@") || name.toLowerCase() === email) return "";
   return name;
 }

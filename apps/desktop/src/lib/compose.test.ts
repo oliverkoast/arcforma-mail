@@ -64,6 +64,16 @@ test("replying to your own message goes back to its recipients", () => {
   assert.deepEqual(recipientsFor("replyAll", mine, owners).cc, [{ email: "priya@northwind.example", name: "Priya" }]);
 });
 
+test("replying to a note to self goes back to yourself, not to nobody", () => {
+  // From one of your addresses to another, or to the same one: stripping owners used to leave an
+  // empty To, and Reply all opened with the recipient line blank.
+  const note = msg({ from: { email: "you@example.com", name: "Oliver" }, to: [{ email: "you@example.net", name: "" }], cc: [], direction: "out" });
+  assert.deepEqual(recipientsFor("reply", note, owners).to, [{ email: "you@example.net", name: "" }]);
+  assert.deepEqual(recipientsFor("replyAll", note, owners), { to: [{ email: "you@example.net", name: "" }], cc: [] });
+  const same = msg({ from: { email: "you@example.com", name: "Oliver" }, to: [{ email: "you@example.com", name: "" }], cc: [], direction: "out" });
+  assert.deepEqual(recipientsFor("replyAll", same, owners).to, [{ email: "you@example.com", name: "" }]);
+});
+
 test("forward and new start with no recipients", () => {
   assert.deepEqual(recipientsFor("forward", msg({}), owners), { to: [], cc: [] });
   assert.deepEqual(recipientsFor("new", null, owners), { to: [], cc: [] });

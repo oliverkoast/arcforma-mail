@@ -50,10 +50,15 @@ export function recipientsFor(mode: ComposeMode, target: MessageView | null, own
   const sender = target.replyTo ?? target.from;
   const fromMe = own.has(target.from.email.toLowerCase());
   const primary = fromMe ? target.to : [sender];
-  const to = dedupe(primary, own);
+  let to = dedupe(primary, own);
+  // A message from you to you, a note to self or a test, has nobody left once your own addresses
+  // are taken out, and a reply with an empty To is a reply to nobody. Keep the original recipients
+  // in that one case: the person wanted to answer the thread they are looking at.
+  const selfOnly = to.length === 0 && fromMe;
+  if (selfOnly) to = dedupe(primary, new Set());
   if (mode === "reply") return { to, cc: [] };
   const toSet = new Set(to.map((a) => a.email));
-  const rest = dedupe([...target.to, ...target.cc], new Set([...own, ...toSet]));
+  const rest = dedupe([...target.to, ...target.cc], new Set([...(selfOnly ? [] : own), ...toSet]));
   return { to, cc: rest };
 }
 

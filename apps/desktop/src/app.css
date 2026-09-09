@@ -2442,7 +2442,7 @@ button.message-from {
   padding: 8px 14px;
   border: 1px solid var(--af-rule);
   border-radius: var(--af-radius-pill);
-  background: var(--af-paper);
+  background: var(--af-bg);
   z-index: 60;
 }
 .goto-chip .goto-keys {
@@ -2462,7 +2462,7 @@ button.message-from {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--af-paper);
+  background: var(--af-bg);
   z-index: 200;
   padding: 32px;
 }
@@ -2534,7 +2534,7 @@ button.message-from {
   list-style: none;
   max-height: 216px;
   overflow-y: auto;
-  background: var(--af-paper);
+  background: var(--af-bg);
   border: 1px solid var(--af-rule);
   border-radius: 10px;
 }
