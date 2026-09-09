@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { keyLabel } from "../keys/keyLabel";
 
-export type Glyph = "reply" | "replyAll" | "forward" | "done" | "inbox" | "snooze" | "star" | "daily" | "weekly" | "trash" | "unsubscribe" | "paperclip";
+export type Glyph = "reply" | "replyAll" | "forward" | "done" | "inbox" | "snooze" | "star" | "daily" | "weekly" | "trash" | "unsubscribe" | "paperclip" | "check";
 
 const STROKE = { fill: "none", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round", strokeLinejoin: "round" } as const;
 
@@ -24,6 +24,12 @@ export function Icon({ glyph }: { glyph: Glyph }): ReactNode {
       return (
         <svg width="16" height="16" viewBox="0 0 16 16" {...STROKE} aria-hidden="true">
           <path d="M9.5 3.5L13.5 7l-4 3.5M13.5 7h-6a5 5 0 0 0-5 5v1" />
+        </svg>
+      );
+    case "check":
+      return (
+        <svg width="12" height="12" viewBox="0 0 16 16" {...STROKE} strokeWidth={1.8} aria-hidden="true">
+          <path d="M3 8.5l3.2 3.2L13 4.5" />
         </svg>
       );
     case "done":

@@ -2,7 +2,7 @@ import type React from "react";
 import { useState, type ReactNode } from "react";
 import { fullDate } from "../lib/format";
 import { describeRecipients, initials, messageEyebrow, relativeTime, showSenderAddress } from "../lib/recipients";
-import { receiptLine } from "../lib/receipts";
+import { receiptChecks } from "../lib/receipts";
 import { Icon } from "./IconButton";
 import { attachmentMarker } from "../lib/attachments";
 import type { MessageView } from "../../shared/types";
@@ -84,6 +84,7 @@ export function MessageHeader({ message, owners, repeatSender, actions, onCollap
         ) : null}
       </div>
       <div className="message-meta">
+        {message.direction === "out" ? <ReceiptChecks receipt={message.receipt ?? null} /> : null}
         <div className="message-date" data-tip={when}>
           {relativeTime(message.internalDate)}
         </div>
@@ -102,13 +103,19 @@ export function MessageHeader({ message, owners, repeatSender, actions, onCollap
             {exact ? <span>{files}</span> : null}
           </button>
         ) : null}
-        {message.receipt ? (
-          <div className={`af-mono message-receipt is-${message.receipt.status === "opened" ? "opened" : "quiet"}`} data-tip={message.receipt.tip}>
-            {receiptLine(message.receipt)}
-          </div>
-        ) : null}
         {actions}
       </div>
+    </div>
+  );
+}
+
+/** Two checks beside the time of a message you sent: one dark once it went out, both dark once it was opened. Hover says what is known. */
+function ReceiptChecks({ receipt }: { receipt: MessageView["receipt"] }): ReactNode {
+  const { filled, label } = receiptChecks(receipt);
+  return (
+    <div className={`message-checks ${filled === 2 ? "is-opened" : "is-sent"}`} data-tip={label} aria-label={label}>
+      <Icon glyph="check" />
+      <Icon glyph="check" />
     </div>
   );
 }

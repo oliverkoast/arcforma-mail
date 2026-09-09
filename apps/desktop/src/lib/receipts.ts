@@ -20,6 +20,18 @@ export const RECEIPT_COMPOSE_TIP =
 export const RECEIPT_NO_SERVICE_TIP =
   "Read receipts need a pixel service you deploy yourself. packages/pixel-service/README.md walks through it; the address and token go in Settings.";
 
+/**
+ * The two small checks beside a sent message's time. One dark check: it went out. Two: the pixel
+ * service saw a fetch that counts as an open. The hover line says which and why, in the same
+ * words the list uses, so the checks never claim more than the line would.
+ */
+export function receiptChecks(receipt: ReceiptSummary | null | undefined, now = Date.now()): { filled: 1 | 2; label: string } {
+  if (!receipt) return { filled: 1, label: "Sent. No read receipt on this message." };
+  if (receipt.status === "opened") return { filled: 2, label: `${receiptLine(receipt, now)}. ${receipt.tip}`.trim() };
+  if (receipt.status === "possibly automatic") return { filled: 1, label: `Sent. Possibly automatic: ${receipt.tip}`.trim() };
+  return { filled: 1, label: `Sent. No open yet. ${receipt.tip}`.trim() };
+}
+
 /** The line itself: "Opened 2 hours ago", "Possibly automatic", "No signal". Never a count of opens, which is not a count of people. */
 export function receiptLine(receipt: ReceiptSummary, now = Date.now()): string {
   if (receipt.status === "opened" && receipt.firstAt !== null) return `Opened ${relativeTime(receipt.firstAt, now)}`;

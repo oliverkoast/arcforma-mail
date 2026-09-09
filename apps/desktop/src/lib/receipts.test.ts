@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { RECEIPT_COMPOSE_TIP, RECEIPT_HONESTY, RECEIPT_NO_SERVICE_TIP, receiptLine } from "./receipts";
+import { RECEIPT_COMPOSE_TIP, RECEIPT_HONESTY, RECEIPT_NO_SERVICE_TIP, receiptChecks, receiptLine } from "./receipts";
 import type { ReceiptSummary } from "../../shared/types";
 
 const at = Date.UTC(2026, 8, 3, 12, 0, 0);
@@ -52,4 +52,15 @@ test("the voice rules hold here too: no emoji, no em dash", () => {
     assert.doesNotMatch(s, /[—–]/, "no em or en dashes");
     assert.doesNotMatch(s, /\p{Extended_Pictographic}/u, "no emoji");
   }
+});
+
+test("the two checks: one for sent, two only for an open, and the hover says which", () => {
+  assert.deepEqual(receiptChecks(null), { filled: 1, label: "Sent. No read receipt on this message." });
+  assert.equal(receiptChecks(summary({ status: "no signal", tip: "Images are widely blocked." })).filled, 1);
+  assert.match(receiptChecks(summary({ status: "no signal", tip: "Images are widely blocked." })).label, /^Sent\. No open yet\./);
+  assert.equal(receiptChecks(summary({ status: "possibly automatic", firstAt: at, count: 1, tip: "" })).filled, 1, "a fetch that looks like a scanner is not an open");
+  const opened = receiptChecks(summary({ status: "opened", firstAt: at - 2 * 3600_000, count: 3, tip: "" }), at);
+  assert.equal(opened.filled, 2);
+  assert.match(opened.label, /^Opened 2 hours ago/);
+  assert.doesNotMatch(opened.label, /3/, "never a count of opens, which is not a count of people");
 });

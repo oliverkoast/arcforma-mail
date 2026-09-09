@@ -354,13 +354,18 @@ body.is-resizing { cursor: col-resize; user-select: none; }
    evidence about software, not news about a person, and the three states are not a scale to rank.
    "Opened" gets body ink because it is the one that says something happened; the other two stay
    soft, because "no signal" is the absence of evidence and must never read as a verdict. */
-.message-receipt {
-  font-size: 11px;
-  white-space: nowrap;
-  color: var(--af-text-soft);
-}
-.message-receipt.is-opened {
+.message-checks {
+  display: inline-flex;
+  align-items: center;
   color: var(--af-text-body);
+  margin-right: 2px;
+}
+.message-checks svg + svg {
+  margin-left: -7px;
+}
+/* Sent, not yet opened: the second check waits, faint, so the pair never claims an open it has no evidence for. */
+.message-checks.is-sent svg + svg {
+  opacity: 0.3;
 }
 .message-body iframe {
   width: 100%;
