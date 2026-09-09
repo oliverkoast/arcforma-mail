@@ -361,6 +361,8 @@ export interface SettingsInfo {
   remindScope: string[];
   /** Read receipts are available at all. Off by default, and on does not arm anything: every message is still chosen one at a time. */
   readReceipts: boolean;
+  /** A new message starts with its receipt armed. Off, each one is chosen by hand. Needs readReceipts and a service. */
+  readReceiptsDefault: boolean;
   /** The pixel service to register tokens with. Empty until one is deployed; see packages/pixel-service/README.md. */
   readReceiptsUrl: string;
   /** Whether a bearer token is stored. The token itself never crosses the bridge in either direction. */

@@ -50,6 +50,7 @@ export function settingsInfo(db: Db): SettingsInfo {
     remindClientsAfterDays: s.remindClientsAfterDays,
     remindScope: s.remindScope,
     readReceipts: s.readReceipts,
+    readReceiptsDefault: s.readReceiptsDefault,
     readReceiptsUrl: s.readReceiptsUrl,
     readReceiptsTokenSet: hasReceiptAuthToken(db),
   };
@@ -185,6 +186,7 @@ export function registerComposeIpc(db: Db, scheduler: Scheduler, mirror: DraftMi
     if (typeof patch.remindClientsAfterDays === "number" && Number.isFinite(patch.remindClientsAfterDays)) setSetting(db, "remindClientsAfterDays", Math.max(0, Math.min(60, Math.round(patch.remindClientsAfterDays))));
     if (Array.isArray(patch.remindScope)) setSetting(db, "remindScope", patch.remindScope.filter((v): v is string => typeof v === "string").map((v) => v.trim()).filter(Boolean));
     if (typeof patch.readReceipts === "boolean") setSetting(db, "readReceipts", patch.readReceipts);
+    if (typeof patch.readReceiptsDefault === "boolean") setSetting(db, "readReceiptsDefault", patch.readReceiptsDefault);
     if (typeof patch.readReceiptsUrl === "string") setSetting(db, "readReceiptsUrl", receiptUrl(patch.readReceiptsUrl));
     const next = settingsInfo(db);
     emit("toast", { text: "Settings saved." });

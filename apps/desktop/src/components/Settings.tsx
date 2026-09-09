@@ -294,6 +294,19 @@ function ReceiptsSection() {
       </label>
       <label className="settings-row">
         <span>
+          Track every message by default
+          <span className="settings-help">Each new message starts with its receipt on, the way Superhuman does it. The control on the message still turns it off for that one. {RECEIPT_HONESTY}</span>
+        </span>
+        <input
+          type="checkbox"
+          checked={settings.readReceiptsDefault}
+          disabled={!settings.readReceipts}
+          data-tip={settings.readReceipts ? "New messages start with a read receipt armed. Remove it on any message from its compose footer." : "Turn on Offer read receipts first."}
+          onChange={(e) => void saveSettings({ readReceiptsDefault: e.target.checked })}
+        />
+      </label>
+      <label className="settings-row">
+        <span>
           Pixel service address
           <span className="settings-help">A service you deploy yourself; packages/pixel-service/README.md walks through it. Nothing about your mail passes through it except the fact that an image was fetched.</span>
         </span>

@@ -28,6 +28,12 @@ export interface Settings {
    * a time. See docs/adr/0003-read-receipts-reverse-an-earlier-decision.md.
    */
   readReceipts: boolean;
+  /**
+   * Whether a new message starts with a receipt armed. Off, each message is chosen by hand; on, every
+   * message is tracked unless the control on it is turned off. Does nothing unless readReceipts is on
+   * and a service is configured.
+   */
+  readReceiptsDefault: boolean;
   /** The pixel service this app registers tokens with and collects from. Empty until one is deployed. */
   readReceiptsUrl: string;
   /** The first-run onboarding step that was on screen when the app last quit, so a resume lands there. */
@@ -48,6 +54,7 @@ export const DEFAULT_SETTINGS: Settings = {
   remindClientsAfterDays: 3,
   remindScope: ["Clients"],
   readReceipts: false,
+  readReceiptsDefault: false,
   readReceiptsUrl: "",
   onboardingStep: "welcome",
   onboardingDone: false,
@@ -84,6 +91,7 @@ export function getSettings(db: Db): Settings {
     remindClientsAfterDays: getSetting(db, "remindClientsAfterDays"),
     remindScope: getSetting(db, "remindScope"),
     readReceipts: getSetting(db, "readReceipts"),
+    readReceiptsDefault: getSetting(db, "readReceiptsDefault"),
     readReceiptsUrl: getSetting(db, "readReceiptsUrl"),
     onboardingStep: getSetting(db, "onboardingStep"),
     onboardingDone: getSetting(db, "onboardingDone"),

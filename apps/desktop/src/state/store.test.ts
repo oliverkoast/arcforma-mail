@@ -1204,6 +1204,27 @@ test("a slower earlier search never overwrites a newer one", async () => {
   useApp.getState().leaveSearch();
 });
 
+test("a new message starts with its receipt armed when that is the default, and only then", async () => {
+  const { useApp } = await import("./store");
+  const base = useApp.getState().settings;
+  const configured = { ...base, readReceipts: true, readReceiptsDefault: true, readReceiptsUrl: "https://pixel.example", readReceiptsTokenSet: true };
+  useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [summary("t-a", "A")], selected: 0, open: null, toast: null, view: "inbox", readingPane: false, categories: [], settings: configured });
+  useApp.getState().openCompose("new");
+  assert.equal(useApp.getState().compose?.readReceipt, true, "armed by default");
+  await useApp.getState().closeCompose(false);
+
+  useApp.setState({ settings: { ...configured, readReceipts: false } });
+  useApp.getState().openCompose("new");
+  assert.notEqual(useApp.getState().compose?.readReceipt, true, "the offer switch off means nothing is armed, whatever the default says");
+  await useApp.getState().closeCompose(false);
+
+  useApp.setState({ settings: { ...configured, readReceiptsTokenSet: false } });
+  useApp.getState().openCompose("new");
+  assert.notEqual(useApp.getState().compose?.readReceipt, true, "no service, nothing armed");
+  await useApp.getState().closeCompose(false);
+  useApp.setState({ settings: base });
+});
+
 test("with nothing open, E still acts on the row the cursor is on", async () => {
   const { useApp } = await import("./store");
   useApp.setState({ status: { accounts, configPath: "", configError: null }, ready: true, rows: [summary("t-a", "A"), summary("t-b", "B")], selected: 1, open: null, toast: null, view: "inbox", readingPane: false, categories: [] });

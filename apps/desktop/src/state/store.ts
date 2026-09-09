@@ -317,7 +317,7 @@ function writeStoredBool(key: string, value: boolean): void {
 }
 
 const EMPTY_STATUS: AccountsStatus = { accounts: [], configPath: "", configError: null };
-const DEFAULT_SETTINGS: SettingsInfo = { undoWindowSec: 10, autoDraft: false, remoteImages: "always", remindClientsAfterDays: 3, remindScope: ["Clients"], readReceipts: false, readReceiptsUrl: "", readReceiptsTokenSet: false };
+const DEFAULT_SETTINGS: SettingsInfo = { undoWindowSec: 10, autoDraft: false, remoteImages: "always", remindClientsAfterDays: 3, remindScope: ["Clients"], readReceipts: false, readReceiptsDefault: false, readReceiptsUrl: "", readReceiptsTokenSet: false };
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 /** How much of the current toast's time is still to run, and when that run started, so a hover can hold it. */
 let toastRemaining = 0;
@@ -1376,6 +1376,11 @@ export const useApp = create<AppState>((set, get) => ({
     let draft: ComposeDraft;
     try {
       draft = buildDraft({ mode, accountId, thread: view?.thread ?? null, messages: view?.messages ?? [], owners, sanitize, bodyHtml: opts.bodyHtml, targetId });
+      // A fresh message starts with its receipt armed when the person asked for that as the default.
+      // Only a fresh one: a draft being reopened keeps whatever was chosen for it. And only when a
+      // receipt could actually be sent, so the control never reads as armed with nothing behind it.
+      const rs = get().settings;
+      if (rs.readReceipts && rs.readReceiptsDefault && rs.readReceiptsUrl.trim() && rs.readReceiptsTokenSet) draft = { ...draft, readReceipt: true };
     } catch (err) {
       get().showToast({ eyebrow: "NOT SUPPORTED YET", text: (err as Error).message });
       return;
