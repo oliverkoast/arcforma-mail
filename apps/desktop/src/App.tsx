@@ -18,6 +18,8 @@ import { GoToChip } from "./components/GoToChip";
 import { Tooltip } from "./components/Tooltip";
 import { useKeyboard } from "./keys/useKeyboard";
 import { useApp } from "./state/store";
+import { invoke } from "./bridge";
+import { installNetworkRecovery, retryMissingContent } from "./lib/networkRecovery";
 
 export function App() {
   const ready = useApp((s) => s.ready);
@@ -26,9 +28,19 @@ export function App() {
   const readingPane = useApp((s) => s.readingPane);
   const rows = useApp((s) => s.rows);
   const init = useApp((s) => s.init);
+  const openAccount = useApp((s) => s.open?.thread.accountId);
+  const openThread = useApp((s) => s.open?.thread.id);
+  const missingContent = useApp((s) => Boolean(s.open?.bodiesError));
   useEffect(() => {
     void init();
   }, [init]);
+  useEffect(() => installNetworkRecovery(window, async () => {
+    await invoke("sync:now");
+    await useApp.getState().refreshOpen();
+  }), []);
+  useEffect(() => {
+    if (missingContent) return retryMissingContent(() => useApp.getState().refreshOpen());
+  }, [missingContent, openAccount, openThread]);
   useKeyboard();
   useHoverScope();
 

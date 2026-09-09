@@ -1,6 +1,7 @@
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { estimateRowHeight, remeasureRows } from "../lib/rowSizing";
 import { isQueueView, useApp } from "../state/store";
 import { attentionEyebrow, eyebrowDate, listDate, participantsLine, sendsAt } from "../lib/format";
 import { rowDescriptors, viewTitle } from "../lib/sidebarLayout";
@@ -181,10 +182,7 @@ export function ThreadList() {
     getItemKey: (i) => `${rows[i]?.accountId}:${rows[i]?.id}`,
     // The first guess for a row not yet measured. Rows carrying an eyebrow are one line taller; a
     // guess that already knows that keeps the layout right on the first paint, not just the second.
-    estimateSize: (i) => {
-      const r = rows[i];
-      return r && ((r.band === "needs_you" && r.attentionReason) || r.noReplyBy || r.wakeAt) ? 91 : 74;
-    },
+    estimateSize: (i) => estimateRowHeight(rows[i]),
     overscan: 8,
   });
 
@@ -192,7 +190,7 @@ export function ThreadList() {
   // stale measurements leave rows overlapping, so measure again once the fonts have settled.
   useEffect(() => {
     let cancelled = false;
-    const remeasure = () => { if (!cancelled) virtualizer.measure(); };
+    const remeasure = () => { if (!cancelled) remeasureRows(parentRef.current, virtualizer.measureElement); };
     void document.fonts?.ready?.then(remeasure).catch(() => {});
     return () => { cancelled = true; };
   }, [virtualizer]);

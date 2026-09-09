@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { OAuth2Client, type OAuth2ClientOptions } from "google-auth-library";
 import { AuthExpiredError, OAuthConfigError } from "./errors.js";
+import { REQUEST_TIMEOUT_MS } from "./transport.js";
 
 /**
  * The slice of the google-auth-library transport the flows use: one request
@@ -21,7 +22,7 @@ export interface TokenTransporter {
 }
 
 function clientOptions(base: OAuth2ClientOptions, transporter: TokenTransporter | undefined): OAuth2ClientOptions {
-  if (!transporter) return base;
+  if (!transporter) return { ...base, transporterOptions: { timeout: REQUEST_TIMEOUT_MS } };
   // A fake transporter carries no interceptor chain, so the library must not try to attach its own.
   return { ...base, transporter: transporter as unknown as NonNullable<OAuth2ClientOptions["transporter"]>, useAuthRequestParameters: false };
 }

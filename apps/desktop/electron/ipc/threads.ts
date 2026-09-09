@@ -1,6 +1,6 @@
 import { ipcMain, shell } from "electron";
 import { shouldLoadImages } from "../images.js";
-import { decodeBody, fetchThreadFull, findBody, findCalendarText, listAttachments, parseIcs } from "@arcforma/gmail";
+import { fetchThreadFull, findBody, listAttachments, readCalendarMessage, isCalendarAttachment, type Attachment } from "@arcforma/gmail";
 import {
   suggestRecipients,
   archive,
@@ -240,6 +240,18 @@ export function registerThreadIpc(db: Db, accounts: AccountRegistry, sync: SyncM
     const cached = new Set(listBodies(db, accountId, threadId).map((b) => b.message_id));
     const missing = messages.filter((m) => !cached.has(m.id));
     let bodiesError: string | null = null;
+    // Older cached bodies may have retained the .ics file without reading it.
+    for (const body of listBodies(db, accountId, threadId)) {
+      if (body.calendar_json) continue;
+      const attachments = JSON.parse(body.attachments_json) as Attachment[];
+      if (!attachments.some(isCalendarAttachment)) continue;
+      try {
+        const client = accounts.client(accountId);
+        if (!client) { bodiesError = "Calendar details will load when this account reconnects."; continue; }
+        const calendar = await readCalendarMessage(client, body.message_id, null, attachments);
+        if (calendar) saveBody(db, accountId, body.message_id, { html: body.html, text: body.text, attachments, calendar });
+      } catch (err) { bodiesError = `Calendar details could not load: ${(err as Error).message}`; }
+    }
     if (missing.length > 0) {
       const client = accounts.client(accountId);
       if (client) {
@@ -250,7 +262,11 @@ export function registerThreadIpc(db: Db, accounts: AccountRegistry, sync: SyncM
             // Only messages the store knows: a body for a message the sync has not landed yet would violate the key.
             if (!known.has(m.id)) continue;
             const body = findBody(m.payload);
-            saveBody(db, accountId, m.id, { html: body.html, text: body.text, attachments: listAttachments(m.payload, [], body.html), calendar: parseIcs(findCalendarText(m.payload, decodeBody) ?? "") });
+            const attachments = listAttachments(m.payload, [], body.html);
+            let calendar = null;
+            try { calendar = await readCalendarMessage(client, m.id, m.payload, attachments); }
+            catch (err) { bodiesError = `Calendar details could not load: ${(err as Error).message}`; }
+            saveBody(db, accountId, m.id, { html: body.html, text: body.text, attachments, calendar });
           }
           messages = listThreadMessages(db, accountId, threadId);
           const still = listBodies(db, accountId, threadId).length;

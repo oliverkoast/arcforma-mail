@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getReplyOptions, openStore, upsertAccount, upsertThreadFromGmail, type Db } from "@arcforma/store";
+import { getReplyOptions, getSummary, saveBody, setReplyOptions, setSummary, openStore, upsertAccount, upsertThreadFromGmail, type Db } from "@arcforma/store";
 import { AiClient, type FetchLike } from "./client.js";
-import { cleanOutput, instantReplies, wantsInstantReplies } from "./features.js";
+import { cleanOutput, instantReplies, wantsInstantReplies, threadText } from "./features.js";
 
 function tempDb(): Db {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "arcmail-features-"));
@@ -92,4 +92,24 @@ test("cleanOutput removes dashes and every kind of emoji before anything is show
   assert.equal(cleanOutput("Family \u{1F468}\u200D\u{1F469}\u200D\u{1F467} time"), "Family time", "zero-width joiner sequences vanish whole");
   assert.equal(cleanOutput("Option 1\uFE0F\u20E3 or 2\uFE0F\u20E3"), "Option 1 or 2", "keycaps leave the digit");
   assert.equal(cleanOutput("Arcforma® and Form™ stay © 2026"), "Arcforma® and Form™ stay © 2026", "ordinary symbols are not emoji");
+});
+
+test("reading an attached calendar reply replaces stale AI context and invalidates cached suggestions", () => {
+  const db = tempDb();
+  seed(db, [message("m1", "david@example.com", T0)]);
+  saveBody(db, "arcforma", "m1", { text: "Confidentiality footer" });
+  setReplyOptions(db, "arcforma", "m1", ["Let me confirm timing"]);
+  setSummary(db, "arcforma", "t1", "m1", "Old summary");
+  const calendar = { method: "REPLY", summary: "Project meeting", startsAt: Date.UTC(2026, 8, 10, 21), endsAt: Date.UTC(2026, 8, 10, 22), attendees: [{ name: "David", email: "david@example.com", status: "ACCEPTED" }] };
+  saveBody(db, "arcforma", "m1", { text: "Confidentiality footer", calendar });
+  const text = threadText(db, "arcforma", "t1").text;
+  assert.match(text, /ACCEPTED/);
+  assert.match(text, /Project meeting/);
+  assert.match(text, /2026-09-10T21:00:00.000Z/);
+  assert.equal(getReplyOptions(db, "arcforma", "m1"), null);
+  assert.equal(getSummary(db, "arcforma", "t1", "m1"), null);
+  setReplyOptions(db, "arcforma", "m1", ["Thanks for accepting"]);
+  saveBody(db, "arcforma", "m1", { text: "Confidentiality footer", calendar });
+  assert.deepEqual(getReplyOptions(db, "arcforma", "m1"), ["Thanks for accepting"], "unchanged calendar preserves a current cache");
+  db.close();
 });

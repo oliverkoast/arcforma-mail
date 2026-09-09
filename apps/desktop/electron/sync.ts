@@ -45,6 +45,8 @@ export interface SyncAccounts {
 export interface SyncOptions {
   pollFocusedMs?: number;
   pollHiddenMs?: number;
+  /** Where files attached to drafts written in Gmail are staged for the compose. */
+  draftStageDir?: string;
 }
 
 export class SyncManager {
@@ -59,6 +61,9 @@ export class SyncManager {
   private stopped = false;
   private readonly pollFocusedMs: number;
   private readonly pollHiddenMs: number;
+  private readonly draftStageDir: string | null;
+  /** Accounts whose drafts have been reconciled once since this process started. */
+  private reconciledSinceBoot = new Set<string>();
   /** Called after new or changed threads land, so the classifier can pick them up. */
   onThreadsChanged: (() => void) | null = null;
 
@@ -67,6 +72,7 @@ export class SyncManager {
     private readonly accounts: SyncAccounts,
     opts: SyncOptions = {}
   ) {
+    this.draftStageDir = opts.draftStageDir ?? null;
     this.pollFocusedMs = opts.pollFocusedMs ?? POLL_FOCUSED_MS;
     this.pollHiddenMs = opts.pollHiddenMs ?? POLL_HIDDEN_MS;
     accounts.onAuthExpired = (id) => this.cancel(id);
@@ -132,7 +138,10 @@ export class SyncManager {
     const t = this.timers.get(accountId);
     if (t) clearTimeout(t);
     this.timers.delete(accountId);
-    const p = this.runOnce(accountId)
+    // Register the run before calling runOnce: an unavailable Keychain returns
+    // synchronously and schedules a retry before its first await. Otherwise
+    // finally replaces that retry with the normal (up to three minute) poll.
+    const p = Promise.resolve().then(() => this.runOnce(accountId))
       .catch((err) => logError("sync", `${accountId} loop`, err))
       .finally(() => {
         this.running.delete(accountId);
@@ -154,6 +163,7 @@ export class SyncManager {
       // An ok account with no client means the Keychain would not answer just now. Try again soon
       // rather than never: this is the path that heals after a relaunch or an Always Allow.
       this.schedule(accountId, 30_000);
+      emit("accounts:changed", this.accounts.status());
       return;
     }
     try {
@@ -162,6 +172,13 @@ export class SyncManager {
           await this.backfill(account, client, 90);
         } else {
           await this.poll(account, client);
+          // Once per launch, after the first good poll: drafts Gmail holds are reconciled even when
+          // no history touched them. That is how rows imported before a fix pick the fix up, files
+          // and dates included, without waiting for someone to edit a draft in Gmail.
+          if (!this.reconciledSinceBoot.has(accountId)) {
+            this.reconciledSinceBoot.add(accountId);
+            await this.reconcileDrafts(accountId, client);
+          }
         }
       } catch (err) {
         if (!(err instanceof HistoryExpiredError)) throw err;
@@ -182,6 +199,8 @@ export class SyncManager {
       }
       updateAccount(this.db, accountId, { error: (err as Error).message });
       emit("accounts:changed", this.accounts.status());
+      // Connectivity failures should keep trying even with the window hidden.
+      this.schedule(accountId, 30_000);
       throw err;
     }
   }
@@ -238,6 +257,7 @@ export class SyncManager {
     }
     // The watermark moves only after every page has been applied and every referenced thread fetched, or put down for a retry.
     updateAccount(this.db, id, { history_id: historyId, last_sync_at: Date.now(), error: null });
+    emit("accounts:changed", this.accounts.status());
     if (changed) {
       emit("threads:changed", { accountId: id });
       this.onThreadsChanged?.();
@@ -281,7 +301,8 @@ export class SyncManager {
   /** Brings the drafts table in line with users.drafts. A failure here waits for the next history batch that touches drafts. */
   private async reconcileDrafts(accountId: string, client: GmailClient): Promise<void> {
     try {
-      const r = await reconcileGmailDrafts(this.db, accountId, client, { ownerAddresses: this.accounts.ownerAddresses(accountId) });
+      const r = await reconcileGmailDrafts(this.db, accountId, client, { ownerAddresses: this.accounts.ownerAddresses(accountId), ...(this.draftStageDir ? { stageDir: this.draftStageDir } : {}) });
+      this.reconciledSinceBoot.add(accountId);
       if (r.imported || r.updated || r.dropped || r.pushed) {
         log("drafts", `${accountId} reconciled: ${reconcileSummary(r)}`);
         emit("drafts:changed", { accountId });

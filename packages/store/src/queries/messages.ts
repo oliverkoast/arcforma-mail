@@ -186,6 +186,12 @@ export interface BodyInput {
 
 export function saveBody(db: Db, accountId: string, messageId: string, body: BodyInput): void {
   transaction(db, () => {
+    const calendarJson = body.calendar ? JSON.stringify(body.calendar) : null;
+    if (calendarJson && calendarJson !== getBody(db, accountId, messageId)?.calendar_json) {
+      // Answers generated before we read the invite attachment lack the event context.
+      db.prepare("DELETE FROM summaries WHERE account_id = ? AND thread_id = (SELECT thread_id FROM messages WHERE account_id = ? AND id = ?)").run(accountId, accountId, messageId);
+      db.prepare("DELETE FROM reply_options WHERE account_id = ? AND message_id IN (SELECT id FROM messages WHERE account_id = ? AND thread_id = (SELECT thread_id FROM messages WHERE account_id = ? AND id = ?))").run(accountId, accountId, accountId, messageId);
+    }
     db.prepare(
       `INSERT INTO message_bodies (account_id, message_id, html, text, attachments_json, calendar_json, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(account_id, message_id) DO UPDATE SET html = excluded.html, text = excluded.text,

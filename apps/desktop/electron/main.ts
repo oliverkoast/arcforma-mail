@@ -307,7 +307,7 @@ async function boot(): Promise<void> {
   accounts = new AccountRegistry(db);
   accounts.reloadConfig();
   if (accounts.configError) log("app", accounts.configError);
-  sync = new SyncManager(db, accounts);
+  sync = new SyncManager(db, accounts, { draftStageDir: path.join(app.getPath("userData"), "draft-attachments") });
   // Read receipts: off by default, per message, and honest about the difference
   // between no fetch and unread. docs/adr/0003 says why they exist at all.
   const receiptService = new ReceiptService(db);
@@ -455,9 +455,10 @@ interface SmokeStep {
 
 const OVERLAP_AUDIT =
   "await new Promise((r) => setTimeout(r, 600));" +
-  "const items = [...document.querySelectorAll('.rows [data-index]')].map((el) => ({ i: Number(el.dataset.index), top: el.getBoundingClientRect().top, bottom: el.getBoundingClientRect().bottom })).sort((a, b) => a.i - b.i);" +
+  "const items = [...document.querySelectorAll('.rows [data-index]')].map((el) => ({ i: Number(el.dataset.index), top: el.getBoundingClientRect().top, bottom: Math.max(el.getBoundingClientRect().bottom, ...[...el.querySelectorAll('.row, .row-main, .row-meta')].map((child) => child.getBoundingClientRect().bottom)) })).sort((a, b) => a.i - b.i);" +
   "let overlaps = 0; for (let k = 1; k < items.length; k++) if (items[k].top < items[k - 1].bottom - 1) overlaps++;" +
-  "console.log('LIST OVERLAP rows:', items.length, 'overlapping:', overlaps);";
+  "console.log('LIST OVERLAP rows:', items.length, 'overlapping:', overlaps);" +
+  "if (overlaps) throw new Error('Mail rows overlap: ' + overlaps);";
 
 const SMOKE_STEPS: SmokeStep[] = [
   { name: "inbox", script: null, waitMs: 2500 },
@@ -549,6 +550,7 @@ const SMOKE_STEPS: SmokeStep[] = [
       "window.__arcmail.updateCompose({ subject: 'Draft for the smoke run', bodyHtml: '<p>Half written.</p>' });" +
       "await window.__arcmail.closeCompose(true); await new Promise((r) => setTimeout(r, 900));" +
       "await window.__arcmail.loadThreads(true); await new Promise((r) => setTimeout(r, 600));" +
+      OVERLAP_AUDIT +
       "const rows = window.__arcmail.rows; const i = rows.findIndex((r) => r.draft && r.subject === 'Draft for the smoke run');" +
       "window.__arcmail.select(Math.max(0, i)); await window.__arcmail.openSelected(); await new Promise((r) => setTimeout(r, 400));" +
       "const c = window.__arcmail.compose;" +

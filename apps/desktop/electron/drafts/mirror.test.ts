@@ -327,3 +327,31 @@ test("a draft imported with the import time as its start is re-dated from Gmail 
   assert.equal(r2.updated, 0, "unchanged in Gmail and already dated: skipped");
   assert.equal(fetches, 1, "fetched exactly once");
 });
+
+
+test("a Gmail draft's files are staged on disk and listed on the draft; a file that will not download is left out, not fatal", async () => {
+  const db = tempDb();
+  const stageDir = fs.mkdtempSync(path.join(os.tmpdir(), "arcmail-stage-"));
+  const pdf = Buffer.from("%PDF-1.4 fake");
+  const withFiles = gmailDraft("dF", "gmF", { subject: "Guide attached" }) as unknown as { message: { payload: { mimeType: string; parts?: unknown[] } } };
+  withFiles.message.payload.mimeType = "multipart/mixed";
+  withFiles.message.payload.parts = [
+    { mimeType: "text/html", body: { data: Buffer.from("<p>see attached</p>").toString("base64url") } },
+    { partId: "1", filename: "guide.pdf", mimeType: "application/pdf", body: { attachmentId: "A1", size: pdf.length }, headers: [{ name: "Content-Disposition", value: 'attachment; filename="guide.pdf"' }] },
+    { partId: "2", filename: "gone.txt", mimeType: "text/plain", body: { attachmentId: "A2", size: 5 }, headers: [{ name: "Content-Disposition", value: "attachment" }] },
+  ];
+  const { client } = clientOf((call) => {
+    if (/\/drafts\?/.test(call.url)) return { status: 200, body: { drafts: [{ id: "dF", message: { id: "gmF", threadId: "thread-dF" } }] } };
+    if (/\/drafts\/dF\?/.test(call.url)) return { status: 200, body: withFiles };
+    if (/attachments\/A1/.test(call.url)) return { status: 200, body: { size: pdf.length, data: pdf.toString("base64url") } };
+    if (/attachments\/A2/.test(call.url)) return { status: 404, body: { error: "gone" } };
+    throw new Error(`unexpected ${call.url}`);
+  });
+  const r = await reconcileGmailDrafts(db, "arcforma", client, { now: T0, stageDir });
+  assert.equal(r.imported, 1);
+  const row = listDrafts(db, ["arcforma"]).find((d) => d.gmail_draft_id === "dF")!;
+  const files = JSON.parse(row.attachments_json) as Array<{ path: string; name: string; size: number }>;
+  assert.deepEqual(files.map((f) => f.name), ["guide.pdf"], "the one that downloaded is listed; the one that did not is not");
+  assert.equal(fs.readFileSync(files[0]!.path).toString(), pdf.toString(), "and the bytes are on disk where the compose reads them");
+  assert.equal(files[0]!.size, pdf.length);
+});

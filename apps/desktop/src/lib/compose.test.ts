@@ -226,6 +226,9 @@ test("sameMessages sees a new message, a body that arrived, and an image toggle,
   const { sameMessages, bodyNotice } = await import("./compose");
   const base = (id: string): MessageView => ({ accountId: "a", id, threadId: "t", internalDate: 1, from: { email: "x@y.z", name: "" }, replyTo: null, to: [], cc: [], bcc: [], messageIdHeader: null, references: null, subject: "", snippet: "", labelIds: [], direction: "in", isAuto: false, hasAttachments: false, body: { html: "<p>hi</p>", text: null, attachments: [] }, loadImages: false });
   const a = [base("m1"), base("m2")];
+  const { parseIcs } = await import("@arcforma/gmail");
+  const invite = parseIcs("BEGIN:VCALENDAR\nMETHOD:REPLY\nBEGIN:VEVENT\nSUMMARY:Meeting\nEND:VEVENT\nEND:VCALENDAR")!;
+  assert.equal(sameMessages(a, [base("m1"), { ...base("m2"), invite }]), false, "calendar details arriving must update the open reader");
   assert.equal(sameMessages(a, [base("m1"), base("m2")]), true);
   assert.equal(sameMessages(a, [base("m1"), base("m2"), base("m3")]), false, "a reply arrived");
   assert.equal(sameMessages(a, [base("m1"), { ...base("m2"), body: null }]), false, "a body went missing or arrived");

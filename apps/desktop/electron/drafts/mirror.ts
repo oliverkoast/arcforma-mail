@@ -11,7 +11,9 @@
 // goes once the send has succeeded (scheduler.ts). Undo and a failed send put
 // the row back, still tied to the Gmail draft, and mirror it again.
 
-import { buildRawMessage, getGmailDraft, importGmailDraft, listGmailDrafts, type DraftUpsertResult, type GmailClient } from "@arcforma/gmail";
+import fs from "node:fs";
+import path from "node:path";
+import { buildRawMessage, fetchAttachment, getGmailDraft, importGmailDraft, listGmailDrafts, type Attachment, type DraftUpsertResult, type GmailClient } from "@arcforma/gmail";
 import {
   deleteDraft,
   dropPendingDraftUpserts,
@@ -212,6 +214,45 @@ export interface ReconcileOptions {
   ownerAddresses?: string[];
   now?: number;
   signal?: AbortSignal;
+  /** Where a Gmail draft's files are written so the compose can list and send them. Without it they stay in Gmail and are not listed. */
+  stageDir?: string;
+}
+
+/**
+ * Brings a Gmail draft's files onto disk, where the compose expects an attachment to be.
+ *
+ * Each part is written under <stageDir>/<gmailDraftId>/ with its own name, so an edit and re-import
+ * lands in the same place. A part that cannot be fetched is logged and left out rather than failing
+ * the import: the text of the draft is worth having even when one file is not. A file already on
+ * disk at the right size is not fetched again.
+ */
+export async function stageAttachments(
+  client: Pick<GmailClient, "request">,
+  messageId: string,
+  gmailDraftId: string,
+  parts: ReadonlyArray<Attachment>,
+  stageDir: string,
+  signal?: AbortSignal,
+): Promise<Array<{ path: string; name: string; size: number; mimeType: string }>> {
+  const out: Array<{ path: string; name: string; size: number; mimeType: string }> = [];
+  if (parts.length === 0) return out;
+  const dir = path.join(stageDir, gmailDraftId.replace(/[^A-Za-z0-9._-]/g, "_"));
+  fs.mkdirSync(dir, { recursive: true });
+  for (const p of parts) {
+    const name = path.basename(p.filename || "attachment").replace(/[\\/]/g, "_") || "attachment";
+    const file = path.join(dir, name);
+    try {
+      const have = fs.existsSync(file) ? fs.statSync(file).size : -1;
+      if (have !== p.size) {
+        const fetched = await fetchAttachment(client, { messageId, attachmentId: p.attachmentId ?? undefined, size: p.size, data: p.data }, signal);
+        fs.writeFileSync(file, fetched.bytes);
+      }
+      out.push({ path: file, name, size: fs.statSync(file).size, mimeType: p.mimeType || "application/octet-stream" });
+    } catch (err) {
+      logError("drafts", `could not fetch ${name} for draft ${gmailDraftId}`, err);
+    }
+  }
+  return out;
 }
 
 /** A Gmail-origin row whose created_at is still the import stamp: created and updated in the same instant. */
@@ -254,7 +295,9 @@ export async function reconcileGmailDrafts(db: Db, accountId: string, client: Gm
     const full = await getGmailDraft(client, r.id, opts.signal);
     const imported = importGmailDraft(full, opts.ownerAddresses ?? []);
     if (l) dropPendingDraftUpserts(db, l.id);
-    upsertGmailDraft(db, { accountId, ...imported }, now);
+    const { attachments: parts, ...rest } = imported;
+    const attachments = opts.stageDir ? await stageAttachments(client, full.message.id, r.id, parts, opts.stageDir, opts.signal) : [];
+    upsertGmailDraft(db, { accountId, ...rest, attachments }, now);
     if (l) result.updated += 1;
     else result.imported += 1;
   }

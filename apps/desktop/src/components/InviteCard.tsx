@@ -27,7 +27,11 @@ function when(invite: CalendarInvite): string {
 /** What kind of message this is, in the words a person would use. */
 function eyebrow(invite: CalendarInvite): string {
   if (invite.status === "CANCELLED" || invite.method === "CANCEL") return "CANCELLED";
-  if (invite.method === "REPLY") return "REPLY TO AN INVITATION";
+  if (invite.method === "REPLY") {
+    const replies = invite.attendees.filter((a) => ["ACCEPTED", "DECLINED", "TENTATIVE"].includes(a.status));
+    if (replies.length === 1) return `${replies[0]!.name || replies[0]!.email}: ${replies[0]!.status}`;
+    return "REPLY TO AN INVITATION";
+  }
   // A revision, not a first ask. Worth saying, because the two look identical otherwise.
   if (invite.sequence > 0) return "UPDATED INVITATION";
   return "INVITATION";

@@ -327,3 +327,78 @@ test("one thread whose threads.get fails does not hold the watermark back: the r
   assert.deepEqual(sync.pendingThreadFetches("arcforma"), []);
   assert.equal(calls.filter((c) => /batch/.test(c.url)).length, 2);
 });
+
+test("Keychain refusal keeps retrying every 30 seconds while hidden, then resumes mail without a poke", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const db = tempDb();
+  liveAccount(db, "arcforma", "you@example.com");
+  let available = false;
+  let attempts = 0;
+  let polls = 0;
+  const { transport } = transportOf((call) => {
+    if (/\/drafts\?/.test(call.url)) return { status: 200, body: { drafts: [] } };
+    polls++;
+    return { status: 200, body: { historyId: "101", history: [] } };
+  });
+  const client = new GmailClient({ accessToken: async () => "t", transport });
+  const accounts = accountsOf({ arcforma: client });
+  accounts.client = () => {
+    attempts++;
+    if (!available) updateAccount(db, "arcforma", { error: "Keychain unavailable" });
+    return available ? client : null;
+  };
+  const sync = new SyncManager(db, accounts);
+  t.after(() => { sync.stop(); db.close(); });
+  sync.setFocused(false);
+  await sync.run("arcforma");
+  assert.equal(attempts, 1);
+  for (let i = 2; i <= 3; i++) {
+    t.mock.timers.tick(29_999);
+    await Promise.resolve();
+    assert.equal(attempts, i - 1);
+    t.mock.timers.tick(1);
+    // Let the scheduled run finish without manually poking or starting it.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(attempts, i);
+  }
+  available = true;
+  t.mock.timers.tick(30_000);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(polls, 1);
+  assert.equal(getAccount(db, "arcforma")!.error, null);
+  assert.equal(getAccount(db, "arcforma")!.history_id, "101");
+  sync.stop();
+  t.mock.timers.tick(180_000);
+  assert.equal(attempts, 4, "stopping cancels the next retry");
+});
+
+test("Wi-Fi failure retries while hidden and a reconnect poke fetches mail immediately", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const db = tempDb();
+  liveAccount(db, "arcforma", "you@example.com");
+  let online = false;
+  let attempts = 0;
+  const { transport } = transportOf((call) => {
+    if (/\/drafts\?/.test(call.url)) return { status: 200, body: { drafts: [] } };
+    attempts++;
+    if (!online) throw new TypeError("fetch failed");
+    return { status: 200, body: { historyId: "102", history: [] } };
+  });
+  const client = new GmailClient({ accessToken: async () => "t", transport });
+  const sync = new SyncManager(db, accountsOf({ arcforma: client }));
+  t.after(() => { sync.stop(); db.close(); });
+  sync.setFocused(false);
+  await sync.run("arcforma");
+  assert.equal(getAccount(db, "arcforma")!.auth_state, "ok");
+  assert.equal(getAccount(db, "arcforma")!.history_id, "100");
+  t.mock.timers.tick(30_000);
+  await new Promise<void>((r) => setImmediate(r));
+  assert.equal(attempts, 2, "failure retries in 30 seconds even while hidden");
+  online = true;
+  sync.pokeAll();
+  t.mock.timers.tick(100);
+  await new Promise<void>((r) => setImmediate(r));
+  assert.equal(attempts, 3, "reconnect does not wait for the next poll");
+  assert.equal(getAccount(db, "arcforma")!.history_id, "102");
+  assert.equal(getAccount(db, "arcforma")!.error, null);
+});

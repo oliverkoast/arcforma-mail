@@ -28,7 +28,12 @@ export function cleanOutput(text: string): string {
 
 function bodyText(db: Db, m: MessageRow): string {
   const body = getBody(db, m.account_id, m.id);
-  const text = body?.text ?? (body?.html ? stripHtml(body.html) : m.snippet);
+  let text = body?.text ?? (body?.html ? stripHtml(body.html) : m.snippet);
+  if (body?.calendar_json) {
+    const event = JSON.parse(body.calendar_json) as { startsAt?: number | null; endsAt?: number | null };
+    const calendar = { ...event, startsAt: event.startsAt == null ? null : new Date(event.startsAt).toISOString(), endsAt: event.endsAt == null ? null : new Date(event.endsAt).toISOString() };
+    text = `Calendar information from this message's invite attachment:\n${JSON.stringify(calendar)}\n\n${text}`;
+  }
   return text.length > BODY_CHARS ? `${text.slice(0, BODY_CHARS)} [cut]` : text;
 }
 

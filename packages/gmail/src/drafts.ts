@@ -5,7 +5,7 @@
 // only what was typed and the send path adds the signature exactly once.
 
 import type { GmailClient } from "./client.js";
-import { findBody, header, parseAddressList, type Address, type GmailMessage } from "./mime.js";
+import { findBody, header, listAttachments, parseAddressList, type Address, type Attachment, type GmailMessage } from "./mime.js";
 
 export interface GmailDraftRef {
   id: string;
@@ -44,6 +44,8 @@ export interface DraftImport {
   gmailMessageId: string;
   /** When the draft was started, from Gmail's internalDate. The inbox lists a draft here. */
   createdAt: number;
+  /** The files attached in Gmail, non-inline parts only. The caller downloads them; the import lists them. */
+  attachments: Attachment[];
   threadId: string | null;
   mode: "new" | "reply" | "replyAll" | "forward";
   to: Address[];
@@ -166,6 +168,9 @@ export function importGmailDraft(draft: GmailDraft, ownerAddresses: string[] = [
     gmailDraftId: draft.id,
     gmailMessageId: m.id,
     createdAt: Number.isFinite(stamped) && stamped > 0 ? stamped : Date.now(),
+    // A draft written in Gmail can carry files. They were dropped on import, so the compose showed
+    // none and a send from here would have gone out without them.
+    attachments: listAttachments(m.payload, [], found.html).filter((a) => !a.inline),
     threadId,
     mode: modeOf(threadId, inReplyTo, subject, cc),
     to,

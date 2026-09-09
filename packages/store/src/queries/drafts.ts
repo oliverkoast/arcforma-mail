@@ -164,6 +164,8 @@ export interface GmailDraftImport {
   gmailMessageId: string;
   /** Gmail's internalDate for the draft. Absent from older callers; the import time stands in. */
   createdAt?: number;
+  /** Files already on disk for this draft, as the compose lists them. */
+  attachments?: Array<{ path: string; name: string; size: number; mimeType: string }>;
   threadId: string | null;
   mode: "new" | "reply" | "replyAll" | "forward";
   to: Array<{ email: string; name: string }>;
@@ -196,7 +198,7 @@ export function upsertGmailDraft(db: Db, d: GmailDraftImport, now = Date.now()):
       // next pass without a migration.
       db.prepare(
         `UPDATE drafts SET thread_id = ?, mode = ?, to_json = ?, cc_json = ?, bcc_json = ?, subject = ?, body_html = ?, quoted_html = ?, in_reply_to = ?, references_header = ?,
-           updated_at = ?, gmail_message_id = ?, mirror_state = 'synced', mirror_error = NULL, mirrored_at = ?, created_at = MIN(created_at, ?) WHERE id = ?`
+           updated_at = ?, gmail_message_id = ?, mirror_state = 'synced', mirror_error = NULL, mirrored_at = ?, created_at = MIN(created_at, ?), attachments_json = ? WHERE id = ?`
       ).run(
         d.threadId,
         d.mode,
@@ -212,6 +214,7 @@ export function upsertGmailDraft(db: Db, d: GmailDraftImport, now = Date.now()):
         d.gmailMessageId,
         now,
         d.createdAt ?? now,
+        JSON.stringify(d.attachments ?? []),
         existing.id
       );
       return existing.id;
@@ -219,8 +222,8 @@ export function upsertGmailDraft(db: Db, d: GmailDraftImport, now = Date.now()):
     const res = db
       .prepare(
         `INSERT INTO drafts (account_id, thread_id, mode, to_json, cc_json, bcc_json, subject, body_html, quoted_html, in_reply_to, references_header, created_at, updated_at,
-           gmail_draft_id, gmail_message_id, mirror_state, mirrored_at, origin, local_edited_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?, 'gmail', NULL)`
+           gmail_draft_id, gmail_message_id, mirror_state, mirrored_at, origin, local_edited_at, attachments_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?, 'gmail', NULL, ?)`
       )
       .run(
         d.accountId,
@@ -238,7 +241,8 @@ export function upsertGmailDraft(db: Db, d: GmailDraftImport, now = Date.now()):
         now,
         d.gmailDraftId,
         d.gmailMessageId,
-        now
+        now,
+        JSON.stringify(d.attachments ?? [])
       );
     return Number(res.lastInsertRowid);
   });

@@ -270,6 +270,7 @@ export function isPending(m: Pick<MessageView, "id">): boolean {
  * scroll back to the top on every sync that touched some other thread.
  */
 export function sameMessages(a: MessageView[], b: MessageView[]): boolean {
+  if (a.some((m, i) => JSON.stringify(m.invite ?? null) !== JSON.stringify(b[i]?.invite ?? null))) return false;
   if (a.length !== b.length) return false;
   return a.every((m, i) => {
     const n = b[i]!;
