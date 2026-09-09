@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { GmailClient, type Transport, type TransportInit } from "@arcforma/gmail";
 import { enqueueSend, getDraft, listDrafts, listOutbox, openStore, saveDraft, updateAccount, upsertAccount, upsertGmailDraft, type Db, type DraftUpsertPayload } from "@arcforma/store";
-import { DraftMirror, LOCAL_WINS_MS, applyDraftUpsertAck, applyDraftUpsertFail, detachDraftForSend, discardDraft, draftsNeedReconcile, mirrorDraft, reconcileGmailDrafts, restoreDraft, needsRedate, needsRefetch } from "./mirror.js";
+import { DraftMirror, LOCAL_WINS_MS, applyDraftUpsertAck, applyDraftUpsertFail, detachDraftForSend, discardDraft, draftsNeedReconcile, mirrorDraft, reconcileGmailDrafts, restoreDraft, needsRedate, needsRefetch, SENT_GRACE_MS } from "./mirror.js";
 
 interface Canned {
   status: number;
@@ -390,4 +390,24 @@ test("a Gmail draft that never had its files looked at is fetched once, gains th
   const r2 = await reconcileGmailDrafts(db, "arcforma", client, { now: T0 + 20_000, stageDir });
   assert.equal(r2.updated, 0, "unchanged and checked: skipped");
   assert.equal(fetches, 1);
+});
+
+
+test("a just-sent message is not imported back as a draft while Gmail still lists it, and is after the grace window", async () => {
+  const db = tempDb();
+  const { enqueueSend, markSent } = await import("@arcforma/store");
+  const T = T0 + 3_600_000;
+  const send = enqueueSend(db, { accountId: "arcforma", threadId: "t1", rawMime: "raw", sendAt: T - 12_000, undoUntil: T - 12_000, meta: { gmailDraftId: "dSent" } } as never);
+  markSent(db, send.id, "gmSent");
+  db.prepare("UPDATE send_queue SET updated_at = ? WHERE id = ?").run(T - 10_000, send.id);
+  const { client, calls } = clientOf((call) => {
+    if (/\/drafts\?/.test(call.url)) return { status: 200, body: { drafts: [{ id: "dSent", message: { id: "gmSentDraft", threadId: "t1" } }] } };
+    if (/\/drafts\/dSent\?/.test(call.url)) return { status: 200, body: gmailDraft("dSent", "gmSentDraft", { subject: "Re: Kickoff" }) };
+    throw new Error(`unexpected ${call.url}`);
+  });
+  const r1 = await reconcileGmailDrafts(db, "arcforma", client, { now: T });
+  assert.equal(r1.imported, 0, "still listed by Gmail ten seconds after the send: not a draft");
+  assert.equal(calls.filter((c) => /\/drafts\/dSent/.test(c.url)).length, 0, "and not even fetched");
+  const r2 = await reconcileGmailDrafts(db, "arcforma", client, { now: T + SENT_GRACE_MS + 1_000 });
+  assert.equal(r2.imported, 1, "past the window it is whatever Gmail says it is");
 });

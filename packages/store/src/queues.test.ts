@@ -289,3 +289,19 @@ test("rollover: on a new week Weekly 0 rows older than seven days drop to Later;
   assert.deepEqual(listThreads(db, { view: "weekly" }).rows.map((r) => r.id), ["recent"]);
   assert.equal(getThreadInbox(db, "old"), 1, "Later is a queue, not an archive");
 });
+
+
+test("a send that went out just now still names its Gmail draft; one from ten minutes ago does not", async () => {
+  const { openStore, upsertAccount, enqueueSend, markSent, recentlySentGmailDraftIds, queuedGmailDraftIds } = await import("./index.js");
+  const db = openStore(":memory:");
+  upsertAccount(db, { id: "a", email: "you@example.com" });
+  const T = Date.UTC(2026, 8, 9, 15, 21, 0);
+  const fresh = enqueueSend(db, { accountId: "a", threadId: null, rawMime: "x", sendAt: T, undoUntil: T, meta: { gmailDraftId: "dFresh" } } as never);
+  const stale = enqueueSend(db, { accountId: "a", threadId: null, rawMime: "y", sendAt: T - 600_000, undoUntil: T - 600_000, meta: { gmailDraftId: "dStale" } } as never);
+  markSent(db, fresh.id, "gm1");
+  markSent(db, stale.id, "gm2");
+  db.prepare("UPDATE send_queue SET updated_at = ? WHERE id = ?").run(T - 600_000, stale.id);
+  db.prepare("UPDATE send_queue SET updated_at = ? WHERE id = ?").run(T - 10_000, fresh.id);
+  assert.deepEqual([...recentlySentGmailDraftIds(db, "a", 5 * 60_000, T)], ["dFresh"]);
+  assert.equal(queuedGmailDraftIds(db, "a").size, 0, "sent is not queued");
+});

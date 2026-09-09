@@ -25,6 +25,7 @@ import {
   listMirroredDrafts,
   listPendingMirrorDrafts,
   queuedGmailDraftIds,
+  recentlySentGmailDraftIds,
   saveDraft,
   setDraftMirror,
   upsertGmailDraft,
@@ -261,6 +262,9 @@ export async function stageAttachments(
  * matching. This is how drafts imported before either fix caught up, with no migration and no
  * one editing anything in Gmail to trigger it.
  */
+/** How long after a send its Gmail draft is still treated as sent, not as a draft to import. */
+export const SENT_GRACE_MS = 5 * 60_000;
+
 export function needsRefetch(l: { origin: string; created_at: number; updated_at: number; attachments_checked?: number }): boolean {
   return needsRedate(l) || (l.origin === "gmail" && (l.attachments_checked ?? 0) === 0);
 }
@@ -278,7 +282,11 @@ export async function reconcileGmailDrafts(db: Db, accountId: string, client: Gm
   const remoteById = new Map(remote.map((r) => [r.id, r]));
   const local = listMirroredDrafts(db, accountId);
   const localByGmail = new Map(local.map((l) => [l.gmail_draft_id!, l]));
-  const queued = queuedGmailDraftIds(db, accountId);
+  // A draft whose send is queued, or went out in the last few minutes, is not a draft to import even
+  // while Gmail still lists it. On 2026-09-09: send queued 15:21:16, Gmail still listed the draft at
+  // 15:21:28 and it was imported, gone by 15:21:35 and dropped. Seven seconds of a sent message
+  // sitting in a reply box as a draft.
+  const queued = new Set([...queuedGmailDraftIds(db, accountId), ...recentlySentGmailDraftIds(db, accountId, SENT_GRACE_MS, now)]);
 
   for (const l of local) {
     if (remoteById.has(l.gmail_draft_id!)) continue;

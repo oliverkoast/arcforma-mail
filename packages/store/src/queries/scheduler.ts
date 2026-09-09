@@ -170,6 +170,26 @@ export function failInterruptedSends(db: Db, now = Date.now()): SendQueueRow[] {
  * drafts still exist (they are deleted once the send succeeds) and must not be
  * imported as new drafts in the meantime.
  */
+/**
+ * Gmail draft ids of sends that went out within `withinMs`. Gmail removes the draft a few seconds
+ * after the message lands, and a drafts.list in that gap still shows it. Without this the reconcile
+ * imported the just-sent message as a fresh draft and dropped it again seven seconds later, which on
+ * screen was a sent message sitting in a reply box with "Keep draft" over it.
+ */
+export function recentlySentGmailDraftIds(db: Db, accountId: string, withinMs: number, now = Date.now()): Set<string> {
+  const rows = db.prepare("SELECT meta_json FROM send_queue WHERE account_id = ? AND status = 'sent' AND updated_at > ?").all(accountId, now - withinMs) as Array<{ meta_json: string }>;
+  const out = new Set<string>();
+  for (const r of rows) {
+    try {
+      const id = (JSON.parse(r.meta_json) as { gmailDraftId?: string | null }).gmailDraftId;
+      if (id) out.add(id);
+    } catch {
+      // Meta that does not parse carries no draft id.
+    }
+  }
+  return out;
+}
+
 export function queuedGmailDraftIds(db: Db, accountId: string): Set<string> {
   const rows = db.prepare("SELECT meta_json FROM send_queue WHERE account_id = ? AND status IN ('queued', 'sending')").all(accountId) as Array<{ meta_json: string }>;
   const out = new Set<string>();
