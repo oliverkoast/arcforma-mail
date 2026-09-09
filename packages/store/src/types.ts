@@ -196,6 +196,8 @@ export interface ReminderRow {
 export interface DraftRow {
   /** JSON array of files chosen for this draft. Paths, not bytes. */
   attachments_json: string;
+  /** 1 once the files a Gmail draft carries have been fetched and recorded; 0 for rows from before that existed. */
+  attachments_checked: number;
   id: number;
   account_id: string;
   thread_id: string | null;

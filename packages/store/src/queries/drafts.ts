@@ -33,7 +33,7 @@ export function saveDraft(db: Db, d: DraftInput, now = Date.now()): number {
   if (d.id) {
     db.prepare(
       `UPDATE drafts SET account_id = ?, thread_id = ?, mode = ?, to_json = ?, cc_json = ?, bcc_json = ?, subject = ?, body_html = ?, quoted_html = ?,
-         in_reply_to = ?, references_header = ?, read_receipt = ?, attachments_json = ?, updated_at = ?, local_edited_at = ?, mirror_state = 'pending', mirror_error = NULL WHERE id = ?`
+         in_reply_to = ?, references_header = ?, read_receipt = ?, attachments_json = ?, attachments_checked = 1, updated_at = ?, local_edited_at = ?, mirror_state = 'pending', mirror_error = NULL WHERE id = ?`
     ).run(
       d.accountId,
       d.threadId ?? null,
@@ -198,7 +198,7 @@ export function upsertGmailDraft(db: Db, d: GmailDraftImport, now = Date.now()):
       // next pass without a migration.
       db.prepare(
         `UPDATE drafts SET thread_id = ?, mode = ?, to_json = ?, cc_json = ?, bcc_json = ?, subject = ?, body_html = ?, quoted_html = ?, in_reply_to = ?, references_header = ?,
-           updated_at = ?, gmail_message_id = ?, mirror_state = 'synced', mirror_error = NULL, mirrored_at = ?, created_at = MIN(created_at, ?), attachments_json = ? WHERE id = ?`
+           updated_at = ?, gmail_message_id = ?, mirror_state = 'synced', mirror_error = NULL, mirrored_at = ?, created_at = MIN(created_at, ?), attachments_json = ?, attachments_checked = 1 WHERE id = ?`
       ).run(
         d.threadId,
         d.mode,
@@ -222,8 +222,8 @@ export function upsertGmailDraft(db: Db, d: GmailDraftImport, now = Date.now()):
     const res = db
       .prepare(
         `INSERT INTO drafts (account_id, thread_id, mode, to_json, cc_json, bcc_json, subject, body_html, quoted_html, in_reply_to, references_header, created_at, updated_at,
-           gmail_draft_id, gmail_message_id, mirror_state, mirrored_at, origin, local_edited_at, attachments_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?, 'gmail', NULL, ?)`
+           gmail_draft_id, gmail_message_id, mirror_state, mirrored_at, origin, local_edited_at, attachments_json, attachments_checked)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?, 'gmail', NULL, ?, 1)`
       )
       .run(
         d.accountId,

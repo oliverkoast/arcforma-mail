@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { GmailClient, type Transport, type TransportInit } from "@arcforma/gmail";
 import { enqueueSend, getDraft, listDrafts, listOutbox, openStore, saveDraft, updateAccount, upsertAccount, upsertGmailDraft, type Db, type DraftUpsertPayload } from "@arcforma/store";
-import { DraftMirror, LOCAL_WINS_MS, applyDraftUpsertAck, applyDraftUpsertFail, detachDraftForSend, discardDraft, draftsNeedReconcile, mirrorDraft, reconcileGmailDrafts, restoreDraft, needsRedate } from "./mirror.js";
+import { DraftMirror, LOCAL_WINS_MS, applyDraftUpsertAck, applyDraftUpsertFail, detachDraftForSend, discardDraft, draftsNeedReconcile, mirrorDraft, reconcileGmailDrafts, restoreDraft, needsRedate, needsRefetch } from "./mirror.js";
 
 interface Canned {
   status: number;
@@ -354,4 +354,40 @@ test("a Gmail draft's files are staged on disk and listed on the draft; a file t
   assert.deepEqual(files.map((f) => f.name), ["guide.pdf"], "the one that downloaded is listed; the one that did not is not");
   assert.equal(fs.readFileSync(files[0]!.path).toString(), pdf.toString(), "and the bytes are on disk where the compose reads them");
   assert.equal(files[0]!.size, pdf.length);
+});
+
+
+test("a Gmail draft that never had its files looked at is fetched once, gains them, and is then left alone", async () => {
+  // The exact row that stayed empty: edited locally after import (so not on the import stamp), files
+  // never fetched. needsRedate is false for it; the attachments flag is what brings it back once.
+  const db = tempDb();
+  const stageDir = fs.mkdtempSync(path.join(os.tmpdir(), "arcmail-stage-"));
+  const pdf = Buffer.from("%PDF-1.4 guide");
+  const id = upsertGmailDraft(db, { accountId: "arcforma", gmailDraftId: "dG", gmailMessageId: "gmG", threadId: null, mode: "new", to: [], cc: [], bcc: [], subject: "Guide", bodyHtml: "<p>attached</p>", quotedHtml: "", inReplyTo: null, references: null, createdAt: T0 - 86_400_000 }, T0);
+  db.prepare("UPDATE drafts SET attachments_checked = 0, updated_at = ? WHERE id = ?").run(T0 + 5_000, id);
+  const before = getDraft(db, id)!;
+  assert.equal(needsRedate(before), false, "not on the import stamp");
+  assert.equal(needsRefetch(before), true, "but its files were never looked at");
+  const full = gmailDraft("dG", "gmG", { subject: "Guide" }) as unknown as { message: { payload: { mimeType: string; parts?: unknown[] } } };
+  full.message.payload.mimeType = "multipart/mixed";
+  full.message.payload.parts = [
+    { mimeType: "text/html", body: { data: Buffer.from("<p>attached</p>").toString("base64url") } },
+    { partId: "1", filename: "guide.pdf", mimeType: "application/pdf", body: { attachmentId: "G1", size: pdf.length }, headers: [{ name: "Content-Disposition", value: 'attachment; filename="guide.pdf"' }] },
+  ];
+  let fetches = 0;
+  const { client } = clientOf((call) => {
+    if (/\/drafts\?/.test(call.url)) return { status: 200, body: { drafts: [{ id: "dG", message: { id: "gmG", threadId: "thread-dG" } }] } };
+    if (/\/drafts\/dG\?/.test(call.url)) { fetches++; return { status: 200, body: full }; }
+    if (/attachments\/G1/.test(call.url)) return { status: 200, body: { size: pdf.length, data: pdf.toString("base64url") } };
+    throw new Error(`unexpected ${call.url}`);
+  });
+  const r1 = await reconcileGmailDrafts(db, "arcforma", client, { now: T0 + 10_000, stageDir });
+  assert.equal(r1.updated, 1);
+  const after = getDraft(db, id)!;
+  assert.equal(JSON.parse(after.attachments_json).map((f: { name: string }) => f.name).join(), "guide.pdf");
+  assert.equal(after.attachments_checked, 1);
+  assert.equal(needsRefetch(after), false);
+  const r2 = await reconcileGmailDrafts(db, "arcforma", client, { now: T0 + 20_000, stageDir });
+  assert.equal(r2.updated, 0, "unchanged and checked: skipped");
+  assert.equal(fetches, 1);
 });

@@ -255,6 +255,16 @@ export async function stageAttachments(
   return out;
 }
 
+/**
+ * An unchanged draft worth fetching again anyway: its date is still the import stamp, or its files
+ * have never been looked at. Both are one-time: the fetch that follows fixes the row so it stops
+ * matching. This is how drafts imported before either fix caught up, with no migration and no
+ * one editing anything in Gmail to trigger it.
+ */
+export function needsRefetch(l: { origin: string; created_at: number; updated_at: number; attachments_checked?: number }): boolean {
+  return needsRedate(l) || (l.origin === "gmail" && (l.attachments_checked ?? 0) === 0);
+}
+
 /** A Gmail-origin row whose created_at is still the import stamp: created and updated in the same instant. */
 export function needsRedate(l: { origin: string; created_at: number; updated_at: number }): boolean {
   return l.origin === "gmail" && l.created_at === l.updated_at;
@@ -285,7 +295,7 @@ export async function reconcileGmailDrafts(db: Db, accountId: string, client: Gm
     // were written before the date travelled with the import, and this is the one pass that fixes
     // them. Fetching it again lets upsertGmailDraft pull created_at back to Gmail's internalDate,
     // and updated_at moves, so the row never matches again.
-    if (l && l.gmail_message_id === r.message.id && !needsRedate(l)) continue;
+    if (l && l.gmail_message_id === r.message.id && !needsRefetch(l)) continue;
     if (l && l.local_edited_at !== null && now - l.local_edited_at < LOCAL_WINS_MS) {
       // Edited in both places within the minute: what was typed here goes up.
       await mirrorDraft(db, l.id);

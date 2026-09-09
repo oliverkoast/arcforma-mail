@@ -11,7 +11,7 @@ export type Db = DatabaseSync;
 
 /** The schema every opened store is migrated up to. Exported so tests assert against this rather
  *  than a copy of the number, which went stale on every bump and failed four suites at once. */
-export const SCHEMA_VERSION = 20;
+export const SCHEMA_VERSION = 21;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
@@ -331,6 +331,9 @@ export function migrate(db: Db): void {
     { version: 19, sql: () => "CREATE INDEX IF NOT EXISTS snoozes_thread ON snoozes(account_id, thread_id, status);" },
     // Recipient names that carried another address or a stray comma, from the old header parser.
     { version: 20, sql: () => "SELECT 1", after: (d) => repairRecipientNames(d) },
+    // Whether a Gmail draft's files have been fetched and recorded. Drafts imported before the files
+    // travelled with the import have never been looked at; the reconcile fetches each of those once.
+    { version: 21, sql: () => "SELECT 1", after: (d) => addAttachmentsChecked(d) },
   ];
   for (const step of steps) {
     if (step.version <= current) continue;
@@ -450,6 +453,12 @@ function addCalendarColumn(db: Db): void {
 }
 
 /** ALTER TABLE ADD COLUMN has no IF NOT EXISTS, so the column is checked first; the step can then rerun like the others. */
+/** Idempotent, like addDraftAttachments: a store migrated twice in a test must not fail on a duplicate column. */
+function addAttachmentsChecked(db: Db): void {
+  const have = new Set((db.prepare("PRAGMA table_info(drafts)").all() as Array<{ name: string }>).map((c) => c.name));
+  if (!have.has("attachments_checked")) db.exec("ALTER TABLE drafts ADD COLUMN attachments_checked INTEGER NOT NULL DEFAULT 0");
+}
+
 function addDraftAttachments(db: Db): void {
   const have = new Set((db.prepare("PRAGMA table_info(drafts)").all() as Array<{ name: string }>).map((c) => c.name));
   if (!have.has("attachments_json")) db.exec("ALTER TABLE drafts ADD COLUMN attachments_json TEXT NOT NULL DEFAULT '[]'");
