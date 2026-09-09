@@ -4,11 +4,12 @@
 // Accessibility grant. The renderer spawns nothing and writes no files; it
 // calls these channels with narrow inputs and renders what comes back.
 
+import { setupIsDone } from "../onboarding/done.js";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { app, ipcMain, shell } from "electron";
-import { getSetting, setSetting, type Db } from "@arcforma/store";
+import { getSetting, listAccounts, setSetting, type Db } from "@arcforma/store";
 import type { AccountRegistry } from "../accounts.js";
 import type { AiClient } from "../ai/client.js";
 import { defaultConfigPath } from "../ai/client.js";
@@ -51,7 +52,10 @@ export function textInstallScript(appPath = app.getAppPath()): string | null {
 }
 
 function onboardingInfo(db: Db): OnboardingInfo {
-  const done = getSetting(db, "onboardingDone") === true;
+  const stored = getSetting(db, "onboardingDone");
+  const done = setupIsDone(stored, listAccounts(db));
+  // Persist what the accounts already prove, so the wizard does not reopen on the next launch either.
+  if (done && stored !== true) setSetting(db, "onboardingDone", true);
   return { step: resumeStepId(getSetting(db, "onboardingStep"), done), done, clientsPath: oauthClientsPath() };
 }
 
