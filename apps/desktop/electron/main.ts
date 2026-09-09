@@ -539,6 +539,29 @@ const SMOKE_STEPS: SmokeStep[] = [
       "await window.__arcmail.closeCompose(false); window.__arcmail.closeThread();",
     waitMs: 300,
   },
+  // A draft shows up in the inbox at the time it was started, marked DRAFT, and Enter on it opens
+  // the compose. Started here through the store, the way typing C and Esc does.
+  {
+    name: "drafts-in-inbox",
+    script:
+      "window.__arcmail.closeThread(); window.__arcmail.setView('inbox');" +
+      "window.__arcmail.openCompose('new'); await new Promise((r) => setTimeout(r, 300));" +
+      "window.__arcmail.updateCompose({ subject: 'Draft for the smoke run', bodyHtml: '<p>Half written.</p>' });" +
+      "await window.__arcmail.closeCompose(true); await new Promise((r) => setTimeout(r, 900));" +
+      "await window.__arcmail.loadThreads(true); await new Promise((r) => setTimeout(r, 600));" +
+      "const rows = window.__arcmail.rows; const i = rows.findIndex((r) => r.draft && r.subject === 'Draft for the smoke run');" +
+      "window.__arcmail.select(Math.max(0, i)); await window.__arcmail.openSelected(); await new Promise((r) => setTimeout(r, 400));" +
+      "const c = window.__arcmail.compose;" +
+      "console.log('DRAFT ROW listed:', i >= 0, 'at index', i, 'opens compose:', !!c && c.subject === 'Draft for the smoke run');" +
+      // Leave the list as the later steps expect it: the smoke draft is discarded and the cursor is
+      // back on a real thread. Without this the draft row sat at index 0 and three steps downstream
+      // reached for a thread that was not there.
+      "const did = c ? (c.draftId ?? window.__arcmail.autosavedDraftId) : null;" +
+      "if (c) await window.__arcmail.closeCompose(false);" +
+      "if (did != null) await window.__arcmail.deleteDraft(did);" +
+      "await window.__arcmail.loadThreads(true); await new Promise((r) => setTimeout(r, 500)); window.__arcmail.select(0);",
+    waitMs: 300,
+  },
   // Cmd+Enter sends with the caret in the body. This is a step rather than a unit test because the
   // fault it guards against was invisible to one: the binding resolved correctly in isolation while
   // TipTap's own keymap, which sits below the window on the editor element, consumed the event

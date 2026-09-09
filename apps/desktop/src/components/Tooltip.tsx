@@ -141,6 +141,13 @@ export function Tooltip() {
   // Measure the card once it has rendered, then place it against the element.
   useEffect(() => {
     if (!tip || !card.current) return;
+    // The element the tip belongs to can leave the page between hover and measure, when the list
+    // re-sorts under the pointer. A detached anchor measures as zeros; the tip would sit in the
+    // corner pointing at nothing. It goes instead.
+    if (!tip.anchor.isConnected) {
+      setTip(null);
+      return;
+    }
     const r = tip.anchor.getBoundingClientRect();
     const c = card.current.getBoundingClientRect();
     const p = placeTooltip({ left: r.left, top: r.top, width: r.width, height: r.height }, { width: c.width, height: c.height }, { width: window.innerWidth, height: window.innerHeight });

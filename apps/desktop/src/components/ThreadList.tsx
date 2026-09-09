@@ -70,6 +70,7 @@ function Row({ row, selected, owners, onClick, onHover, accountLabel, accountEma
     <div className={`row${row.unread ? " unread" : ""}${selected ? " selected" : ""}`} onClick={onClick} onMouseMove={onHover} role="option" aria-selected={selected} data-tip={threadRowTip(row.subject, preview, accountEmail)} data-tip-if-truncated=".row-subject, .row-snippet">
       <span className="dot" />
       <div className="row-main">
+        {row.draft ? <span className="af-mono row-eyebrow" data-tip="A message you are writing, listed here at the time you started it. Enter opens it in the compose; E, S and the other keys leave it alone.">Draft</span> : null}
         {row.band === "needs_you" && row.attentionReason ? <span className="af-mono row-eyebrow" data-tip={row.attentionReason}>{attentionEyebrow(row.attentionReason)}</span> : null}
         {row.noReplyBy ? <span className="af-mono row-eyebrow">No reply by {eyebrowDate(row.noReplyBy)}</span> : null}
         {row.wakeAt ? <span className="af-mono row-eyebrow">Back {eyebrowDate(row.wakeAt, true)}</span> : null}

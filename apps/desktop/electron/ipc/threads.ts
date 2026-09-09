@@ -36,6 +36,7 @@ import {
   type InboxView as StoreView,
   type MessageRow,
   type ThreadListRow,
+  listDrafts,
 } from "@arcforma/store";
 import type { AccountRegistry } from "../accounts.js";
 import { previewKind } from "../attachments/kind.js";
@@ -45,6 +46,7 @@ import { categoryInfos } from "./ai.js";
 import { requireAccount, requireEmail, requireId } from "./guard.js";
 import { logError } from "../log.js";
 import { scheduledSendId, scheduledSummary, scheduledView } from "../scheduled.js";
+import { mergeDrafts } from "../drafted.js";
 import type { Scheduler } from "../scheduler.js";
 import { unsubscribeThread } from "../unsubscribe.js";
 import type { SyncManager } from "../sync.js";
@@ -214,7 +216,12 @@ export function listView(db: Db, req: ListRequest): ListResponse {
     cursor: req.cursor ?? null,
     limit: req.limit ?? 60,
   });
-  return { rows: withReceipts(db, page.rows.map(toSummary)), nextCursor: page.nextCursor };
+  let rows = withReceipts(db, page.rows.map(toSummary));
+  // Drafts sit in Important and Everything at the time they were started. First page only: a draft
+  // merged into every page would be listed once per page, and there are never enough to need more.
+  const inbox = req.view === "inbox" && (req.split ?? null) !== "other" && !req.category && !req.cursor;
+  if (inbox) rows = mergeDrafts(rows, listDrafts(db, req.accountIds), (accountId) => senderFor(db, accountId));
+  return { rows, nextCursor: page.nextCursor };
 }
 
 export function registerThreadIpc(db: Db, accounts: AccountRegistry, sync: SyncManager, scheduler?: Pick<Scheduler, "wakeSoon">): void {

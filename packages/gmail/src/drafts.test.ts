@@ -164,3 +164,9 @@ test("a rate limit on a draft op schedules a retry; a 400 is terminal", async ()
   assert.equal((bad as { retryAt: number | null }).retryAt, null);
   assert.match((bad as { error: string }).error, /Invalid/);
 });
+
+
+test("an imported draft carries the date it was started, from internalDate", () => {
+  const draft = { id: "d1", message: { id: "m1", threadId: "t1", internalDate: "1756800000000", payload: { mimeType: "text/plain", headers: [{ name: "Subject", value: "s" }, { name: "To", value: "a@b.c" }], body: { data: Buffer.from("hi").toString("base64url") } } } } as never;
+  assert.equal(importGmailDraft(draft).createdAt, 1_756_800_000_000);
+});

@@ -27,7 +27,7 @@ export function draftOf(row: SendQueueRow): ComposeDraft | null {
   }
 }
 
-function snippetOf(html: string): string {
+export function snippetOf(html: string): string {
   return html
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")

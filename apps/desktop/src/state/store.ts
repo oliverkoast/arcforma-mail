@@ -474,6 +474,11 @@ export function currentTarget(t: Pick<ThreadSummary, "split" | "type" | "categor
 
 /** Rows in the Scheduled view are queued sends, not threads: E, H, S, D, W have nothing to act on. */
 function scheduledOnly(row: ThreadSummary, showToast: (t: ToastEvent) => void): boolean {
+  if (row.draft) {
+    // Nothing to archive, star, snooze or mark about a message that has not gone anywhere yet.
+    showToast({ eyebrow: "DRAFT", text: "Open it to keep writing, or discard it from the compose." });
+    return true;
+  }
   if (!row.scheduled) return false;
   showToast({ eyebrow: "SCHEDULED", text: "Open the message and use Cancel send." });
   return true;
@@ -696,6 +701,14 @@ export const useApp = create<AppState>((set, get) => ({
     const s = get();
     const row = s.rows[s.selected];
     if (!row) return;
+    if (row.draft) {
+      // A draft row is the message being written: Enter goes back into the compose, not a thread.
+      const drafts = await invoke("drafts:list", [row.accountId]);
+      const d = drafts.find((x) => x.draftId === row.draft?.draftId);
+      if (d) get().openDraft(d);
+      else get().showToast({ eyebrow: "DRAFT", text: "That draft is gone. Refreshing the list." }), void get().loadThreads(true);
+      return;
+    }
     await s.openThreadById(row.accountId, row.id);
   },
 

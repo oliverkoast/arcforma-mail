@@ -162,6 +162,8 @@ export interface GmailDraftImport {
   accountId: string;
   gmailDraftId: string;
   gmailMessageId: string;
+  /** Gmail's internalDate for the draft. Absent from older callers; the import time stands in. */
+  createdAt?: number;
   threadId: string | null;
   mode: "new" | "reply" | "replyAll" | "forward";
   to: Array<{ email: string; name: string }>;
@@ -189,9 +191,12 @@ export function upsertGmailDraft(db: Db, d: GmailDraftImport, now = Date.now()):
   return transaction(db, () => {
     const existing = findDraftByGmailId(db, d.accountId, d.gmailDraftId);
     if (existing) {
+      // created_at moves back to Gmail's date when that is earlier: rows imported before the date
+      // travelled with the import were stamped with the import time, and this corrects them on the
+      // next pass without a migration.
       db.prepare(
         `UPDATE drafts SET thread_id = ?, mode = ?, to_json = ?, cc_json = ?, bcc_json = ?, subject = ?, body_html = ?, quoted_html = ?, in_reply_to = ?, references_header = ?,
-           updated_at = ?, gmail_message_id = ?, mirror_state = 'synced', mirror_error = NULL, mirrored_at = ? WHERE id = ?`
+           updated_at = ?, gmail_message_id = ?, mirror_state = 'synced', mirror_error = NULL, mirrored_at = ?, created_at = MIN(created_at, ?) WHERE id = ?`
       ).run(
         d.threadId,
         d.mode,
@@ -206,6 +211,7 @@ export function upsertGmailDraft(db: Db, d: GmailDraftImport, now = Date.now()):
         now,
         d.gmailMessageId,
         now,
+        d.createdAt ?? now,
         existing.id
       );
       return existing.id;
@@ -228,7 +234,7 @@ export function upsertGmailDraft(db: Db, d: GmailDraftImport, now = Date.now()):
         d.quotedHtml,
         d.inReplyTo,
         d.references,
-        now,
+        d.createdAt ?? now,
         now,
         d.gmailDraftId,
         d.gmailMessageId,

@@ -27,6 +27,7 @@ export function toDraftInfo(row: DraftRow): DraftInfo {
     quotedHtml: row.quoted_html,
     inReplyTo: row.in_reply_to,
     references: row.references_header,
+    createdAt: row.created_at,
     updatedAt: row.updated_at,
     readReceipt: row.read_receipt === 1,
     attachments: filesOf(row.attachments_json),

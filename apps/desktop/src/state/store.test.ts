@@ -59,7 +59,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
           if (saveDelay) await wait(saveDelay);
           const d = args[0] as ComposeDraft;
           const id = d.draftId ?? nextDraftId++;
-          draftRows.set(id, { ...d, draftId: id, updatedAt: Date.now() + id, origin: "local", mirror: { state: "pending", error: null, at: null } });
+          draftRows.set(id, { ...d, draftId: id, createdAt: 0, updatedAt: Date.now() + id, origin: "local", mirror: { state: "pending", error: null, at: null } });
           return id;
         }
         case "drafts:list":
@@ -738,7 +738,7 @@ test("opening a draft from the Drafts view: a reply opens its thread and docks u
   useApp.getState().setView("drafts");
   await settle();
   assert.equal(useApp.getState().open, null);
-  const reply: DraftInfo = { draftId: 71, accountId: "arcforma", threadId: "t-kickoff", mode: "reply", to: [{ email: "dana@northwind.example", name: "Dana Reyes" }], cc: [], bcc: [], subject: "Re: Kickoff next week", bodyHtml: "<p>From the drafts list.</p>", quotedHtml: "", inReplyTo: "<m3@x>", references: null, updatedAt: 1, origin: "gmail", mirror: { state: "synced", error: null, at: 1 } };
+  const reply: DraftInfo = { draftId: 71, accountId: "arcforma", threadId: "t-kickoff", mode: "reply", to: [{ email: "dana@northwind.example", name: "Dana Reyes" }], cc: [], bcc: [], subject: "Re: Kickoff next week", bodyHtml: "<p>From the drafts list.</p>", quotedHtml: "", inReplyTo: "<m3@x>", references: null, createdAt: 0, updatedAt: 1, origin: "gmail", mirror: { state: "synced", error: null, at: 1 } };
   useApp.getState().openDraft(reply);
   await wait(20);
   let s = useApp.getState();

@@ -42,6 +42,8 @@ export async function getGmailDraft(client: GmailClient, id: string, signal?: Ab
 export interface DraftImport {
   gmailDraftId: string;
   gmailMessageId: string;
+  /** When the draft was started, from Gmail's internalDate. The inbox lists a draft here. */
+  createdAt: number;
   threadId: string | null;
   mode: "new" | "reply" | "replyAll" | "forward";
   to: Address[];
@@ -157,9 +159,13 @@ export function importGmailDraft(draft: GmailDraft, ownerAddresses: string[] = [
   }
   // A one-message thread that is only this draft is not a reply thread: the draft owns it.
   const threadId = inReplyTo || references ? m.threadId ?? null : null;
+  // internalDate is when Gmail first saw the draft, which is when it was started. A draft imported
+  // with the import time instead sat in the inbox at the wrong moment, forty-eight of them at once.
+  const stamped = Number(m.internalDate);
   return {
     gmailDraftId: draft.id,
     gmailMessageId: m.id,
+    createdAt: Number.isFinite(stamped) && stamped > 0 ? stamped : Date.now(),
     threadId,
     mode: modeOf(threadId, inReplyTo, subject, cc),
     to,

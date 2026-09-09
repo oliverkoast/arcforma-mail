@@ -67,6 +67,8 @@ export interface ThreadSummary {
   scheduled?: ScheduledInfo | null;
   /** What the pixel service knows about the newest message on this thread that was sent with a receipt armed. Null for every other thread. */
   receipt?: ReceiptSummary | null;
+  /** Set on the rows the inbox lists for a draft: a message being written, placed at the time it was started. */
+  draft?: { draftId: number; createdAt: number } | null;
 }
 
 /**
@@ -407,6 +409,8 @@ export type DraftMirrorState = "pending" | "synced" | "failed";
 
 export interface DraftInfo extends ComposeDraft {
   draftId: number;
+  /** When the draft was started. The inbox lists a draft here, not at its last edit. */
+  createdAt: number;
   updatedAt: number;
   /** Written here, or found in Gmail and imported. Both edit and mirror the same way. */
   origin: "local" | "gmail";
