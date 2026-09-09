@@ -73,9 +73,6 @@ export interface BuiltMessage {
 }
 
 export async function buildRawMessage(input: ComposeInput): Promise<BuiltMessage> {
-  if (input.attachments && input.attachments.length > 0) {
-    throw new Error("Attachments are not supported yet. Send this one from Gmail.");
-  }
   const bodyHtml = input.html ?? (input.text ? `<div>${input.text.replace(/\n/g, "<br>")}</div>` : "");
   // Body, then signature, then the quoted history: signature once, above the quote.
   // A read receipt's image, when one is armed, goes after all of it.
@@ -99,6 +96,7 @@ export async function buildRawMessage(input: ComposeInput): Promise<BuiltMessage
     references,
     messageId: input.messageId,
     date: input.date,
+    attachments: input.attachments,
     textEncoding: "quoted-printable",
   });
   const buffer = await composer.compile().build();

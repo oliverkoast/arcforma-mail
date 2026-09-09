@@ -114,3 +114,27 @@ test("validateDraft refuses a message with nothing written, unless it forwards q
   assert.doesNotThrow(() => validateDraft({ ...draft, mode: "forward", bodyHtml: "", quotedHtml: "<div>Forwarded message</div>" }));
   assert.doesNotThrow(() => validateDraft(draft));
 });
+
+test("attachment sends embed the file in the queue and undo restores the attachment", async () => {
+  const store = db();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "arcmail-send-file-"));
+  const file = path.join(dir, "contract.pdf");
+  const content = Buffer.from("%PDF-1.7\nTest attachment\n");
+  fs.writeFileSync(file, content);
+  const attachments = [{ path: file, name: "contract.pdf", mimeType: "application/pdf", size: content.length }];
+  try {
+    const result = await queueSend(store, { ...draft, attachments });
+    const mime = getSend(store, result.id)!.raw_mime;
+    assert.match(mime, /Content-Type: application\/pdf/);
+    assert.match(mime, /filename=contract.pdf/);
+    assert.ok(mime.includes(content.toString("base64")));
+    fs.unlinkSync(file);
+    assert.equal(getSend(store, result.id)!.raw_mime, mime, "queued message is independent of the file after preparation");
+    assert.deepEqual(undoSend(store, result.id).draft?.attachments, attachments);
+    await assert.rejects(queueSend(store, { ...draft, attachments }), /contract.pdf could not be read/);
+    assert.equal(releasableSends(store, Date.now() + 60_000).length, 0, "missing file never queues an incomplete email");
+  } finally {
+    store.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

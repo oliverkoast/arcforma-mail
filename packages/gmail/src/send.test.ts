@@ -54,7 +54,7 @@ test("the MIME is RFC 822: CRLF, encoded non-ASCII headers, quoted-printable bod
   assert.equal(/[^\x00-\x7f]/.test(mime), false, "the whole message is 7-bit clean");
 });
 
-test("the signature is appended once, above the quoted history, and attachments are an explicit error", async () => {
+test("the signature is appended once, above the quoted history, and quoted history stays below it", async () => {
   const built = await buildRawMessage({
     from: { email: "you@example.com", name: "Oliver" },
     to: [{ email: "dana@example.com", name: "" }],
@@ -71,8 +71,29 @@ test("the signature is appended once, above the quoted history, and attachments 
   const textPart = qp(built.mime.split("Content-Type: text/plain")[1]!.split("Content-Type: text/html")[0]!);
   assert.ok(textPart.indexOf("Arcforma") < textPart.indexOf("Can we do 9:00?"), "the text part follows the same order");
   assert.equal(appendQuote("<p>a</p>", "  "), "<p>a</p>");
-  await assert.rejects(
-    buildRawMessage({ from: { email: "o@x.com", name: "" }, to: [{ email: "a@b.com", name: "" }], subject: "x", html: "<p>x</p>", attachments: [{ filename: "a.pdf", content: "x" }] }),
-    /Attachments are not supported yet/
-  );
+
+});
+
+
+test("attachments survive MIME encoding with exact binary bytes and file metadata", async () => {
+  const content = Buffer.from(Array.from({ length: 4096 }, (_, i) => i % 256));
+  const built = await buildRawMessage({
+    from: { email: "sender@example.com", name: "" },
+    to: [{ email: "recipient@example.com", name: "" }],
+    subject: "Attached documents", html: "<p>Here are the files.</p>",
+    attachments: [
+      { filename: "contract.pdf", content, contentType: "application/pdf" },
+      { filename: "notes.txt", content: "Meeting notes", contentType: "text/plain" },
+    ],
+  });
+  assert.match(built.mime, /Content-Type: multipart\/mixed/);
+  assert.match(built.mime, /Content-Type: multipart\/alternative/);
+  for (const [name, expected] of [["contract.pdf", content], ["notes.txt", Buffer.from("Meeting notes")]] as const) {
+    const part = built.mime.split(/\r\n--[^\r\n]+\r\n/).find(p => p.includes(`filename=${name}`));
+    assert.ok(part, `attachment ${name} exists`);
+    assert.match(part, /Content-Transfer-Encoding: base64/);
+    const encoded = part.split("\r\n\r\n")[1]!.split("\r\n--")[0]!;
+    assert.deepEqual(Buffer.from(encoded, "base64"), expected);
+  }
+  assert.equal(Buffer.from(built.raw, "base64url").toString("utf8"), built.mime);
 });
