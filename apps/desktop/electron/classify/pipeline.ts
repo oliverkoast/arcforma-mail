@@ -108,7 +108,7 @@ export async function classifyThread(db: Db, ai: AiClient, accountId: string, th
 }
 
 /** Bump when a rule changes meaning, so stored rule verdicts get re-evaluated once. */
-const RULES_VERSION = 3;
+const RULES_VERSION = 4;
 
 /**
  * Bump when the attention weights or the bands change. Unlike the rules
@@ -214,6 +214,19 @@ export class Classifier {
   private reclassifyAfterRuleChange(): number {
     if (getSetting(this.db, "rulesVersion") >= RULES_VERSION) return 0;
     const n = Number(this.db.prepare("DELETE FROM classifications WHERE source = 'rule'").run().changes);
+    // Version 4 taught the rules to see a calendar acceptance with no .ics. Threads the local model
+    // had already filed under those subjects go back through the rules too, or the one that
+    // prompted the change would stay where the model put it.
+    const calendar = Number(
+      this.db
+        .prepare(
+          `DELETE FROM classifications WHERE source = 'local' AND EXISTS (
+             SELECT 1 FROM threads t WHERE t.account_id = classifications.account_id AND t.id = classifications.thread_id
+               AND (t.subject LIKE 'Accepted:%' OR t.subject LIKE 'Declined:%' OR t.subject LIKE 'Tentative%' OR t.subject LIKE 'Invitation:%' OR t.subject LIKE 'Updated invitation:%' OR t.subject LIKE 'Canceled event:%' OR t.subject LIKE 'Cancelled event:%'))`,
+        )
+        .run().changes,
+    );
+    if (calendar > 0) log("classify", `rules v${RULES_VERSION}: ${calendar} calendar-shaped thread(s) sent back through the rules`);
     setSetting(this.db, "rulesVersion", RULES_VERSION);
     log("classify", `rules v${RULES_VERSION}: reset ${n} rule verdict(s) for re-evaluation`);
     return n;

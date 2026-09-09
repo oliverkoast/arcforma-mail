@@ -111,6 +111,8 @@ test("the six types: each one has a rule, and the ambiguous cases go to the mode
   assert.equal(t("pat@denosys-labs.example", "Full-stack CV for your open role"), "jobs", "a subject about an application");
   assert.equal(t("dana@northwind-coaching.example", "Invitation: Kickoff", { "Content-Type": "text/calendar" }), null, "a calendar part needs the attachment flag");
   assert.equal(classifyByRules(input({ from: "calendar-notification@google.com", subject: "Invitation: Kickoff", headers: {}, hasCalendarPart: true }), ctx).type, "calendar");
+  assert.equal(classifyByRules(input({ from: "daan@marblebar.example", subject: "Accepted: Arcforma Foundations | Session 2", headers: {}, hasCalendarPart: false, threadHasOutbound: true }), ctx).type, "calendar", "an acceptance with no .ics, on a thread the owner started");
+  assert.equal(classifyByRules(input({ from: "daan@marblebar.example", subject: "Accepted: Arcforma Foundations | Session 2", headers: {}, hasCalendarPart: false, threadHasOutbound: false }), ctx).type, null, "the same words on a thread nobody here started stay a conversation");
   assert.equal(t("support@e.usa.experian.com", "Your credit report has an update", { "List-Unsubscribe": "<mailto:x>" }), "notifications", "a platform subdomain");
   assert.equal(t("security@vault-id.example", "New sign-in from a new device"), "notifications", "a notifier local part off the known platforms");
   assert.equal(t("gustonoreply@gusto.com", "Your payroll is ready", { "List-Unsubscribe": "<mailto:x>" }), "notifications", "no-reply buried in a longer local part still reads as no-reply");
