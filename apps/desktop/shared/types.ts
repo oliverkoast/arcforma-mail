@@ -363,6 +363,10 @@ export interface SettingsInfo {
   readReceipts: boolean;
   /** A new message starts with its receipt armed. Off, each one is chosen by hand. Needs readReceipts and a service. */
   readReceiptsDefault: boolean;
+  /** The inbox list the app opens on. */
+  startSplit: "everything" | "important";
+  /** macOS banners for new Important and calendar mail. */
+  notifyBanners: boolean;
   /** The pixel service to register tokens with. Empty until one is deployed; see packages/pixel-service/README.md. */
   readReceiptsUrl: string;
   /** Whether a bearer token is stored. The token itself never crosses the bridge in either direction. */
@@ -659,6 +663,8 @@ export interface ArcmailEvents {
   "calendar:changed": { accountId: string | null };
   /** A draft reached Gmail, failed to, arrived from Gmail, or went away there. The Drafts view reloads. */
   "drafts:changed": { accountId: string | null };
+  /** A banner was clicked: open this thread. */
+  "notify:open": { accountId: string; threadId: string };
   /** The model download or the text tool install said something while onboarding is open. */
   "onboarding:progress": OnboardingProgress;
 }
@@ -781,4 +787,4 @@ export interface ArcmailInvoke {
 export type InvokeChannel = keyof ArcmailInvoke;
 export type EventChannel = keyof ArcmailEvents;
 
-export const EVENT_CHANNELS: EventChannel[] = ["accounts:changed", "threads:changed", "sync:progress", "toast", "categories:changed", "calendar:changed", "drafts:changed", "onboarding:progress"];
+export const EVENT_CHANNELS: EventChannel[] = ["accounts:changed", "threads:changed", "sync:progress", "toast", "categories:changed", "calendar:changed", "drafts:changed", "onboarding:progress", "notify:open"];

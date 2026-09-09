@@ -137,7 +137,9 @@ export class Classifier {
     private readonly db: Db,
     private readonly ai: AiClient,
     private readonly ownerAddresses: () => string[],
-    private readonly onChanged: (accountIds: Set<string>) => void
+    private readonly onChanged: (accountIds: Set<string>) => void,
+    /** Announces a thread the moment it is decided important; absent in tests. */
+    private readonly notifier: { consider(accountId: string, threadId: string): void } | null = null
   ) {}
 
   start(): void {
@@ -190,6 +192,7 @@ export class Classifier {
           const band: AttentionBand = row.source === "manual" ? (split === "important" ? "important" : "other") : out.band;
           if (split !== row.split || band !== row.band) moved += 1;
           updateAttention(this.db, { accountId: row.account_id, threadId: row.thread_id, split, attention: out.attention, band, reason: out.reason });
+          if (split === "important") this.notifier?.consider(row.account_id, row.thread_id);
           touched.add(row.account_id);
         } catch (err) {
           logError("classify", `attention ${row.account_id}/${row.thread_id}`, err);

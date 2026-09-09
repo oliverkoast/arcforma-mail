@@ -47,6 +47,8 @@ export interface SyncOptions {
   pollHiddenMs?: number;
   /** Where files attached to drafts written in Gmail are staged for the compose. */
   draftStageDir?: string;
+  /** Announces new Important and calendar mail after a fetch. */
+  notifier?: { consider(accountId: string, threadId: string): void };
 }
 
 export class SyncManager {
@@ -62,6 +64,8 @@ export class SyncManager {
   private readonly pollFocusedMs: number;
   private readonly pollHiddenMs: number;
   private readonly draftStageDir: string | null;
+  /** Banners for new Important and calendar mail; absent in tests and in the smoke run. */
+  private readonly notifier: { consider(accountId: string, threadId: string): void } | null;
   /** Accounts whose drafts have been reconciled once since this process started. */
   private reconciledSinceBoot = new Set<string>();
   /** Called after new or changed threads land, so the classifier can pick them up. */
@@ -73,6 +77,7 @@ export class SyncManager {
     opts: SyncOptions = {}
   ) {
     this.draftStageDir = opts.draftStageDir ?? null;
+    this.notifier = opts.notifier ?? null;
     this.pollFocusedMs = opts.pollFocusedMs ?? POLL_FOCUSED_MS;
     this.pollHiddenMs = opts.pollHiddenMs ?? POLL_HIDDEN_MS;
     accounts.onAuthExpired = (id) => this.cancel(id);
@@ -275,6 +280,7 @@ export class SyncManager {
     const owners = this.accounts.ownerAddresses(accountId);
     transaction(this.db, () => {
       for (const t of threads) upsertThreadFromGmail(this.db, accountId, t, { ownerAddresses: owners });
+      for (const t of threads) this.notifier?.consider(accountId, t.id);
     });
     const retry = this.retryFetch.get(accountId) ?? new Map<string, number>();
     for (const t of threads) retry.delete(t.id);

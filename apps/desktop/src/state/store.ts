@@ -36,6 +36,7 @@ import {
 } from "../../shared/types";
 import { ONBOARDING_STEPS, type OnboardingStepId } from "../../shared/onboarding";
 import { TYPING_SCOPES, type Scope } from "../keys/keymap";
+import { startingSplit } from "../lib/startView";
 import { addAttachments, checkAttachments } from "../lib/outgoingAttachments";
 import { scopeFor } from "../keys/scope";
 import { installActivityTracker } from "../lib/activity";
@@ -317,7 +318,7 @@ function writeStoredBool(key: string, value: boolean): void {
 }
 
 const EMPTY_STATUS: AccountsStatus = { accounts: [], configPath: "", configError: null };
-const DEFAULT_SETTINGS: SettingsInfo = { undoWindowSec: 10, autoDraft: false, remoteImages: "always", remindClientsAfterDays: 3, remindScope: ["Clients"], readReceipts: false, readReceiptsDefault: false, readReceiptsUrl: "", readReceiptsTokenSet: false };
+const DEFAULT_SETTINGS: SettingsInfo = { undoWindowSec: 10, autoDraft: false, remoteImages: "always", remindClientsAfterDays: 3, remindScope: ["Clients"], readReceipts: false, readReceiptsDefault: false, startSplit: "everything", notifyBanners: false, readReceiptsUrl: "", readReceiptsTokenSet: false };
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 /** How much of the current toast's time is still to run, and when that run started, so a hover can hold it. */
 let toastRemaining = 0;
@@ -596,7 +597,9 @@ export const useApp = create<AppState>((set, get) => ({
       invoke("searches:list").catch(() => [] as SavedSearchInfo[]),
       invoke("sidebar:getLayout").catch(() => null),
     ]);
-    set({ categories, settings, snippets, savedSearches, sidebarLayout, smoke: Boolean(info.smoke), userArt: info.userArt ?? [], ready: true });
+    // The starting list is a setting; it has to be in place before the first load, or the app opens
+    // on Everything and jumps.
+    set({ categories, settings, snippets, savedSearches, sidebarLayout, smoke: Boolean(info.smoke), userArt: info.userArt ?? [], ready: true, split: startingSplit(settings) });
     await get().loadOnboarding();
     // Throttled activity drives the Daily 0 day boundary in the main process.
     activityUninstall ??= installActivityTracker((at) => void invoke("app:activity", at).catch(() => undefined));
@@ -617,6 +620,7 @@ export const useApp = create<AppState>((set, get) => ({
     on("toast", (t) => get().showToast(t));
     on("categories:changed", (categories) => set({ categories }));
     on("drafts:changed", () => void get().loadDrafts());
+    on("notify:open", (p) => void get().openThreadById(p.accountId, p.threadId));
   },
 
   async refreshStatus() {

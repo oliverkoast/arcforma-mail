@@ -34,6 +34,7 @@ import { isAllowedNavigation, isExternalLink } from "./navigation.js";
 import { dbPath } from "./paths.js";
 import { serviceArmer } from "./receipts/arm.js";
 import { ReceiptPoller } from "./receipts/poller.js";
+import { Notifier } from "./notify.js";
 import { ReceiptService } from "./receipts/service.js";
 import { Scheduler } from "./scheduler.js";
 import { seedFixture } from "./smoke/seed.js";
@@ -307,7 +308,10 @@ async function boot(): Promise<void> {
   accounts = new AccountRegistry(db);
   accounts.reloadConfig();
   if (accounts.configError) log("app", accounts.configError);
-  sync = new SyncManager(db, accounts, { draftStageDir: path.join(app.getPath("userData"), "draft-attachments") });
+  // Banners for new Important and calendar mail. Clicking one brings the window up and opens the
+  // thread. The window does not exist yet here; the closure reads it at click time.
+  const notifier = new Notifier(db, { smoke: Boolean(SMOKE_DIR), focus: () => { mainWindow?.show(); mainWindow?.focus(); } });
+  sync = new SyncManager(db, accounts, { draftStageDir: path.join(app.getPath("userData"), "draft-attachments"), notifier });
   // Read receipts: off by default, per message, and honest about the difference
   // between no fetch and unread. docs/adr/0003 says why they exist at all.
   const receiptService = new ReceiptService(db);
@@ -327,7 +331,8 @@ async function boot(): Promise<void> {
     () => registry.list().flatMap((a) => registry.ownerAddresses(a.id)),
     (ids) => {
       for (const id of ids) emit("threads:changed", { accountId: id });
-    }
+    },
+    notifier
   );
   sync.onThreadsChanged = () => classifier?.poke();
   calendar = new CalendarSync(db, accounts);

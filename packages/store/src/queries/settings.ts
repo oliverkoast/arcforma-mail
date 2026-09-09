@@ -34,6 +34,10 @@ export interface Settings {
    * and a service is configured.
    */
   readReceiptsDefault: boolean;
+  /** Which inbox list the app opens on: everything in the inbox, or only what the classifier called important. */
+  startSplit: "everything" | "important";
+  /** macOS banners for new mail the classifier calls important, and for calendar mail. Off unless someone turns them on. */
+  notifyBanners: boolean;
   /** The pixel service this app registers tokens with and collects from. Empty until one is deployed. */
   readReceiptsUrl: string;
   /** The first-run onboarding step that was on screen when the app last quit, so a resume lands there. */
@@ -55,6 +59,8 @@ export const DEFAULT_SETTINGS: Settings = {
   remindScope: ["Clients"],
   readReceipts: false,
   readReceiptsDefault: false,
+  startSplit: "everything",
+  notifyBanners: false,
   readReceiptsUrl: "",
   onboardingStep: "welcome",
   onboardingDone: false,
@@ -92,6 +98,8 @@ export function getSettings(db: Db): Settings {
     remindScope: getSetting(db, "remindScope"),
     readReceipts: getSetting(db, "readReceipts"),
     readReceiptsDefault: getSetting(db, "readReceiptsDefault"),
+    startSplit: getSetting(db, "startSplit"),
+    notifyBanners: getSetting(db, "notifyBanners"),
     readReceiptsUrl: getSetting(db, "readReceiptsUrl"),
     onboardingStep: getSetting(db, "onboardingStep"),
     onboardingDone: getSetting(db, "onboardingDone"),
