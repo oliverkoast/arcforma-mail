@@ -18,6 +18,7 @@ import type { AccountInfo, AccountsStatus } from "../shared/types.js";
 // its own OAuth client.
 
 export class AccountRegistry {
+  private keychainAsked = false;
   private configs = new Map<string, OAuthClientConfig>();
   private clients = new Map<string, GmailClient>();
   configError: string | null = null;
@@ -95,6 +96,13 @@ export class AccountRegistry {
     // out of whatever happened to ask first and surfacing as a raw IPC error on an unrelated call.
     let refreshToken: string | null = null;
     try {
+      // On the first launch after an install macOS may put up a Keychain dialog here and block this
+      // process until it is answered. The line below is the only sign of that in the log: the process
+      // sleeps at zero CPU, nothing after this runs, and without it the wait looked like a hang.
+      if (!this.keychainAsked) {
+        this.keychainAsked = true;
+        log("auth", "reading saved sign-ins from the Keychain; if macOS shows a dialog, choose Always Allow");
+      }
       refreshToken = loadRefreshToken(accountId);
     } catch (err) {
       if (err instanceof KeychainUnavailableError) {

@@ -214,6 +214,11 @@ export interface ReconcileOptions {
   signal?: AbortSignal;
 }
 
+/** A Gmail-origin row whose created_at is still the import stamp: created and updated in the same instant. */
+export function needsRedate(l: { origin: string; created_at: number; updated_at: number }): boolean {
+  return l.origin === "gmail" && l.created_at === l.updated_at;
+}
+
 /** Makes the local drafts table agree with users.drafts.list, one account at a time. */
 export async function reconcileGmailDrafts(db: Db, accountId: string, client: GmailClient, opts: ReconcileOptions = {}): Promise<ReconcileResult> {
   const now = opts.now ?? Date.now();
@@ -235,7 +240,11 @@ export async function reconcileGmailDrafts(db: Db, accountId: string, client: Gm
   for (const r of remote) {
     if (queued.has(r.id)) continue;
     const l = localByGmail.get(r.id);
-    if (l && l.gmail_message_id === r.message.id) continue;
+    // An unchanged draft is skipped, except one still carrying the import time as its start: those
+    // were written before the date travelled with the import, and this is the one pass that fixes
+    // them. Fetching it again lets upsertGmailDraft pull created_at back to Gmail's internalDate,
+    // and updated_at moves, so the row never matches again.
+    if (l && l.gmail_message_id === r.message.id && !needsRedate(l)) continue;
     if (l && l.local_edited_at !== null && now - l.local_edited_at < LOCAL_WINS_MS) {
       // Edited in both places within the minute: what was typed here goes up.
       await mirrorDraft(db, l.id);

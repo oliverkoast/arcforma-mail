@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { GmailClient, type Transport, type TransportInit } from "@arcforma/gmail";
 import { enqueueSend, getDraft, listDrafts, listOutbox, openStore, saveDraft, updateAccount, upsertAccount, upsertGmailDraft, type Db, type DraftUpsertPayload } from "@arcforma/store";
-import { DraftMirror, LOCAL_WINS_MS, applyDraftUpsertAck, applyDraftUpsertFail, detachDraftForSend, discardDraft, draftsNeedReconcile, mirrorDraft, reconcileGmailDrafts, restoreDraft } from "./mirror.js";
+import { DraftMirror, LOCAL_WINS_MS, applyDraftUpsertAck, applyDraftUpsertFail, detachDraftForSend, discardDraft, draftsNeedReconcile, mirrorDraft, reconcileGmailDrafts, restoreDraft, needsRedate } from "./mirror.js";
 
 interface Canned {
   status: number;
@@ -304,4 +304,26 @@ test("recover on start queues drafts left pending with nothing behind them, and 
   const pending = listOutbox(db, "arcforma", "pending").filter((r) => r.op === "draftUpsert").map((r) => payloadOf(r).draftId).sort();
   assert.deepEqual(pending, [stranded, queued].sort(), "one row each; the stranded draft got its outbox row back");
   assert.deepEqual(poked, ["arcforma"]);
+});
+
+
+test("a draft imported with the import time as its start is re-dated from Gmail once, then left alone", async () => {
+  const db = tempDb();
+  const started = T0 - 5 * 86_400_000;
+  // The old import: no createdAt, so created_at === updated_at === the import time.
+  const id = upsertGmailDraft(db, { accountId: "arcforma", gmailDraftId: "dOld", gmailMessageId: "gmOld", threadId: null, mode: "new", to: [], cc: [], bcc: [], subject: "Old", bodyHtml: "<p>x</p>", quotedHtml: "", inReplyTo: null, references: null }, T0);
+  assert.equal(needsRedate(getDraft(db, id)!), true);
+  let fetches = 0;
+  const { client } = clientOf((call) => {
+    if (/\/drafts\?/.test(call.url)) return { status: 200, body: { drafts: [{ id: "dOld", message: { id: "gmOld", threadId: "thread-dOld" } }] } };
+    if (/\/drafts\/dOld\?/.test(call.url)) { fetches++; const d = gmailDraft("dOld", "gmOld", { subject: "Old" }); (d.message as { internalDate?: string }).internalDate = String(started); return { status: 200, body: d }; }
+    throw new Error(`unexpected ${call.url}`);
+  });
+  const r1 = await reconcileGmailDrafts(db, "arcforma", client, { now: T0 + 60_000 });
+  assert.equal(r1.updated, 1);
+  assert.equal(getDraft(db, id)!.created_at, started, "created_at is when Gmail first saw it");
+  assert.equal(needsRedate(getDraft(db, id)!), false, "updated_at moved, so it no longer matches");
+  const r2 = await reconcileGmailDrafts(db, "arcforma", client, { now: T0 + 120_000 });
+  assert.equal(r2.updated, 0, "unchanged in Gmail and already dated: skipped");
+  assert.equal(fetches, 1, "fetched exactly once");
 });
