@@ -25,6 +25,8 @@ export const KEYMAP: Binding[] = [
   { key: "k", scope: "thread", action: "prev", label: "Previous thread" },
   { key: "e", scope: "list", action: "archive", label: "Mark done" },
   { key: "e", scope: "thread", action: "archive", label: "Mark done" },
+  { key: "e", meta: true, scope: "list", action: "archive", label: "Mark done" },
+  { key: "e", meta: true, scope: "thread", action: "archive", label: "Mark done" },
   // Shift+E is the way back. U was taken by unsubscribe long before Done had a row of its own.
   { key: "e", shift: true, scope: "list", action: "moveToInbox", label: "Move back to inbox" },
   { key: "e", shift: true, scope: "thread", action: "moveToInbox", label: "Move back to inbox" },

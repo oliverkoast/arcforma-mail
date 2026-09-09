@@ -1301,3 +1301,16 @@ test("Shift+E puts a thread back in the inbox: the write, the row leaving the Do
   assert.equal(app.getState().toast?.text, "That thread is already in the inbox.");
   assert.equal(calls.filter((c) => c.channel === "threads:moveToInbox").length, 0);
 });
+
+test("archiving a just-clicked message cancels its pending open instead of bringing it back", async () => {
+  const useApp = await freshKickoff();
+  useApp.setState({ rows: [summary("t-kickoff", "Kickoff"), summary("t-agreement", "Agreement")], selected: 1, view: "inbox" });
+  threadDelays.set("arcforma:t-agreement", 60);
+  const pending = useApp.getState().openSelected();
+  await useApp.getState().archiveSelected();
+  await pending;
+  assert.notEqual(useApp.getState().open?.thread.id, "t-agreement", "a late message fetch must not reopen the archived message");
+  threadDelays.delete("arcforma:t-agreement");
+  useApp.getState().closeThread();
+  useApp.getState().showToast(null);
+});

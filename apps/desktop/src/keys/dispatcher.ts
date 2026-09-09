@@ -31,9 +31,11 @@ export interface KeyLike {
 }
 
 function isEditable(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  if (target.isContentEditable) return true;
-  const tag = target.tagName;
+  // Message frames have their own HTMLElement constructor.
+  const element = target as HTMLElement | null;
+  if (!element || typeof element.tagName !== "string") return false;
+  if (element.isContentEditable) return true;
+  const tag = element.tagName;
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 }
 
@@ -63,6 +65,7 @@ export function resolveBinding(scope: Scope, e: KeyLike, editable: boolean): Bin
   for (const b of KEYMAP) {
     if (b.scope !== scope && b.scope !== "global") continue;
     if (!matches(b, e)) continue;
+    if (typing && b.action === "archive") continue;
     if (typing && !b.meta && !PASSTHROUGH.has(b.key)) continue;
     return b;
   }
@@ -74,7 +77,7 @@ export function resolveBinding(scope: Scope, e: KeyLike, editable: boolean): Bin
  * (defaultPrevented) is left alone, so a Tab that expanded a snippet never
  * also accepts an auto-draft.
  */
-export function installKeyDispatcher(getScope: () => Scope, actions: ActionMap, prefix?: PrefixHooks): () => void {
+export function installKeyDispatcher(getScope: () => Scope, actions: ActionMap, prefix?: PrefixHooks, target: EventTarget = window): () => void {
   let armed = false;
   let armedTimer: ReturnType<typeof setTimeout> | null = null;
   const setArmed = (next: boolean) => {
@@ -127,9 +130,9 @@ export function installKeyDispatcher(getScope: () => Scope, actions: ActionMap, 
     e.stopPropagation();
     run();
   };
-  window.addEventListener("keydown", handler);
+  target.addEventListener("keydown", handler as EventListener);
   return () => {
     if (armedTimer) clearTimeout(armedTimer);
-    window.removeEventListener("keydown", handler);
+    target.removeEventListener("keydown", handler as EventListener);
   };
 }

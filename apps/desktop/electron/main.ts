@@ -696,6 +696,21 @@ const SMOKE_STEPS: SmokeStep[] = [
   { name: "done-thread", script: "window.__arcmail.select(0); await window.__arcmail.openSelected();", hover: ".reading-actions .icon-btn[data-glyph='inbox']", waitMs: 2500 },
   // The invitation card: the event out of the .ics, above the message that carried it.
   {
+    name: "command-e-message-frame",
+    script:
+      // Earlier smoke steps may archive this fixture; restore its starting state.
+      "await window.arcmail.invoke('threads:moveToInbox', 'arcforma', 't-self');" +
+      "window.__arcmail.closeThread(); window.__arcmail.setView('inbox'); await new Promise(r => setTimeout(r, 700));" +
+      "const index = window.__arcmail.rows.findIndex(r => r.id === 't-self'); if(index < 0) throw new Error('Missing shortcut fixture');" +
+      "window.__arcmail.select(index); await window.__arcmail.openSelected(); await new Promise(r => setTimeout(r, 500));" +
+      "const doc = document.querySelector('.message-body iframe')?.contentDocument; if(!doc) throw new Error('Missing message frame');" +
+      "doc.body.dispatchEvent(new doc.defaultView.KeyboardEvent('keydown', {key:'e',metaKey:true,bubbles:true,cancelable:true}));" +
+      "await new Promise(r => setTimeout(r, 500));" +
+      "if(window.__arcmail.rows.some(r => r.id === 't-self')) throw new Error('Command-E in message frame did not archive');" +
+      "console.log('COMMAND E FRAME: archived'); await window.__arcmail.undo();",
+    waitMs: 300,
+  },
+  {
     name: "invite-card",
     script:
       "window.__arcmail.setView('inbox');" +
@@ -791,7 +806,11 @@ function runSmoke(win: BrowserWindow, dir: string, ctx: SmokeContext): void {
   win.webContents.once("did-finish-load", () => {
     void (async () => {
       let failed = false;
-      for (const step of SMOKE_FLOW === "onboarding" ? ONBOARDING_SMOKE_STEPS : SMOKE_STEPS) {
+      const steps = SMOKE_FLOW === "onboarding" ? ONBOARDING_SMOKE_STEPS : SMOKE_STEPS;
+      const requestedStep = process.env["ARCMAIL_SMOKE_STEP"];
+      const selectedSteps = requestedStep ? steps.filter((step) => step.name === requestedStep) : steps;
+      if (!selectedSteps.length) { log("smoke", `unknown step: ${requestedStep}`); app.exit(1); return; }
+      for (const step of selectedSteps) {
         try {
           if (step.script) await win.webContents.executeJavaScript(`(async () => { ${step.script} })()`, true);
           if (step.hover) {

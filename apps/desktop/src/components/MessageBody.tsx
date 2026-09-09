@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import DOMPurify from "dompurify";
 import type { MessageView } from "../../shared/types";
 import { useApp } from "../state/store";
+import { installAppKeyboard } from "../keys/useKeyboard";
 import { PURIFY_CONFIG, buildMessageCsp, foldLabels, foldPlainText, hardenNode, hasRemoteImages, tidyMessage, tooLarge, type HookNode, type MailDocument } from "../lib/mailhtml";
 
 function token(name: string): string {
@@ -86,16 +87,21 @@ export function MessageBody({ message, priorTexts = NO_PRIORS, pending = false }
       const full = doc.documentElement.scrollHeight;
       if (full > frame.clientHeight) frame.style.height = `${full}px`;
     };
+    let removeKeys: (() => void) | undefined;
     const onLoad = () => {
+      removeKeys?.();
+      if (frame.contentDocument) removeKeys = installAppKeyboard(frame.contentDocument);
       fit();
       // Show quoted text and Hide quoted text change the document height; toggle does not bubble, so listen in the capture phase.
       frame.contentDocument?.addEventListener("toggle", fit, true);
     };
     frame.addEventListener("load", onLoad);
+    if (frame.contentDocument?.readyState === "complete") onLoad();
     const timers = [200, 800, 2000].map((ms) => setTimeout(fit, ms));
     return () => {
       cancelled = true;
       frame.removeEventListener("load", onLoad);
+      removeKeys?.();
       for (const t of timers) clearTimeout(t);
     };
   }, [srcdoc]);

@@ -168,3 +168,28 @@ test("a letter that means nothing after G goes nowhere", () => {
   assert.equal(resolveGoTo("z"), null);
   assert.equal(resolveGoTo(""), null);
 });
+
+test("Command-E archives in list and reader, but never while typing", () => {
+  for (const scope of ["list", "thread"] as const) {
+    assert.equal(resolveBinding(scope, key("e", { metaKey: true }), false)?.action, "archive");
+    assert.equal(resolveBinding(scope, key("e", { metaKey: true }), true), null);
+  }
+  assert.equal(resolveBinding("compose", key("e", { metaKey: true }), true), null);
+});
+
+test("the same shortcut works inside a message document and cleanup removes its listener", async () => {
+  const { installKeyDispatcher } = await import("./dispatcher");
+  const doc = new EventTarget();
+  let archived = 0;
+  const remove = installKeyDispatcher(() => "thread", { archive: () => { archived++; } }, undefined, doc);
+  const press = () => {
+    const event = Object.assign(new Event("keydown", { cancelable: true }), key("e", { metaKey: true }));
+    doc.dispatchEvent(event);
+    return event;
+  };
+  assert.equal(press().defaultPrevented, true);
+  assert.equal(archived, 1);
+  remove();
+  assert.equal(press().defaultPrevented, false);
+  assert.equal(archived, 1);
+});

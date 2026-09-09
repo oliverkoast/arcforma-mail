@@ -347,6 +347,7 @@ function saveKey(d: ComposeDraft): string {
 }
 /** Bumped on every open, close, or view change of the reading pane; a threads:get that resolves for an older open is dropped, so a fast J J never lands the first thread over the second. */
 let openSeq = 0;
+let openingThread: { accountId: string; id: string } | null = null;
 /**
  * The same guard for the list. Bumped by every load and by every action that edits rows by hand, so
  * a threads:list that resolves late is dropped instead of overwriting what has happened since.
@@ -714,11 +715,13 @@ export const useApp = create<AppState>((set, get) => ({
 
   async openThreadById(accountId, threadId, opts = {}) {
     const seq = ++openSeq;
+    openingThread = { accountId, id: threadId };
     set({ openLoading: true, popover: null, summary: null, replies: null });
     try {
       const view = await invoke("threads:get", accountId, threadId);
       // A later open (or a close) won the race: this result is for a thread nobody is looking at.
       if (seq !== openSeq) return false;
+      openingThread = null;
       // The thread opens on its newest message with the history folded away. No animation: this is the first paint.
       set({ open: view, openLoading: false, expandedMessages: defaultExpanded(view.messages), allExpanded: false });
       get().syncScope();
@@ -731,6 +734,7 @@ export const useApp = create<AppState>((set, get) => ({
       return true;
     } catch (err) {
       if (seq !== openSeq) return false;
+      openingThread = null;
       set(opts.quiet ? { openLoading: false } : { openLoading: false, error: (err as Error).message });
       get().syncScope();
       return false;
@@ -739,6 +743,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   closeThread() {
     openSeq += 1;
+    openingThread = null;
     set({ open: null, openLoading: false, popover: null, summary: null, replies: null, expandedMessages: [], allExpanded: false });
     get().syncScope();
   },
@@ -747,21 +752,26 @@ export const useApp = create<AppState>((set, get) => ({
     const s = get();
     const row = actionTarget(s);
     if (!row || scheduledOnly(row, s.showToast)) return;
-    const wasOpen = s.open?.thread.id === row.id;
+    const wasOpen = (s.open?.thread.id === row.id && s.open.thread.accountId === row.accountId) || (openingThread?.id === row.id && openingThread.accountId === row.accountId);
+    if (wasOpen) {
+      openSeq += 1;
+      openingThread = null;
+    }
+    const actionOpenSeq = openSeq;
     // In a queue view E advances: the next row is selected, and opened when the reading pane is showing.
     const advance = wasOpen || (isQueueView(s.view) && s.readingPane);
     invalidateThreadList();
     set((cur) => {
       const rows = cur.rows.filter((r) => !(r.id === row.id && r.accountId === row.accountId));
       const selected = Math.min(cur.selected, Math.max(0, rows.length - 1));
-      return { rows, selected, open: wasOpen ? null : cur.open };
+      return { rows, selected, open: wasOpen ? null : cur.open, openLoading: wasOpen ? false : cur.openLoading };
     });
     get().syncScope();
     try {
       await invoke("threads:archive", row.accountId, row.id);
       get().showToast({ text: "Marked done.", undo: { kind: "archive", accountId: row.accountId, threadId: row.id, until: undoUntil(get()), text: "Back in the inbox." } });
       const next = get().rows[get().selected];
-      if (advance && next) void get().openSelected();
+      if (advance && next && openSeq === actionOpenSeq) void get().openSelected();
       void get().refreshCounts();
     } catch (err) {
       set({ error: (err as Error).message });

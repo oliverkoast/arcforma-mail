@@ -75,13 +75,13 @@ export function appActions(): ActionMap {
   };
 }
 
-export function useKeyboard(): void {
-  useEffect(
-    () =>
-      installKeyDispatcher(() => useApp.getState().scope, appActions(), {
+export function installAppKeyboard(target: EventTarget = window): () => void {
+  return installKeyDispatcher(() => useApp.getState().scope, appActions(), {
         goTo: (view) => useApp.getState().setView(view),
         onArmed: (armedNow) => useApp.setState({ goToArmed: armedNow }),
-      }),
-    []
-  );
+      }, target);
+}
+
+export function useKeyboard(): void {
+  useEffect(() => installAppKeyboard(), []);
 }
