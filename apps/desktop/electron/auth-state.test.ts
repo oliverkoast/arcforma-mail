@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { AuthExpiredError, createTokenSource, type TokenTransporter } from "@arcforma/gmail";
 import { getAccount, openStore, updateAccount, upsertAccount, upsertCalendarEvents, type Db } from "@arcforma/store";
-import { REAUTH_MESSAGE, clearAccountOnSignOut, markAccountExpired } from "./auth-state.js";
+import { KEYCHAIN_MESSAGE, REAUTH_MESSAGE, clearAccountOnSignOut, keychainUnavailablePatch, markAccountExpired } from "./auth-state.js";
 import { accountEyebrow } from "../shared/accountState.js";
 import type { AccountInfo } from "../shared/types.js";
 
@@ -83,4 +83,19 @@ test("the sidebar eyebrow order: expired beats signed out beats syncing beats a 
   assert.equal(accountEyebrow({ authState: "ok", syncState: "new", error: null }), "SYNCING");
   assert.equal(accountEyebrow({ authState: "ok", syncState: "live", error: "HTTP 500" }), "SYNC ERROR");
   assert.equal(accountEyebrow({ authState: "ok", syncState: "live", error: null }), null);
+});
+
+
+test("a Keychain refusal leaves the account signed in and says what to do", () => {
+  // The token is still on disk. Marking the account signed out made a passing condition permanent:
+  // nothing retried, the sidebar said SIGNED OUT, and a fresh sign-in needed the same Keychain.
+  const db = seeded();
+  updateAccount(db, "arcforma", keychainUnavailablePatch());
+  const row = getAccount(db, "arcforma")!;
+  assert.equal(row.auth_state, "ok", "still signed in");
+  assert.equal(row.error, KEYCHAIN_MESSAGE);
+  assert.notEqual(accountEyebrow(info(db, "arcforma")), "Signed out");
+  // The next good sync clears it the way it clears any error.
+  updateAccount(db, "arcforma", { error: null, last_sync_at: T0 });
+  assert.equal(getAccount(db, "arcforma")!.error, null);
 });

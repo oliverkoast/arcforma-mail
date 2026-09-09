@@ -150,7 +150,12 @@ export class SyncManager {
     const account = getAccount(this.db, accountId);
     if (!account || account.auth_state !== "ok") return;
     const client = this.accounts.client(accountId);
-    if (!client) return;
+    if (!client) {
+      // An ok account with no client means the Keychain would not answer just now. Try again soon
+      // rather than never: this is the path that heals after a relaunch or an Always Allow.
+      this.schedule(accountId, 30_000);
+      return;
+    }
     try {
       try {
         if (account.sync_state === "new" || account.sync_state === "backfill" || !account.history_id) {

@@ -8,6 +8,7 @@ import { clearAccountOnSignOut, markAccountExpired } from "./auth-state.js";
 import { emit } from "./events.js";
 import { log, logError } from "./log.js";
 import { oauthClientsPath } from "./paths.js";
+import { keychainUnavailablePatch } from "./auth-state.js";
 import { KeychainUnavailableError, deleteRefreshToken, hasRefreshToken, loadRefreshToken, saveRefreshToken } from "./tokens.js";
 import type { AccountInfo, AccountsStatus } from "../shared/types.js";
 
@@ -92,8 +93,10 @@ export class AccountRegistry {
       refreshToken = loadRefreshToken(accountId);
     } catch (err) {
       if (err instanceof KeychainUnavailableError) {
+        // Not signed out: the token is still there. Recorded as an error the account carries until
+        // the Keychain answers again; the sync loop retries on its own. See keychainUnavailablePatch.
         logError("auth", `${accountId}: ${err.message}`, err);
-        updateAccount(this.db, accountId, { auth_state: "signed_out", error: err.message });
+        updateAccount(this.db, accountId, keychainUnavailablePatch());
         return null;
       }
       throw err;

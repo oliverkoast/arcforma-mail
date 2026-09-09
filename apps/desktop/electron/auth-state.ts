@@ -23,3 +23,21 @@ export function clearAccountOnSignOut(db: Db, accountId: string): { calendarEven
   updateAccount(db, accountId, { auth_state: "signed_out", error: null });
   return { calendarEvents: events };
 }
+
+/** Shown while the Keychain refuses the app. It is a condition of the machine, and it passes. */
+export const KEYCHAIN_MESSAGE = "Keychain access is off, so the saved sign-in cannot be read. Quit and reopen Arcforma Mail; if macOS asks, choose Always Allow.";
+
+/**
+ * What to record when the Keychain cannot be read: the error, and nothing else.
+ *
+ * This used to set auth_state to signed_out. The token was still on disk, encrypted and valid; only
+ * the ability to decrypt it had gone, and it comes back the moment the app is reopened or the
+ * Keychain prompt is allowed. Marking the account signed out turned a passing condition into a
+ * permanent one: the sync loop only schedules accounts that are ok, so nothing ever tried again,
+ * the sidebar said SIGNED OUT, and the only way back was a full sign-in, which itself needs the
+ * Keychain and so failed too. That is exactly the night of 2026-09-08. The account stays ok, the
+ * error says what to do, and the sync loop keeps retrying until the Keychain answers.
+ */
+export function keychainUnavailablePatch(): { error: string } {
+  return { error: KEYCHAIN_MESSAGE };
+}
