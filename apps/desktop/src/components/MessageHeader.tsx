@@ -84,8 +84,8 @@ export function MessageHeader({ message, owners, repeatSender, actions, onCollap
         ) : null}
       </div>
       <div className="message-meta">
-        {message.direction === "out" ? <ReceiptChecks receipt={message.receipt ?? null} /> : null}
         <div className="message-date" data-tip={when}>
+          {message.direction === "out" ? <ReceiptChecks receipt={message.receipt ?? null} /> : null}
           {relativeTime(message.internalDate)}
         </div>
         {files > 0 ? (

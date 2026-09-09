@@ -357,11 +357,12 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .message-checks {
   display: inline-flex;
   align-items: center;
+  vertical-align: -2px;
   color: var(--af-text-body);
-  margin-right: 2px;
+  margin-right: 5px;
 }
 .message-checks svg + svg {
-  margin-left: -7px;
+  margin-left: -5px;
 }
 /* Sent, not yet opened: the second check waits, faint, so the pair never claims an open it has no evidence for. */
 .message-checks.is-sent svg + svg {
