@@ -41,3 +41,16 @@ export const KEYCHAIN_MESSAGE = "Keychain access is off, so the saved sign-in ca
 export function keychainUnavailablePatch(): { error: string } {
   return { error: KEYCHAIN_MESSAGE };
 }
+
+/**
+ * Whether an account marked signed out was in fact only refused by the Keychain.
+ *
+ * A real sign-out deletes the token from disk (clearAccountOnSignOut), so an account that says
+ * signed_out while its encrypted token is still there, and whose error names the Keychain, was
+ * demoted by the old code path on a Keychain refusal. Restoring it to ok puts it back in the sync
+ * loop, which now retries until the Keychain answers. The error is kept so the sidebar explains
+ * itself until the first good poll clears it.
+ */
+export function shouldRestoreAfterKeychain(row: { auth_state: string; error: string | null }, hasToken: boolean): boolean {
+  return row.auth_state === "signed_out" && hasToken && /keychain/i.test(row.error ?? "");
+}

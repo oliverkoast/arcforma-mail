@@ -8,7 +8,7 @@ import { clearAccountOnSignOut, markAccountExpired } from "./auth-state.js";
 import { emit } from "./events.js";
 import { log, logError } from "./log.js";
 import { oauthClientsPath } from "./paths.js";
-import { keychainUnavailablePatch } from "./auth-state.js";
+import { keychainUnavailablePatch, shouldRestoreAfterKeychain } from "./auth-state.js";
 import { KeychainUnavailableError, deleteRefreshToken, hasRefreshToken, loadRefreshToken, saveRefreshToken } from "./tokens.js";
 import type { AccountInfo, AccountsStatus } from "../shared/types.js";
 
@@ -42,6 +42,11 @@ export class AccountRegistry {
     // A token that no longer decrypts or a config that vanished means signed out.
     for (const row of listAccounts(this.db)) {
       if (row.auth_state === "ok" && !hasRefreshToken(row.id)) updateAccount(this.db, row.id, { auth_state: "signed_out" });
+      // The reverse: an account the old code signed out on a Keychain refusal, token still on disk.
+      if (shouldRestoreAfterKeychain(row, hasRefreshToken(row.id))) {
+        log("auth", `${row.id}: restored to signed in; it was marked signed out on a Keychain refusal and its token is still stored`);
+        updateAccount(this.db, row.id, { auth_state: "ok" });
+      }
     }
   }
 

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { AuthExpiredError, createTokenSource, type TokenTransporter } from "@arcforma/gmail";
 import { getAccount, openStore, updateAccount, upsertAccount, upsertCalendarEvents, type Db } from "@arcforma/store";
-import { KEYCHAIN_MESSAGE, REAUTH_MESSAGE, clearAccountOnSignOut, keychainUnavailablePatch, markAccountExpired } from "./auth-state.js";
+import { KEYCHAIN_MESSAGE, REAUTH_MESSAGE, clearAccountOnSignOut, keychainUnavailablePatch, markAccountExpired, shouldRestoreAfterKeychain } from "./auth-state.js";
 import { accountEyebrow } from "../shared/accountState.js";
 import type { AccountInfo } from "../shared/types.js";
 
@@ -98,4 +98,14 @@ test("a Keychain refusal leaves the account signed in and says what to do", () =
   // The next good sync clears it the way it clears any error.
   updateAccount(db, "arcforma", { error: null, last_sync_at: T0 });
   assert.equal(getAccount(db, "arcforma")!.error, null);
+});
+
+
+test("an account signed out by the old Keychain path is restored after a Keychain refusal, and a real sign-out is not", () => {
+  const oldMessage = "The Keychain is unavailable, so the saved sign-in cannot be read. Quit and reopen Arcforma Mail.";
+  assert.equal(shouldRestoreAfterKeychain({ auth_state: "signed_out", error: oldMessage }, true), true, "the exact row from 2026-09-08");
+  assert.equal(shouldRestoreAfterKeychain({ auth_state: "signed_out", error: KEYCHAIN_MESSAGE }, true), true);
+  assert.equal(shouldRestoreAfterKeychain({ auth_state: "signed_out", error: oldMessage }, false), false, "no token on disk is a real sign-out");
+  assert.equal(shouldRestoreAfterKeychain({ auth_state: "signed_out", error: null }, true), false, "signed out for some other reason stays out");
+  assert.equal(shouldRestoreAfterKeychain({ auth_state: "expired", error: REAUTH_MESSAGE }, true), false, "a dead token is not a Keychain problem");
 });
