@@ -27,6 +27,8 @@ const onboarding = process.argv.includes("--onboarding");
 const positional = process.argv.slice(2).find((a) => !a.startsWith("--"));
 const outDir = path.resolve(positional || path.join(os.tmpdir(), `arcmail-smoke-${Date.now()}`));
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), "arcmail-smoke-data-"));
+// The walk is ~50 steps with real waits; on a loaded machine it outgrew the 120 s build ceiling.
+const WALK_TIMEOUT_MS = 6 * 60_000;
 const fixture = process.env.ARCMAIL_FIXTURE || path.join(here, "fixtures", "threads.json");
 
 function run(cmd, args, opts = {}) {
@@ -54,6 +56,7 @@ let out = "";
 let exitError = null;
 try {
   out = await run(electronBinary, ["."], {
+    timeoutMs: WALK_TIMEOUT_MS,
     env: {
       ...process.env,
       ARCMAIL_SMOKE: outDir,
@@ -72,7 +75,6 @@ try {
     // The walk grew with the attachment preview steps, which open two more
     // windows and wait for each to paint. The cap is a backstop against a hung
     // Electron, not a budget: it kills the child, so nothing outlives the run.
-    timeoutMs: 180_000,
   });
 } catch (err) {
   exitError = err;
