@@ -34,6 +34,8 @@ test("ruleType assigns one of the six types, or nothing", () => {
   assert.equal(ruleType(msg({ From: "jj@example.com", Subject: "Accepted: Arcforma | JJ @ Tue Sep 1" }, { mimeType: "multipart/mixed", parts: [{ mimeType: "text/calendar" }] })), "calendar");
   // The same acceptance with no calendar object at all, the way Exchange and Google send it, answers an invitation the owner sent.
   assert.equal(ruleType(msg({ From: "daan@marblebar.example", Subject: "Accepted: Arcforma Foundations | Session 2" }, { mimeType: "text/html" }), { threadHasOutbound: true }), "calendar");
+  assert.equal(ruleType(msg({ From: "daan@marblebar.example", Subject: "Accepted: Arcforma Foundations | Session 2" }, { mimeType: "text/html" }), { threadHasOutbound: false }), "calendar", "a response verb counts on its own");
+  assert.equal(ruleType(msg({ From: "kate@kjtravel.example", Subject: "Invitation: Kate <> Oliver @ Wed Aug 19, 2026 2:45pm - 3pm (PDT) (oliver@arcforma.ai)" }, { mimeType: "text/html" }), { threadHasOutbound: false }), "calendar", "Google's when-suffix on an invitation from a person");
   // Without the owner's invitation behind it, a person's "Invitation" is a conversation.
   assert.equal(ruleType(msg({ From: "daan@marblebar.example", Subject: "Invitation to dinner next week?" }, { mimeType: "text/html" }), { threadHasOutbound: false }), null);
 });

@@ -108,7 +108,7 @@ export async function classifyThread(db: Db, ai: AiClient, accountId: string, th
 }
 
 /** Bump when a rule changes meaning, so stored rule verdicts get re-evaluated once. */
-const RULES_VERSION = 4;
+const RULES_VERSION = 5;
 
 /**
  * Bump when the attention weights or the bands change. Unlike the rules

@@ -150,6 +150,10 @@ const RECEIPT_SENDERS = /^(receipts?|invoices?|billing|payments?|orders?|no-?rep
 /** Subjects calendar systems generate for invitations and replies. */
 const CALENDAR_SUBJECT = /^\s*(invitation|updated invitation|accepted|declined|tentatively accepted|tentative|canceled event|cancelled event|new event|event update|reminder)\b/i;
 const CALENDAR_SENDERS = /^(calendar-notification@google\.com|calendar-server@|.*@calendar\.google\.com|no-?reply@calendly\.com|.*@cal\.com)$/i;
+/** A reply to an invitation. Nobody writes "Accepted:" as a subject of their own. */
+const CALENDAR_RESPONSE = /^\s*(accepted|declined|tentatively accepted|tentative)\s*:/i;
+/** The "@ Wed Sep 2, 2026 1pm" Google Calendar appends to every subject it writes. */
+const CALENDAR_WHEN = /@ (mon|tue|wed|thu|fri|sat|sun) [a-z]{3} \d{1,2}, \d{4}/i;
 
 /** Domains that only ever mail about something that happened in an account or a project. */
 const PLATFORM_DOMAINS =
@@ -262,12 +266,16 @@ export function isCalendarNotice(m: GmailMessage, ctx: Pick<RuleContext, "thread
   const from = fromAddress(m);
   const subject = header(m, "Subject");
   if (!hasCalendarPart(m.payload)) {
-    // No calendar object, so this is only a notice if the words and the shape say so together.
-    // An "Accepted:" from a person, on a thread the owner started, answers an invitation the
-    // owner sent: Exchange and Google send those as plain mail, no .ics, a legal footer for a
-    // body. One arrived on 2026-09-09 and sat in the inbox untagged. A person writing "Invitation
-    // to dinner?" with no outbound behind it is still a conversation.
-    return CALENDAR_SUBJECT.test(subject) && (CALENDAR_SENDERS.test(from) || ctx.threadHasOutbound === true);
+    // No calendar object in sight. The sync fetches headers only, so the .ics on a response is
+    // invisible until the thread is opened, and Exchange sends acceptances with no .ics at all:
+    // plain mail from the person's own address, a legal footer for a body. On 2026-09-09 about
+    // 150 of them sat in the store untyped, every one a calendar response, not one a conversation.
+    // A response verb counts on its own, and so does the "@ Wed Sep 2, 2026" Google appends. An
+    // invitation word alone still needs a calendar sender or the owner's own mail behind it: a
+    // person writing "Invitation to dinner?" is still a conversation.
+    if (CALENDAR_RESPONSE.test(subject)) return true;
+    if (!CALENDAR_SUBJECT.test(subject)) return false;
+    return CALENDAR_WHEN.test(subject) || CALENDAR_SENDERS.test(from) || ctx.threadHasOutbound === true;
   }
   if (CALENDAR_SENDERS.test(from)) return true;
   if (CALENDAR_SUBJECT.test(subject)) return true;
