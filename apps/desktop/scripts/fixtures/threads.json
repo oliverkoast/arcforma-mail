@@ -1116,6 +1116,31 @@
           "html": "<p>That is everything from my side. See you Thursday.</p>"
         }
       ]
+    },
+    {
+      "id": "t-self",
+      "accountId": "arcforma",
+      "classification": {
+        "split": "important",
+        "categoryId": "clients",
+        "source": "local",
+        "confidence": 0.91
+      },
+      "summary": null,
+      "messages": [
+        {
+          "id": "m-self-1",
+          "from": "you@example.com",
+          "to": "you@example.com",
+          "subject": "Note to self",
+          "hoursAgo": 2,
+          "labels": [
+            "INBOX",
+            "SENT"
+          ],
+          "html": "<p>Remember to send the deck on Thursday.</p>"
+        }
+      ]
     }
   ],
   "calendar": [

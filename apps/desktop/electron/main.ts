@@ -524,6 +524,21 @@ const SMOKE_STEPS: SmokeStep[] = [
       "window.__arcmail.leaveSearch();",
     waitMs: 300,
   },
+  // Reply all on a note to self must address someone. Stripping your own addresses is right for
+  // every other message and, on this one, used to strip everyone and open with an empty To.
+  {
+    name: "reply-self",
+    script:
+      "const acct = window.__arcmail.status.accounts[0].id;" +
+      "await window.__arcmail.openThreadById(acct, 't-self');" +
+      "await new Promise((r) => setTimeout(r, 500));" +
+      "window.__arcmail.openCompose('replyAll');" +
+      "await new Promise((r) => setTimeout(r, 400));" +
+      "const c = window.__arcmail.compose;" +
+      "console.log('REPLY SELF to:', c ? c.to.length : -1, 'first:', c && c.to[0] ? c.to[0].email : 'none');" +
+      "await window.__arcmail.closeCompose(false); window.__arcmail.closeThread();",
+    waitMs: 300,
+  },
   // Cmd+Enter sends with the caret in the body. This is a step rather than a unit test because the
   // fault it guards against was invisible to one: the binding resolved correctly in isolation while
   // TipTap's own keymap, which sits below the window on the editor element, consumed the event
