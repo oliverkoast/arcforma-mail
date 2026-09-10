@@ -515,3 +515,18 @@ test("stripping never eats the message when the banner runs unusually long", () 
   assert.ok(out.length > 0);
   assert.ok(out.length <= long.length);
 });
+
+test("an Outlook reply header one level down, inside the WordSection1 wrapper with a legal footer after it, still folds", () => {
+  const html =
+    '<div class="WordSection1"><p class="MsoNormal">Hi Oliver, thanks for this.</p><p class="MsoNormal">I can do a call at 10.30 Friday.</p>' +
+    '<div class="MsoNormal" align="center"><hr size="2" width="98%" align="center"></div>' +
+    '<div id="divRplyFwdMsg"><p class="MsoNormal"><b><span>From:</span></b><span> Oliver Korzen &lt;oliver@example.com&gt;<br><b>Sent:</b> Wednesday, 09 September 2026 19:33<br><b>To:</b> George Woods<br><b>Subject:</b> Marble Bar sessions</span></p></div>' +
+    '<p class="MsoNormal">Earlier from Oliver.</p></div>' +
+    "This message is intended only for the use of the person(s) to whom it is addressed.";
+  const t = tidy(html);
+  assert.equal(t.result.folded, "quote");
+  assert.equal(t.visible.split("\n").slice(0, 2).join(" | "), "Hi Oliver, thanks for this. | I can do a call at 10.30 Friday.");
+  assert.ok(t.quoted.includes("From: Oliver Korzen"), t.quoted);
+  assert.ok(t.quoted.includes("Earlier from Oliver."), t.quoted);
+  assert.ok(!t.visible.includes("Earlier from Oliver."), "the history is inside the fold, not under the files");
+});

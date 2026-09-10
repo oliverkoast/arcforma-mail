@@ -416,7 +416,8 @@ function foldBody(details: MailElement): MailElement {
 function foldFrom(doc: MailDocument, root: MailElement, from: MailNode, existing: MailElement | null): MailElement {
   const all = kids(root);
   const start = all.indexOf(from);
-  const stop = existing ? all.indexOf(existing) : all.length;
+  // An existing fold can sit one level down (see the wrapper case in tidyMessage); then everything from `from` on moves into it.
+  const stop = existing && all.includes(existing) ? all.indexOf(existing) : all.length;
   const moving = all.slice(start, stop);
   if (existing) {
     const body = foldBody(existing);
@@ -964,6 +965,22 @@ export function tidyMessage(doc: MailDocument, priorTexts: string[] = []): TidyR
     fold = foldFrom(doc, root, blocks[backOverBreaks(blocks, start)]!, null);
     folded = "quote";
     kinds.add("quote");
+  } else if (start < 0) {
+    // Outlook wraps the whole message in one WordSection1 div and appends a legal footer after it
+    // as a sibling, so the wrapper is not the single child contentRoot() walks into, and the reply
+    // header sits one level down where the top-level scan never looked. On 2026-09-10 a reply with
+    // seven files showed its whole quoted history under them for that reason. Look inside the one
+    // block that holds the message.
+    for (const b of blocks) {
+      if (!isElement(b) || !WRAPPER_TAGS.has(tagOf(b))) continue;
+      const inner = blocksOf(b);
+      const at = quoteStartIndex(inner);
+      if (at < 0 || !hasVisibleContent(inner.slice(0, at))) continue;
+      fold = foldFrom(doc, b, inner[backOverBreaks(inner, at)]!, null);
+      folded = "quote";
+      kinds.add("quote");
+      break;
+    }
   }
 
   if (priorTexts.length) {
