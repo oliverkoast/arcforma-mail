@@ -4,7 +4,7 @@
 // search rows, and Ask AI all go through parseSearchQuery and compileSearch,
 // so one query means the same thing everywhere.
 //
-//   from:dana to:maya cc:priya subject:invoice "exact phrase" free words
+//   from:dana to:maya cc:priya with:jack subject:invoice "exact phrase" free words
 //   has:attachment is:unread is:read is:starred
 //   in:inbox in:archive in:snoozed in:daily in:weekly
 //   before:2026-09-01 after:2026-08-01 newer_than:7d older_than:2w
@@ -26,6 +26,8 @@ export interface ParsedSearch {
   phrases: string[];
   from: string[];
   to: string[];
+  /** with:addr, a person on the message in any role: sender, To, or Cc. What picking a person in the search box writes. */
+  with: string[];
   cc: string[];
   subject: string[];
   hasAttachment: boolean;
@@ -50,6 +52,7 @@ const EMPTY: ParsedSearch = {
   phrases: [],
   from: [],
   to: [],
+  with: [],
   cc: [],
   subject: [],
   hasAttachment: false,
@@ -94,7 +97,7 @@ export function parseSearchWindow(value: string): number | null {
 }
 
 export function parseSearchQuery(input: string): ParsedSearch {
-  const out: ParsedSearch = { ...EMPTY, text: [], phrases: [], from: [], to: [], cc: [], subject: [], labels: [], ignored: [] };
+  const out: ParsedSearch = { ...EMPTY, text: [], phrases: [], from: [], to: [], with: [], cc: [], subject: [], labels: [], ignored: [] };
   for (const m of (input ?? "").matchAll(TOKEN)) {
     const [raw, op, quotedValue, bareValue, phrase, word] = m;
     if (op !== undefined) {
@@ -110,6 +113,9 @@ export function parseSearchQuery(input: string): ParsedSearch {
           break;
         case "to":
           out.to.push(value);
+          break;
+        case "with":
+          out.with.push(value);
           break;
         case "cc":
           out.cc.push(value);
@@ -186,6 +192,7 @@ export function isEmptySearch(p: ParsedSearch): boolean {
     p.phrases.length === 0 &&
     p.from.length === 0 &&
     p.to.length === 0 &&
+    p.with.length === 0 &&
     p.cc.length === 0 &&
     p.subject.length === 0 &&
     !p.hasAttachment &&
@@ -269,6 +276,10 @@ export function compileSearch(p: ParsedSearch, opts: CompileOptions = {}): Compi
   for (const v of p.cc) {
     where.push(addressListMatch("m.cc_json"));
     args.push(like(v), like(v));
+  }
+  for (const v of p.with) {
+    where.push(`(lower(COALESCE(m.from_email, '')) LIKE ? OR lower(COALESCE(m.from_name, '')) LIKE ? OR ${addressListMatch("m.to_json")} OR ${addressListMatch("m.cc_json")})`);
+    args.push(like(v), like(v), like(v), like(v), like(v), like(v));
   }
   if (p.hasAttachment) where.push("t.has_attachments = 1");
   if (p.isUnread) where.push("t.unread = 1");

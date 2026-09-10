@@ -129,6 +129,7 @@ test("bad dates, unknown values, and unknown operators degrade without breaking 
 
 test("toFtsMatch and compileSearch build a MATCH plus predicates that hold the FTS5 syntax at bay", () => {
   const p = parseSearchQuery('from:dana@northwind.example subject:"re: kickoff" "session plan" kick OR NOT');
+  assert.deepEqual(parseSearchQuery('with:jack.sieff@marblebar.example kickoff').with, ['jack.sieff@marblebar.example'], 'with: is what picking a person writes');
   assert.equal(toFtsMatch(p), '"kick"* "OR"* "NOT"* "session plan" from_text : "dana@northwind.example"* subject : "re: kickoff"*');
   const c = compileSearch(parseSearchQuery("is:unread has:attachment to:maya"), { accountIds: ["arcforma"] });
   assert.equal(c.fts, null);
@@ -147,6 +148,9 @@ test("compiled queries run on fixtures: words, from, to, cc, subject, phrases", 
   assert.deepEqual(ids("to:dana"), ["arcforma:kickoff"], "to: reads the To list, so Oliver's reply to Dana matches");
   assert.deepEqual(ids("to:maya"), [], "Maya wrote in, nobody wrote to her");
   assert.deepEqual(ids("cc:priya"), ["arcforma:kickoff"]);
+  assert.deepEqual(ids("with:dana"), ["arcforma:kickoff"], "with: finds a person in any role, sender or recipient");
+  assert.deepEqual(ids("with:maya"), ids("from:maya"), "Maya only ever wrote in, so with: and from: agree on her");
+  assert.deepEqual(ids("with:priya"), ["arcforma:kickoff"], "a Cc counts too");
   assert.deepEqual(ids("subject:invoice"), ["arcforma:invoice"], "subject: skips the body mention of an invoice");
   assert.deepEqual(ids('"session plan"'), ["arcforma:kickoff"]);
   assert.deepEqual(ids('"plan session"'), [], "a phrase keeps its word order");

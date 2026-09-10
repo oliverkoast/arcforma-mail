@@ -552,6 +552,40 @@ const SMOKE_STEPS: SmokeStep[] = [
   // Reply all on a note to self must address someone. Stripping your own addresses is right for
   // every other message and, on this one, used to strip everyone and open with an empty To.
   {
+    name: "search-people",
+    script:
+      "window.__arcmail.closeThread(); window.__arcmail.setView('inbox');" +
+      // The smoke window is never focused, so focus events never fire: the scope is set the way onFocus would set it.
+      "const input = document.querySelector('#search-input'); input.focus(); window.__arcmail.setScope('search'); window.__arcmail.setSearchQuery('dan');" +
+      "await new Promise(r => setTimeout(r, 500));" +
+      "const rows = [...document.querySelectorAll('.search-people .recipient-suggest-row')]; if(rows.length === 0) throw new Error('No people offered for dan');" +
+      "if(!rows.some(r => r.textContent.includes('dana@northwind.example'))) throw new Error('Dana is not among the people offered: ' + rows.map(r => r.textContent).join(' | '));" +
+      "input.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowDown', bubbles:true})); await new Promise(r => setTimeout(r, 50));" +
+      "input.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter', bubbles:true})); await new Promise(r => setTimeout(r, 900));" +
+      "const q = window.__arcmail.searchQuery; if(!/^with:dana@[^ ]+ \\s*$/.test(q)) throw new Error('Picking a person did not write with:<address>: ' + JSON.stringify(q));" +
+      "if(!window.__arcmail.searchHits || window.__arcmail.rows.length === 0) throw new Error('with: search found nothing');" +
+      "console.log('PEOPLE: ' + rows.length + ' offered for dan, picked ' + q.trim() + ', ' + window.__arcmail.rows.length + ' hit(s)');" +
+      "window.__arcmail.leaveSearch();",
+    waitMs: 300,
+  },
+  {
+    name: "search-survives-sync",
+    script:
+      "window.__arcmail.closeThread(); window.__arcmail.setView('inbox');" +
+      "window.__arcmail.setSearchQuery('Northwind'); await new Promise(r => setTimeout(r, 1400));" +
+      "if(!window.__arcmail.searchHits) throw new Error('The search did not run after a one second pause');" +
+      "const before = window.__arcmail.rows.map(r => r.id); if(before.length === 0) throw new Error('No hits for Northwind in the fixture');" +
+      "window.__arcmail.select(0); await window.__arcmail.openSelected(); await new Promise(r => setTimeout(r, 300));" +
+      "await window.__arcmail.loadThreads(true); await new Promise(r => setTimeout(r, 600));" +
+      "if(!window.__arcmail.searchHits) throw new Error('A reset reload left the search');" +
+      "if(window.__arcmail.searchQuery !== 'Northwind') throw new Error('The query was cleared');" +
+      "if(JSON.stringify(window.__arcmail.rows.map(r => r.id)) !== JSON.stringify(before)) throw new Error('The rows changed under the search: ' + window.__arcmail.rows.map(r => r.id).join(','));" +
+      "if(!window.__arcmail.open) throw new Error('The open thread was closed by the reload');" +
+      "console.log('SEARCH: ' + before.length + ' hit(s) survived a reset reload with the thread still open');" +
+      "window.__arcmail.leaveSearch();",
+    waitMs: 300,
+  },
+  {
     name: "links-in-mail",
     script:
       "await window.__arcmail.openThreadById('formai', 't-vendor'); await new Promise(r => setTimeout(r, 700));" +

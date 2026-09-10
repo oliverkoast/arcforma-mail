@@ -1,5 +1,6 @@
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "../bridge";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { estimateRowHeight, remeasureRows } from "../lib/rowSizing";
 import { isQueueView, useApp } from "../state/store";
@@ -10,7 +11,7 @@ import { threadRowTip } from "../lib/tooltip";
 import { keyLabel } from "../keys/keyLabel";
 import { SearchExcerpt } from "./SearchExcerpt";
 import { Icon } from "./IconButton";
-import type { DraftInfo, SearchHighlight, ThreadSummary } from "../../shared/types";
+import type { DraftInfo, SearchHighlight, ThreadSummary, RecipientSuggestion } from "../../shared/types";
 
 /** The search operators, each with what it does, for the hint under an empty focused search field. */
 const SEARCH_OPS: Array<[string, string]> = [
@@ -152,6 +153,7 @@ export function ThreadList() {
   const progress = useApp((s) => s.progress);
   const searchQuery = useApp((s) => s.searchQuery);
   const searchHits = useApp((s) => s.searchHits);
+  const { people, peopleActive, peopleKeys, pickPerson } = useSearchPeople(searchQuery);
   const error = useApp((s) => s.error);
   const loading = useApp((s) => s.loading);
   const select = useApp((s) => s.select);
@@ -241,7 +243,7 @@ export function ThreadList() {
             </svg>
           </button>
         </div>
-        <label className="search" data-tip="Search subject, sender, recipients, and message text across every account. Enter runs it." data-key={keyLabel("search") ?? undefined}>
+        <label className="search" data-tip="Search subject, sender, recipients, and message text across every account. Enter runs it. Three letters of a name offer the people you write with." data-key={keyLabel("search") ?? undefined}>
           <span className="af-mono">/</span>
           <input
             id="search-input"
@@ -250,8 +252,21 @@ export function ThreadList() {
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setScope("search")}
             onBlur={() => setScope(open ? "thread" : "list")}
+            onKeyDown={peopleKeys}
             spellCheck={false}
           />
+          {people.length > 0 && scope === "search" ? (
+            <ul className="recipient-suggest search-people" role="listbox" aria-label="People">
+              {people.map((hit, i) => (
+                <li key={hit.email} role="option" aria-selected={i === peopleActive}>
+                  <button type="button" className={`recipient-suggest-row${i === peopleActive ? " is-active" : ""}`} onMouseDown={(e) => e.preventDefault()} onClick={() => pickPerson(hit)}>
+                    <span className="recipient-suggest-name">{hit.name || hit.email}</span>
+                    {hit.name ? <span className="recipient-suggest-mail">{hit.email}</span> : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </label>
         {scope === "search" && !searchQuery ? (
           <div className="search-ops" aria-label="Search operators">
@@ -356,4 +371,65 @@ export function ThreadList() {
       </div>
     </section>
   );
+}
+
+/** The word being typed at the end of the query, when it is a bare word of three letters or more, not an operator. */
+export function personTerm(query: string): string | null {
+  const m = /(?:^|\s)([^\s:]{3,})$/.exec(query);
+  return m ? m[1]! : null;
+}
+
+/**
+ * People under the search box. Three letters of a name or address and the people you write
+ * with appear; arrows move, Enter takes one, and the word becomes with:<address>, which finds
+ * the person in any role. Enter with nothing highlighted runs the search as typed.
+ */
+function useSearchPeople(query: string) {
+  const [people, setPeople] = useState<RecipientSuggestion[]>([]);
+  const [peopleActive, setPeopleActive] = useState(-1);
+  const term = personTerm(query);
+  useEffect(() => {
+    if (!term) {
+      setPeople([]);
+      setPeopleActive(-1);
+      return;
+    }
+    let live = true;
+    const t = setTimeout(() => {
+      void invoke("recipients:suggest", term, []).then((hits) => {
+        if (!live) return;
+        setPeople(hits.slice(0, 5));
+        setPeopleActive(-1);
+      });
+    }, 120);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [term]);
+  const pickPerson = (hit: RecipientSuggestion) => {
+    const s = useApp.getState();
+    const q = s.searchQuery.replace(/([^\s:]{3,})$/, `with:${hit.email} `);
+    setPeople([]);
+    setPeopleActive(-1);
+    s.setSearchQuery(q);
+    void s.runSearch();
+  };
+  const peopleKeys = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (people.length === 0) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      setPeopleActive((i) => (i + (e.key === "ArrowDown" ? 1 : people.length - 1) + (i < 0 && e.key === "ArrowUp" ? 1 : 0)) % people.length);
+    } else if (e.key === "Enter" && peopleActive >= 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      pickPerson(people[peopleActive]!);
+    } else if (e.key === "Escape") {
+      // First Escape closes the people; the next one leaves the search, through the keymap.
+      e.stopPropagation();
+      setPeople([]);
+      setPeopleActive(-1);
+    }
+  };
+  return { people, peopleActive, peopleKeys, pickPerson };
 }

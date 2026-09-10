@@ -232,7 +232,8 @@ export interface AppState {
   toggleReadingPane: () => void;
   setReadingPane: (open: boolean) => void;
   setSearchQuery: (q: string) => void;
-  runSearch: () => Promise<void>;
+  /** keepPlace: refresh the hits for the same query without moving the selection or closing the open thread. */
+  runSearch: (opts?: { keepPlace?: boolean }) => Promise<void>;
   leaveSearch: () => void;
   signIn: (id: string) => Promise<void>;
   showToast: (t: ToastEvent | null) => void;
@@ -638,7 +639,13 @@ export const useApp = create<AppState>((set, get) => ({
 
   async loadThreads(reset = false) {
     const s = get();
-    if (s.searchHits && !reset) return;
+    // A search stays a search. A sync announcing changed threads asks for a reset reload, and on
+    // 2026-09-10 that replaced the results with the inbox while the query sat in the box: switch
+    // apps, come back, the sync runs, the search is gone. Refresh the hits in place instead.
+    if (s.searchHits) {
+      if (reset) void get().runSearch({ keepPlace: true });
+      return;
+    }
     const accountIds = selectedAccountIds(s);
     const seq = ++listSeq;
     listInFlight += 1;
@@ -1105,7 +1112,7 @@ export const useApp = create<AppState>((set, get) => ({
     }, SEARCH_DEBOUNCE_MS);
   },
 
-  async runSearch() {
+  async runSearch(opts = {}) {
     if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
     const s = get();
     const q = s.searchQuery.trim();
@@ -1117,7 +1124,16 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       const hits = await invoke("search:query", q, selectedAccountIds(s));
       if (seq !== searchSeq) return;
-      set({ searchHits: hits, rows: hits.map((h) => h.thread), nextCursor: null, selected: 0, open: null });
+      const rows = hits.map((h) => h.thread);
+      if (opts.keepPlace) {
+        // The same query, fresher rows: the selection stays on its thread if it is still listed, and an open thread stays open.
+        const cur = get();
+        const selectedId = cur.rows[cur.selected]?.id ?? null;
+        const at = selectedId ? rows.findIndex((r) => r.id === selectedId) : -1;
+        set({ searchHits: hits, rows, nextCursor: null, selected: at >= 0 ? at : Math.min(cur.selected, Math.max(rows.length - 1, 0)) });
+        return;
+      }
+      set({ searchHits: hits, rows, nextCursor: null, selected: 0, open: null });
       get().syncScope();
     } catch (err) {
       if (seq === searchSeq) set({ error: (err as Error).message });
