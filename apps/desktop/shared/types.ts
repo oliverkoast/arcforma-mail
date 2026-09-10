@@ -665,6 +665,8 @@ export interface ArcmailEvents {
   "drafts:changed": { accountId: string | null };
   /** A banner was clicked: open this thread. */
   "notify:open": { accountId: string; threadId: string };
+  /** A mailto: link was followed in a message: open a compose with these filled in. */
+  "compose:mailto": { to: Address[]; subject: string; bodyHtml: string };
   /** The model download or the text tool install said something while onboarding is open. */
   "onboarding:progress": OnboardingProgress;
 }
@@ -787,4 +789,4 @@ export interface ArcmailInvoke {
 export type InvokeChannel = keyof ArcmailInvoke;
 export type EventChannel = keyof ArcmailEvents;
 
-export const EVENT_CHANNELS: EventChannel[] = ["accounts:changed", "threads:changed", "sync:progress", "toast", "categories:changed", "calendar:changed", "drafts:changed", "onboarding:progress", "notify:open"];
+export const EVENT_CHANNELS: EventChannel[] = ["accounts:changed", "threads:changed", "sync:progress", "toast", "categories:changed", "calendar:changed", "drafts:changed", "onboarding:progress", "notify:open", "compose:mailto"];

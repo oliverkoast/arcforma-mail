@@ -6,7 +6,7 @@ import electron = require("electron");
 
 const { contextBridge, ipcRenderer, webUtils } = electron;
 
-const EVENT_CHANNELS = new Set(["accounts:changed", "threads:changed", "sync:progress", "toast", "categories:changed", "calendar:changed", "drafts:changed", "onboarding:progress", "notify:open"]);
+const EVENT_CHANNELS = new Set(["accounts:changed", "threads:changed", "sync:progress", "toast", "categories:changed", "calendar:changed", "drafts:changed", "onboarding:progress", "notify:open", "compose:mailto"]);
 
 // Mirrors the keys of ArcmailInvoke in shared/types.ts; preload.test.ts keeps the two in step.
 const INVOKE_CHANNELS = new Set([

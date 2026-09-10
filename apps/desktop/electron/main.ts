@@ -10,6 +10,7 @@ import { Classifier } from "./classify/pipeline.js";
 import { Contacts } from "./contacts.js";
 import { DraftMirror } from "./drafts/mirror.js";
 import { emit } from "./events.js";
+import { parseMailto } from "./mailto.js";
 import { applyLoginItem, registerAccountIpc } from "./ipc/accounts.js";
 import { registerAiIpc } from "./ipc/ai.js";
 import { registerCalendarIpc } from "./ipc/calendar.js";
@@ -100,20 +101,38 @@ if (!app.requestSingleInstanceLock()) {
   void boot();
 }
 
-/** Denies navigation off the app origin for the main frame and every child frame; http(s) targets go to the browser instead. */
+/**
+ * What a link in a message does. http(s) goes to the browser; a mailto: opens a compose here
+ * with the address filled in; anything else is dropped and logged. A smoke run never opens the
+ * browser: it prints the hand-off instead, so the walk can prove a click got this far.
+ */
+function followLink(url: string): void {
+  if (isExternalLink(url)) {
+    if (SMOKE_DIR) console.log(`SMOKE [info] EXTERNAL LINK: ${url}`);
+    else void shell.openExternal(url);
+    return;
+  }
+  const mail = parseMailto(url);
+  if (mail) {
+    emit("compose:mailto", mail);
+    return;
+  }
+  log("nav", `blocked navigation to ${url.slice(0, 120)}`);
+}
+
+/** Denies navigation off the app origin for the main frame and every child frame; the link itself is followed by followLink(). */
 function guardContents(contents: WebContents): void {
   contents.on("will-attach-webview", (event) => event.preventDefault());
   const deny = (event: { preventDefault(): void }, url: string) => {
     if (isAllowedNavigation(url, { devUrl: DEV_URL })) return;
     event.preventDefault();
-    if (isExternalLink(url)) void shell.openExternal(url);
-    else log("nav", `blocked navigation to ${url.slice(0, 120)}`);
+    followLink(url);
   };
   contents.on("will-navigate", (event, url) => deny(event, url));
   contents.on("will-frame-navigate", (details) => deny(details, details.url));
   contents.on("will-redirect", (event, url) => deny(event, url));
   contents.setWindowOpenHandler(({ url }) => {
-    if (isExternalLink(url)) void shell.openExternal(url);
+    followLink(url);
     return { action: "deny" };
   });
 }
@@ -532,6 +551,23 @@ const SMOKE_STEPS: SmokeStep[] = [
   },
   // Reply all on a note to self must address someone. Stripping your own addresses is right for
   // every other message and, on this one, used to strip everyone and open with an empty To.
+  {
+    name: "links-in-mail",
+    script:
+      "await window.__arcmail.openThreadById('formai', 't-vendor'); await new Promise(r => setTimeout(r, 700));" +
+      "const doc = document.querySelector('.message-body iframe')?.contentDocument; if(!doc) throw new Error('Missing message frame');" +
+      "const web = doc.querySelector('a[href^=\"http\"]'); if(!web) throw new Error('Missing http link in fixture');" +
+      "web.click(); await new Promise(r => setTimeout(r, 400));" +
+      "if(document.querySelector('.message-body iframe')?.contentDocument?.location?.href !== 'about:srcdoc') throw new Error('The frame navigated away on a link click');" +
+      "const mail = doc.querySelector('a[href^=\"mailto:\"]'); if(!mail) throw new Error('Missing mailto link in fixture');" +
+      "mail.click(); await new Promise(r => setTimeout(r, 600));" +
+      "const c = window.__arcmail.compose; if(!c) throw new Error('mailto did not open a compose');" +
+      "if(c.to?.[0]?.email !== 'editor@product-weekly.example') throw new Error('mailto compose has the wrong recipient: ' + JSON.stringify(c.to));" +
+      "if(c.subject !== 'Product Weekly') throw new Error('mailto compose has the wrong subject: ' + c.subject);" +
+      "console.log('LINKS: http link handed off, mailto opened a compose to ' + c.to[0].email);" +
+      "await window.__arcmail.closeCompose(false); window.__arcmail.closeThread();",
+    waitMs: 300,
+  },
   {
     name: "reply-self",
     script:

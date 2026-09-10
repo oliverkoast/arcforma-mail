@@ -33,6 +33,7 @@ import {
   type ToastEvent,
   type ToastUndo,
   type OutgoingAttachmentInfo,
+  type Address,
 } from "../../shared/types";
 import { ONBOARDING_STEPS, type OnboardingStepId } from "../../shared/onboarding";
 import { TYPING_SCOPES, type Scope } from "../keys/keymap";
@@ -56,6 +57,9 @@ export interface InlineAnchor {
 }
 export interface OpenComposeOptions {
   bodyHtml?: string;
+  /** Recipients and subject to start from, the way a mailto: link names them. */
+  to?: Address[];
+  subject?: string;
   draft?: ComposeDraft;
   placement?: ComposePlacement;
   /** Reply to this message rather than the thread's latest. */
@@ -621,6 +625,7 @@ export const useApp = create<AppState>((set, get) => ({
     on("categories:changed", (categories) => set({ categories }));
     on("drafts:changed", () => void get().loadDrafts());
     on("notify:open", (p) => void get().openThreadById(p.accountId, p.threadId));
+    on("compose:mailto", (p) => get().openCompose("new", { to: p.to, subject: p.subject, bodyHtml: p.bodyHtml, placement: "panel" }));
   },
 
   async refreshStatus() {
@@ -1385,6 +1390,8 @@ export const useApp = create<AppState>((set, get) => ({
       // receipt could actually be sent, so the control never reads as armed with nothing behind it.
       const rs = get().settings;
       if (rs.readReceipts && rs.readReceiptsDefault && rs.readReceiptsUrl.trim() && rs.readReceiptsTokenSet) draft = { ...draft, readReceipt: true };
+      if (opts.to?.length) draft = { ...draft, to: opts.to };
+      if (opts.subject) draft = { ...draft, subject: opts.subject };
     } catch (err) {
       get().showToast({ eyebrow: "NOT SUPPORTED YET", text: (err as Error).message });
       return;
