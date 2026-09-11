@@ -298,3 +298,27 @@ export function mergePending(fresh: MessageView[], pending: MessageView[], now =
   });
   return [...fresh, ...keep];
 }
+
+/** The settings the receipt default depends on. */
+export interface ReceiptDefaultSettings {
+  readReceipts: boolean;
+  readReceiptsDefault: boolean;
+  readReceiptsUrl: string;
+  readReceiptsTokenSet: boolean;
+}
+
+/**
+ * Whether a draft being opened should start with its read receipt armed. A fresh message takes
+ * the default. So does a draft that came in from Gmail and was never armed here: nobody chose
+ * "no receipt" for it, the choice was never offered. On 2026-09-11 every real send since the
+ * default went on had come from a Gmail draft, so none carried a pixel. A draft written here
+ * keeps what was chosen for it. And a receipt is only ever armed when one could be sent: the
+ * feature on, a service address, a token.
+ */
+export function receiptDefault(draft: Pick<ComposeDraft, "readReceipt" | "origin"> | null, s: ReceiptDefaultSettings): boolean {
+  const possible = s.readReceipts && s.readReceiptsDefault && s.readReceiptsUrl.trim().length > 0 && s.readReceiptsTokenSet;
+  if (!draft) return possible;
+  if (draft.readReceipt === true) return true;
+  if (draft.origin === "gmail") return possible;
+  return false;
+}

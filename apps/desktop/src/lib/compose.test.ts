@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildDraft, draftPreview, forwardSubject, hasBody, mergePending, parseAddresses, quotedHtml, recipientLine, recipientsFor, referencesFor, replySubject, replyTarget, sentMessage, textToHtml } from "./compose";
+import { buildDraft, draftPreview, receiptDefault, forwardSubject, hasBody, mergePending, parseAddresses, quotedHtml, recipientLine, recipientsFor, referencesFor, replySubject, replyTarget, sentMessage, textToHtml } from "./compose";
 import type { MessageView, ThreadSummary } from "../../shared/types";
 
 const owners = new Set(["you@example.com", "you@example.net"]);
@@ -237,4 +237,15 @@ test("sameMessages sees a new message, a body that arrived, and an image toggle,
   assert.equal(bodyNotice({ bodiesPending: false }), null);
   assert.equal(bodyNotice({ bodiesPending: true }), "Messages not loaded.");
   assert.equal(bodyNotice({ bodiesPending: true, bodiesError: "Not signed in, so the message bodies cannot be fetched." }), "Messages not loaded. Not signed in, so the message bodies cannot be fetched.");
+});
+
+test("receiptDefault: fresh and Gmail drafts take the default, a draft written here keeps its choice, and nothing arms without a service", () => {
+  const on = { readReceipts: true, readReceiptsDefault: true, readReceiptsUrl: "https://pixel.example", readReceiptsTokenSet: true };
+  assert.equal(receiptDefault(null, on), true, "a fresh message");
+  assert.equal(receiptDefault({ origin: "gmail", readReceipt: false }, on), true, "a Gmail draft was never asked");
+  assert.equal(receiptDefault({ origin: "local", readReceipt: false }, on), false, "a draft written here chose no receipt");
+  assert.equal(receiptDefault({ origin: "local", readReceipt: true }, on), true);
+  assert.equal(receiptDefault(null, { ...on, readReceiptsDefault: false }), false, "the default is off");
+  assert.equal(receiptDefault({ origin: "gmail", readReceipt: false }, { ...on, readReceiptsTokenSet: false }), false, "no token, nothing to arm with");
+  assert.equal(receiptDefault(null, { ...on, readReceiptsUrl: " " }), false, "no service address");
 });

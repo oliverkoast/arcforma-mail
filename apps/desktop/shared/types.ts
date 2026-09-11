@@ -396,6 +396,8 @@ export interface ComposeDraft {
    * of the draft cannot quietly disarm or arm it.
    */
   readReceipt?: boolean;
+  /** Where a reopened draft came from; a Gmail draft was never asked about a receipt here, so it takes the default. Unset on a fresh message. */
+  origin?: "local" | "gmail";
   /**
    * Files going out with this message. Paths, not bytes: the file is read once, at send, so a
    * draft parked for a week sends whatever the file says then rather than a stale copy of it.

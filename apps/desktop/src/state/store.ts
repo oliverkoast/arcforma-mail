@@ -42,7 +42,7 @@ import { addAttachments, checkAttachments } from "../lib/outgoingAttachments";
 import { scopeFor } from "../keys/scope";
 import { installActivityTracker } from "../lib/activity";
 import { defaultExpanded } from "../lib/collapse";
-import { buildDraft, hasBody, isPending, mergePending, sameMessages, sentMessage, textToHtml } from "../lib/compose";
+import { buildDraft, hasBody, isPending, mergePending, sameMessages, sentMessage, textToHtml, receiptDefault } from "../lib/compose";
 import { nextMondayAt, tomorrowAt } from "../lib/format";
 import { expandSnippet, missingVariablesText, stripCursorToken, type ExpandedSnippet, type SnippetContext } from "../lib/snippets";
 
@@ -1308,7 +1308,7 @@ export const useApp = create<AppState>((set, get) => ({
     const docked = s.compose && s.composePlacement === "inline" && s.inlineAnchor && view && s.inlineAnchor.threadId === view.thread.id && s.inlineAnchor.accountId === view.thread.accountId ? s.inlineAnchor : null;
 
     if (opts.draft) {
-      const d = { ...opts.draft, mode: opts.draft.mode ?? mode };
+      const d = { ...opts.draft, mode: opts.draft.mode ?? mode, readReceipt: receiptDefault(opts.draft, s.settings) };
       // A draft docks under the message it answers when that thread is open; anywhere else it gets the panel.
       const anchorMessage = view && d.threadId === view.thread.id && d.accountId === view.thread.accountId ? view.messages.find((m) => m.messageIdHeader && m.messageIdHeader === d.inReplyTo)?.id ?? lastId : null;
       const placement: ComposePlacement = opts.placement ?? (anchorMessage ? "inline" : "panel");
@@ -1405,8 +1405,7 @@ export const useApp = create<AppState>((set, get) => ({
       // A fresh message starts with its receipt armed when the person asked for that as the default.
       // Only a fresh one: a draft being reopened keeps whatever was chosen for it. And only when a
       // receipt could actually be sent, so the control never reads as armed with nothing behind it.
-      const rs = get().settings;
-      if (rs.readReceipts && rs.readReceiptsDefault && rs.readReceiptsUrl.trim() && rs.readReceiptsTokenSet) draft = { ...draft, readReceipt: true };
+      if (receiptDefault(null, get().settings)) draft = { ...draft, readReceipt: true };
       if (opts.to?.length) draft = { ...draft, to: opts.to };
       if (opts.subject) draft = { ...draft, subject: opts.subject };
     } catch (err) {
