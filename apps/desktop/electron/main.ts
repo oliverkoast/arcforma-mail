@@ -618,6 +618,20 @@ const SMOKE_STEPS: SmokeStep[] = [
   // A draft shows up in the inbox at the time it was started, marked DRAFT, and Enter on it opens
   // the compose. Started here through the store, the way typing C and Esc does.
   {
+    name: "draft-row-actions",
+    script:
+      "window.__arcmail.closeThread(); window.__arcmail.setView('inbox'); await window.__arcmail.loadThreads(true); await new Promise(r => setTimeout(r, 500));" +
+      "const i = window.__arcmail.rows.findIndex(r => r.draft && !r.id.startsWith('draft:')); if(i < 0) throw new Error('No thread carrying a reply draft in the inbox');" +
+      "const id = window.__arcmail.rows[i].id; const wasUnread = window.__arcmail.rows[i].unread;" +
+      "window.__arcmail.select(i); await window.__arcmail.toggleReadSelected(); await new Promise(r => setTimeout(r, 500));" +
+      "const after = window.__arcmail.rows.find(r => r.id === id); if(!after || after.unread === wasUnread) throw new Error('U did nothing on a thread carrying a draft');" +
+      "window.__arcmail.select(window.__arcmail.rows.findIndex(r => r.id === id)); await window.__arcmail.archiveSelected(); await new Promise(r => setTimeout(r, 500));" +
+      "if(window.__arcmail.rows.some(r => r.id === id)) throw new Error('E did nothing on a thread carrying a draft');" +
+      "console.log('DRAFT ROW ACTIONS: U flipped unread and E archived the thread that carries a draft');" +
+      "await window.__arcmail.undo(); await window.__arcmail.toggleReadSelected();",
+    waitMs: 300,
+  },
+  {
     name: "drafts-in-inbox",
     script:
       "window.__arcmail.closeThread(); window.__arcmail.setView('inbox');" +

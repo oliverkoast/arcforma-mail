@@ -83,6 +83,35 @@ function cut(html: string, open: RegExp): { before: string; inner: string; after
   return { before: html.slice(0, m.index), inner: html.slice(innerStart, close[0]), after: html.slice(close[1]) };
 }
 
+/** A quote written the way this app and Superhuman write one: an attribution paragraph, then a blockquote. Not Gmail's gmail_quote div. */
+const ATTRIBUTION_OPEN = /<(p|div)\b[^>]*>\s*On [^<]{5,200}wrote:\s*(?:<br\s*\/?>)?\s*<\/\1>\s*(?=<blockquote\b)/i;
+const BLOCKQUOTE_TOKEN = /<blockquote\b[^>]*>|<\/blockquote\s*>/gi;
+/** The end offset of the blockquote opening at `open`, nesting-aware; null when it never closes. */
+function blockquoteEnd(html: string, open: number): number | null {
+  BLOCKQUOTE_TOKEN.lastIndex = open;
+  let depth = 0;
+  for (let m = BLOCKQUOTE_TOKEN.exec(html); m; m = BLOCKQUOTE_TOKEN.exec(html)) {
+    depth += m[0].startsWith("</") ? -1 : 1;
+    if (depth === 0) return m.index + m[0].length;
+  }
+  return null;
+}
+/**
+ * Lifts an attribution-plus-blockquote quote out, or a bare top-level blockquote. On 2026-09-11 a
+ * draft written elsewhere carried its quote this way; the splitter only knew Gmail's div, so the
+ * quote stayed in the body and the cursor landed under it, with the new words typed below the
+ * history. Text after the quote is the writer's and stays in the body.
+ */
+function cutBlockquote(html: string): { before: string; inner: string; after: string } | null {
+  const a = ATTRIBUTION_OPEN.exec(html);
+  const start = a ? a.index : html.search(/<blockquote\b/i);
+  if (start < 0) return null;
+  const bq = html.slice(start).search(/<blockquote\b/i);
+  if (bq < 0) return null;
+  const end = blockquoteEnd(html, start + bq);
+  if (end === null) return { before: html.slice(0, start), inner: html.slice(start), after: "" };
+  return { before: html.slice(0, start), inner: html.slice(start, end), after: html.slice(end) };
+}
 const TRAILING_BREAKS = /(?:\s|<br\s*\/?>)+$/i;
 const LEADING_BREAKS = /^(?:\s|<br\s*\/?>)+/i;
 
@@ -99,7 +128,7 @@ function join(before: string, after: string): string {
 export function splitDraftHtml(html: string): { bodyHtml: string; quotedHtml: string } {
   let body = html;
   let quoted = "";
-  const q = cut(body, QUOTE_OPEN);
+  const q = cut(body, QUOTE_OPEN) ?? cutBlockquote(body);
   if (q) {
     quoted = q.inner.trim();
     body = join(q.before, q.after);

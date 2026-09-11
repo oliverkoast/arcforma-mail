@@ -7,6 +7,7 @@ import { discardDraft, restoreDraft, sendDraft, type DraftMirror } from "../draf
 import { emit } from "../events.js";
 import { log, logError } from "../log.js";
 import { normaliseServiceUrl } from "../receipts/pixel.js";
+import { splitDraftHtml } from "@arcforma/gmail";
 import type { ReceiptArmer } from "../receipts/arm.js";
 import type { ReceiptService } from "../receipts/service.js";
 import type { Scheduler } from "../scheduler.js";
@@ -23,8 +24,8 @@ export function toDraftInfo(row: DraftRow): DraftInfo {
     cc: JSON.parse(row.cc_json) as Address[],
     bcc: JSON.parse(row.bcc_json) as Address[],
     subject: row.subject,
-    bodyHtml: row.body_html,
-    quotedHtml: row.quoted_html,
+    // A draft imported before the splitter knew every quote shape still carries its history in the body; lift it out on the way to the compose.
+    ...(row.quoted_html ? { bodyHtml: row.body_html, quotedHtml: row.quoted_html } : splitDraftHtml(row.body_html)),
     inReplyTo: row.in_reply_to,
     references: row.references_header,
     createdAt: row.created_at,

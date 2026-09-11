@@ -170,3 +170,13 @@ test("an imported draft carries the date it was started, from internalDate", () 
   const draft = { id: "d1", message: { id: "m1", threadId: "t1", internalDate: "1756800000000", payload: { mimeType: "text/plain", headers: [{ name: "Subject", value: "s" }, { name: "To", value: "a@b.c" }], body: { data: Buffer.from("hi").toString("base64url") } } } } as never;
   assert.equal(importGmailDraft(draft).createdAt, 1_756_800_000_000);
 });
+
+test("splitDraftHtml lifts an attribution-plus-blockquote quote, and keeps words typed after it", () => {
+  // The shape of a draft written elsewhere on 2026-09-11: the reply, the attribution, the blockquote, then words typed under it.
+  const html = "<p>Hi Jack,<br><br>Sounds good.</p><p><br></p><p>On Fri, Sep 11, 2026 07:18 AM, Jack Sieff &lt;jack@example.com&gt; wrote:<br></p><blockquote><p>Thank you, Oliver.</p><blockquote><p>older</p></blockquote></blockquote><p>Hi Jack</p>";
+  const r = splitDraftHtml(html);
+  assert.equal(r.quotedHtml, "<p>On Fri, Sep 11, 2026 07:18 AM, Jack Sieff &lt;jack@example.com&gt; wrote:<br></p><blockquote><p>Thank you, Oliver.</p><blockquote><p>older</p></blockquote></blockquote>");
+  assert.equal(r.bodyHtml, "<p>Hi Jack,<br><br>Sounds good.</p><p><br></p><p>Hi Jack</p>", "the nested blockquote closes the right one, and the words after it stay");
+  assert.deepEqual(splitDraftHtml("<p>New</p><blockquote>old</blockquote>"), { bodyHtml: "<p>New</p>", quotedHtml: "<blockquote>old</blockquote>" });
+  assert.deepEqual(splitDraftHtml("<p>No quote here</p>"), { bodyHtml: "<p>No quote here</p>", quotedHtml: "" });
+});

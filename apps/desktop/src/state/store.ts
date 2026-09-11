@@ -481,8 +481,9 @@ export function currentTarget(t: Pick<ThreadSummary, "split" | "type" | "categor
 
 /** Rows in the Scheduled view are queued sends, not threads: E, H, S, D, W have nothing to act on. */
 function scheduledOnly(row: ThreadSummary, showToast: (t: ToastEvent) => void): boolean {
-  if (row.draft) {
-    // Nothing to archive, star, snooze or mark about a message that has not gone anywhere yet.
+  if (row.draft && row.id.startsWith("draft:")) {
+    // A new message being written: nothing to archive, star, snooze or mark, it has not gone anywhere yet.
+    // A thread that merely carries a reply draft is still a thread, and E, U, S, H act on it.
     showToast({ eyebrow: "DRAFT", text: "Open it to keep writing, or discard it from the compose." });
     return true;
   }
