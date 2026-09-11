@@ -108,7 +108,36 @@ export class AiService {
    * Returns {ok, text, model, latencyMs} or {ok:false, code, error}.
    * @param {{task: string, user: string, vars?: Record<string,string>, system?: string, model?: string, maxTokens?: number, timeoutMs?: number, requestId?: string, allowedTools?: string[], json?: boolean}} req
    */
+  /**
+   * A person is waiting on a text.* request; background classification is not. While one is in
+   * flight, classify calls hold at the gate, so the slot a fix needs is free the moment it asks.
+   */
+  _enterInteractive() {
+    this._interactive = (this._interactive ?? 0) + 1;
+  }
+  _leaveInteractive() {
+    this._interactive = Math.max(0, (this._interactive ?? 0) - 1);
+    if (this._interactive === 0) {
+      const waiters = this._waiters ?? [];
+      this._waiters = [];
+      for (const w of waiters) w();
+    }
+  }
+  async _awaitQuiet() {
+    while ((this._interactive ?? 0) > 0) await new Promise((r) => (this._waiters ??= []).push(r));
+  }
+
   async complete(req) {
+    const interactive = typeof req.task === "string" && req.task.startsWith("text.");
+    if (interactive) this._enterInteractive();
+    try {
+      return await this._complete(req);
+    } finally {
+      if (interactive) this._leaveInteractive();
+    }
+  }
+
+  async _complete(req) {
     const route = req.task ? this.routes[req.task] : null;
     if (route?.engine === "local" && !req.model) {
       const local = await this._routeLocal(req, route);
@@ -159,7 +188,11 @@ export class AiService {
   }
 
   /** Background classification on the local model. Never touches Claude. */
-  classifyLocal({ text, schema, system, task = "classify", vars, maxTokens, timeoutMs }) {
+  async classifyLocal(req) {
+    await this._awaitQuiet();
+    return this._classifyLocalNow(req);
+  }
+  _classifyLocalNow({ text, schema, system, task = "classify", vars, maxTokens, timeoutMs }) {
     return this.complete({ task: system ? undefined : task, system, user: text, vars, schema, maxTokens, timeoutMs }).then((r) => {
       if (r.ok && !r.json) { try { r.json = JSON.parse(r.text); } catch { return { ok: false, code: "bad_json", error: r.text.slice(0, 200) }; } }
       return r;

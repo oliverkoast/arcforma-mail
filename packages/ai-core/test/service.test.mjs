@@ -48,3 +48,21 @@ test("a caller-supplied system prompt makes task a label, not a library lookup",
   assert.equal(r.ok, true);
   assert.match(r.text, /^fixed:hi/);
 });
+
+test("a classify call waits while a text.* request is in flight, and runs once it is done", async () => {
+  const s = svc("ok");
+  const order = [];
+  let release;
+  s._routeLocal = async () => { order.push("fix:start"); await new Promise((r) => (release = r)); order.push("fix:end"); return { ok: true, text: "x", engine: "local" }; };
+  s._classifyLocalNow = async () => { order.push("classify"); return { ok: true }; };
+  s.routes = { ...s.routes, "text.fix": { engine: "local", prompt: "grammar_fix_local", maxChars: 1500, fallback: "claude" } };
+  const fix = s.complete({ task: "text.fix", user: JSON.stringify({ selectedText: "teh" }) });
+  await new Promise((r) => setTimeout(r, 10));
+  const classify = s.classifyLocal({ text: "hi", vars: { categories: "", examples: "" } });
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(order, ["fix:start"], "the classify holds at the gate");
+  release();
+  await fix;
+  await classify;
+  assert.deepEqual(order, ["fix:start", "fix:end", "classify"]);
+});

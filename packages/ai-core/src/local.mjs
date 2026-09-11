@@ -57,6 +57,12 @@ export class LocalModel {
       "--host", "127.0.0.1", "--port", String(port),
       "--threads", String(this.cfg.threads ?? 4),
       "--ctx-size", String(this.cfg.ctx ?? DEFAULT_CTX),
+      // Two slots. The inbox classifier and Cmd+J share this one process; with one slot a fix
+      // waited behind every classify call in flight (30 to 100 seconds on 2026-09-11 while a
+      // relaunch reclassified the mailbox). The context is split across slots, so the daemon
+      // config doubles it to keep 8k per slot.
+      "--parallel", "2",
+      "--cont-batching",
       "--n-gpu-layers", "99",
       "--jinja",
     ];

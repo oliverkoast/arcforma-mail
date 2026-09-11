@@ -28,7 +28,7 @@ const DEFAULTS = () => ({
     ]),
     baseUrl: null,
     threads: 4,
-    ctx: 8192,
+    ctx: 16384, // two slots of 8k; see local.mjs
     idleMinutes: 120,
   },
   routes: {
