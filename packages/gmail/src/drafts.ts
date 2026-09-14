@@ -102,9 +102,7 @@ function blockquoteEnd(html: string, open: number): number | null {
  * quote stayed in the body and the cursor landed under it, with the new words typed below the
  * history. Text after the quote is the writer's and stays in the body.
  */
-function cutBlockquote(html: string): { before: string; inner: string; after: string } | null {
-  const a = ATTRIBUTION_OPEN.exec(html);
-  const start = a ? a.index : html.search(/<blockquote\b/i);
+function cutBlockquote(html: string, start: number): { before: string; inner: string; after: string } | null {
   if (start < 0) return null;
   const bq = html.slice(start).search(/<blockquote\b/i);
   if (bq < 0) return null;
@@ -128,7 +126,15 @@ function join(before: string, after: string): string {
 export function splitDraftHtml(html: string): { bodyHtml: string; quotedHtml: string } {
   let body = html;
   let quoted = "";
-  const q = cut(body, QUOTE_OPEN) ?? cutBlockquote(body);
+  // The quote starts at whichever shape comes first. A reply quoting a message that itself quoted
+  // one of ours holds a gmail_quote div deep inside an outer blockquote; on 2026-09-14 the Gmail
+  // wrapper was tried first, the inner one was lifted out, and the outer quote stayed in the body.
+  const gi = QUOTE_OPEN.exec(body)?.index ?? -1;
+  const ai = ATTRIBUTION_OPEN.exec(body)?.index ?? -1;
+  const bi = body.search(/<blockquote\b/i);
+  const starts = [gi, ai, bi].filter((i) => i >= 0);
+  const first = starts.length ? Math.min(...starts) : -1;
+  const q = first < 0 ? null : first === gi ? cut(body, QUOTE_OPEN) : cutBlockquote(body, first);
   if (q) {
     quoted = q.inner.trim();
     body = join(q.before, q.after);

@@ -25,7 +25,7 @@ export function toDraftInfo(row: DraftRow): DraftInfo {
     bcc: JSON.parse(row.bcc_json) as Address[],
     subject: row.subject,
     // A draft imported before the splitter knew every quote shape still carries its history in the body; lift it out on the way to the compose.
-    ...(row.quoted_html ? { bodyHtml: row.body_html, quotedHtml: row.quoted_html } : splitDraftHtml(row.body_html)),
+    ...repairSplit(row.body_html, row.quoted_html),
     inReplyTo: row.in_reply_to,
     references: row.references_header,
     createdAt: row.created_at,
@@ -35,6 +35,18 @@ export function toDraftInfo(row: DraftRow): DraftInfo {
     origin: row.origin,
     mirror: { state: row.mirror_state, error: row.mirror_error, at: row.mirrored_at },
   };
+}
+
+/**
+ * A draft imported before the splitter knew every quote shape can still carry quoted history in
+ * its body, either all of it or the outer layer around a quote that was lifted. Lift whatever is
+ * left on the way to the compose, ahead of what was already lifted, so the writing area holds
+ * only the writing.
+ */
+function repairSplit(bodyHtml: string, quotedHtml: string): { bodyHtml: string; quotedHtml: string } {
+  if (!/<blockquote\b|gmail_quote/i.test(bodyHtml)) return { bodyHtml, quotedHtml };
+  const fixed = splitDraftHtml(bodyHtml);
+  return { bodyHtml: fixed.bodyHtml, quotedHtml: fixed.quotedHtml ? fixed.quotedHtml + quotedHtml : quotedHtml };
 }
 
 /**

@@ -180,3 +180,14 @@ test("splitDraftHtml lifts an attribution-plus-blockquote quote, and keeps words
   assert.deepEqual(splitDraftHtml("<p>New</p><blockquote>old</blockquote>"), { bodyHtml: "<p>New</p>", quotedHtml: "<blockquote>old</blockquote>" });
   assert.deepEqual(splitDraftHtml("<p>No quote here</p>"), { bodyHtml: "<p>No quote here</p>", quotedHtml: "" });
 });
+
+test("splitDraftHtml cuts at the outermost quote when a Gmail wrapper sits inside a blockquote", () => {
+  // 2026-09-14: a draft replying to a message that quoted our own Gmail-sent reply. The gmail_quote div is inside the outer blockquote.
+  const html = '<p></p><div>On Sun, Sep 13, 2026 09:10 PM, Jackie Reed &lt;jackie@example.com&gt; wrote:</div><blockquote><p>Yes! How is Thursday?</p><blockquote><p>On Sep 10, 2026, at 3:43 PM, Oliver wrote:</p><p>Hi Jackie,</p><div>On Thu, Sep 10, 2026, 9:33 AM, Jackie Reed wrote:</div><div class="gmail_quote"><div>Let me know if next week works?</div></div></blockquote></blockquote>';
+  const r = splitDraftHtml(html);
+  assert.equal(r.bodyHtml, "<p></p>");
+  assert.ok(r.quotedHtml.startsWith("<div>On Sun, Sep 13, 2026 09:10 PM"), r.quotedHtml.slice(0, 80));
+  assert.ok(r.quotedHtml.endsWith("</blockquote></blockquote>"), "the outer quote closes it, nothing of it is left behind");
+  const wrapperFirst = '<p>New</p><div class="gmail_quote"><blockquote>old</blockquote></div>';
+  assert.deepEqual(splitDraftHtml(wrapperFirst), { bodyHtml: "<p>New</p>", quotedHtml: "<blockquote>old</blockquote>" }, "a top-level Gmail wrapper still wins when it comes first");
+});
