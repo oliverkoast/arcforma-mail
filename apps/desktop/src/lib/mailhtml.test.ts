@@ -530,3 +530,26 @@ test("an Outlook reply header one level down, inside the WordSection1 wrapper wi
   assert.ok(t.quoted.includes("Earlier from Oliver."), t.quoted);
   assert.ok(!t.visible.includes("Earlier from Oliver."), "the history is inside the fold, not under the files");
 });
+
+test("a repeat fold that starts at the wrapper holding a nested quote fold leaves the wrapper in place instead of moving it into itself", () => {
+  // 2026-09-14: a forwarded Outlook message whose whole wrapper text had been seen in an earlier message. The quote fold sat one
+  // level down inside the wrapper; the repeat pass then tried to move the wrapper into that fold, and the DOM refused, taking the
+  // window down on that one thread.
+  const html =
+    "<p>See below.</p>" +
+    '<div class="WordSection1"><p>Thanks, will do. I will send the deck on Thursday and the notes right after the call.</p><hr><div id="divRplyFwdMsg"><p><b>From:</b> A<br><b>Sent:</b> B<br><b>To:</b> C<br><b>Subject:</b> D</p></div><p>Earlier from A.</p></div>' +
+    "<p>Regards from the whole team at Northwind, and see you on Thursday for the walkthrough.</p>";
+  // The prior is what the wrapper and the footer read as once the quote inside is folded: the run has to reach the end.
+  const once = tidy(html);
+  const prior = [find(once.doc.body, (el) => el.className === "WordSection1")!, find(once.doc.body, (el) => el.tag === "p" && lineText(el).startsWith("Regards from"))!].map((el) => normaliseRepeatText(lineText(el))).join(" ").replace(/, \d+ lines?/g, ""); // the line count joins the label only at the end
+  const t = tidy(html, [prior]);
+  assert.equal(t.result.folded, "quote+repeat");
+  const wrapper = find(t.doc.body, (el) => el.className === "WordSection1")!;
+  assert.ok(!find(t.foldBody!, (el) => el === wrapper), "the wrapper is not inside its own fold");
+  // No cycle: walking up from the fold reaches the body.
+  let n: MiniElement | null = t.fold!;
+  const seen = new Set<MiniElement>();
+  while (n) { assert.ok(!seen.has(n), "cycle in the parent chain"); seen.add(n); n = n.parentNode as MiniElement | null; }
+  assert.ok(t.visible.includes("See below."), "the new text is still visible");
+  assert.ok(t.visible.includes("Thanks, will do."), "and so is the wrapper, since it could not move");
+});

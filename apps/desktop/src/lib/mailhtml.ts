@@ -413,12 +413,20 @@ function foldBody(details: MailElement): MailElement {
 }
 
 /** Moves every child of root from `from` to the end into the fold, creating the fold at `from`'s position when there is none yet. */
+/** True when `node` is `inner` or one of its ancestors. */
+function isAncestorOf(node: MailNode, inner: MailNode): boolean {
+  for (let cur: MailNode | null = inner; cur; cur = cur.parentNode) if (cur === node) return true;
+  return false;
+}
 function foldFrom(doc: MailDocument, root: MailElement, from: MailNode, existing: MailElement | null): MailElement {
   const all = kids(root);
   const start = all.indexOf(from);
-  // An existing fold can sit one level down (see the wrapper case in tidyMessage); then everything from `from` on moves into it.
+  // An existing fold can sit one level down (see the wrapper case in tidyMessage); then everything from `from` on moves into it,
+  // except the node that holds the fold: a node cannot be moved inside itself, and the DOM refuses with "the new child element
+  // contains the parent", which took the whole window down on 2026-09-14. That node stays where it is.
   const stop = existing && all.includes(existing) ? all.indexOf(existing) : all.length;
-  const moving = all.slice(start, stop);
+  const moving = all.slice(start, stop).filter((n) => !existing || !isAncestorOf(n, existing));
+  if (existing && moving.length === 0) return existing;
   if (existing) {
     const body = foldBody(existing);
     const first = kids(body)[0] ?? null;
