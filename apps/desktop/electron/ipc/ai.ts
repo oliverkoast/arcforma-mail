@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 import { createCategory, deleteCategory, listCategories, updateCategory, type Db } from "@arcforma/store";
 import type { AiClient } from "../ai/client.js";
+import type { ClaudeSignIn } from "../ai/signin.js";
 import { askInbox, draftReply, instantReplies, summarize } from "../ai/features.js";
 import { refileThread } from "../classify/corrections.js";
 import type { Classifier } from "../classify/pipeline.js";
@@ -22,8 +23,12 @@ function slug(name: string): string {
     .slice(0, 40);
 }
 
-export function registerAiIpc(db: Db, ai: AiClient, classifier: Classifier | null, sync: SyncManager): void {
+export function registerAiIpc(db: Db, ai: AiClient, classifier: Classifier | null, sync: SyncManager, signIn: ClaudeSignIn): void {
   ipcMain.handle("ai:status", () => ai.status());
+  ipcMain.handle("ai:signIn", () => signIn.start());
+  ipcMain.handle("ai:signInCode", (_e, code: unknown) => signIn.submit(typeof code === "string" ? code : ""));
+  ipcMain.handle("ai:signInCancel", () => signIn.cancel());
+  ipcMain.handle("ai:signInOpenLink", () => signIn.openLink());
   ipcMain.handle("ai:summary", (_e, accountId: string, threadId: string) => summarize(db, ai, accountId, threadId));
   ipcMain.handle("ai:instantReplies", (_e, accountId: string, messageId: string) => instantReplies(db, ai, accountId, messageId));
   ipcMain.handle("ai:draftReply", (_e, accountId: string, threadId: string) => draftReply(db, ai, accountId, threadId));

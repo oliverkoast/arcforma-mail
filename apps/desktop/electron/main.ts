@@ -11,6 +11,7 @@ import { Contacts } from "./contacts.js";
 import { DraftMirror } from "./drafts/mirror.js";
 import { emit } from "./events.js";
 import { parseMailto } from "./mailto.js";
+import { ClaudeSignIn } from "./ai/signin.js";
 import { applyLoginItem, registerAccountIpc } from "./ipc/accounts.js";
 import { registerAiIpc } from "./ipc/ai.js";
 import { registerCalendarIpc } from "./ipc/calendar.js";
@@ -379,7 +380,7 @@ async function boot(): Promise<void> {
   registerSidebarIpc(db);
   registerSchedulerIpc(db, scheduler, sync);
   registerComposeIpc(db, scheduler, mirror, sync, { armer: serviceArmer(db, receiptService), service: receiptService, storePath: file });
-  registerAiIpc(db, ai, SMOKE_DIR ? null : classifier, sync);
+  registerAiIpc(db, ai, SMOKE_DIR ? null : classifier, sync, new ClaudeSignIn(Boolean(SMOKE_DIR)));
   registerCalendarIpc(db, SMOKE_DIR ? null : calendar);
   registerContactIpc(contacts);
   registerOnboardingIpc(db, accounts, sync, ai);
@@ -492,6 +493,22 @@ const SMOKE_STEPS: SmokeStep[] = [
   { name: "list-overlap-first", script: OVERLAP_AUDIT, waitMs: 200 },
   // Settings, scrolled to read receipts: the only place the feature can be turned on, and so the
   // only place that has to say what a receipt cannot tell you.
+  {
+    name: "claude-sign-in",
+    script:
+      "window.__arcmail.openSettings(); await new Promise((r) => setTimeout(r, 400));" +
+      "const btn = [...document.querySelectorAll('.claude-signin button')].find((b) => b.textContent.trim() === 'Sign in to Claude Code'); if(!btn) throw new Error('No sign-in button while signed out');" +
+      "btn.click(); await new Promise((r) => setTimeout(r, 600));" +
+      "if(!document.querySelector('.claude-signin-row input')) throw new Error('The code field did not appear');" +
+      "if(window.__arcmail.claudeSignIn.state !== 'waiting' || !window.__arcmail.claudeSignIn.url) throw new Error('Sign-in did not reach waiting with a link: ' + JSON.stringify(window.__arcmail.claudeSignIn));" +
+      "await window.__arcmail.submitClaudeCode('nope'); await new Promise((r) => setTimeout(r, 400));" +
+      "if(window.__arcmail.claudeSignIn.state !== 'failed') throw new Error('A bad code did not fail: ' + window.__arcmail.claudeSignIn.state);" +
+      "await window.__arcmail.startClaudeSignIn(); await new Promise((r) => setTimeout(r, 400)); await window.__arcmail.submitClaudeCode('smoke-ok'); await new Promise((r) => setTimeout(r, 400));" +
+      "if(window.__arcmail.claudeSignIn.state !== 'done') throw new Error('The good code did not finish: ' + window.__arcmail.claudeSignIn.state);" +
+      "console.log('CLAUDE SIGN-IN: button, link, code field, bad code failed, good code done');" +
+      "await window.__arcmail.startClaudeSignIn(); await new Promise((r) => setTimeout(r, 300));",
+    waitMs: 300,
+  },
   {
     name: "settings-receipts",
     script:

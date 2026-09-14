@@ -102,7 +102,11 @@ export function ComposeEditor({ compose, autofocus }: { compose: ComposeDraft; a
               </>
             ) : (
               <>
-                <span className="af-mono">{ghost.code === "not_logged_in" ? "Sign in to Claude Code" : ghost.code === "daemon_down" ? "AI daemon off" : "Auto-draft unavailable"}</span>
+                {ghost.code === "not_logged_in" ? (
+                  <button type="button" className="af-mono link-btn" onClick={() => useApp.getState().openSettings()} data-tip="Opens Settings, where the sign-in button is.">Sign in to Claude Code</button>
+                ) : (
+                  <span className="af-mono">{ghost.code === "daemon_down" ? "AI daemon off" : "Auto-draft unavailable"}</span>
+                )}
                 <div className="ghost-text">{ghost.code === "not_logged_in" ? "Auto-draft needs Claude. Write the reply as usual." : ghost.text || "Write the reply as usual."}</div>
               </>
             )}

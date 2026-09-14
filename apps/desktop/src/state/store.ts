@@ -34,6 +34,7 @@ import {
   type ToastUndo,
   type OutgoingAttachmentInfo,
   type Address,
+  type ClaudeSignInState,
 } from "../../shared/types";
 import { ONBOARDING_STEPS, type OnboardingStepId } from "../../shared/onboarding";
 import { TYPING_SCOPES, type Scope } from "../keys/keymap";
@@ -147,6 +148,11 @@ export interface AppState {
   snippets: SnippetInfo[];
   drafts: DraftInfo[];
   aiStatus: AiStatus | null;
+  claudeSignIn: ClaudeSignInState;
+  startClaudeSignIn: () => Promise<void>;
+  submitClaudeCode: (code: string) => Promise<void>;
+  cancelClaudeSignIn: () => Promise<void>;
+  refreshAiStatus: () => Promise<void>;
 
   compose: ComposeDraft | null;
   /**
@@ -572,6 +578,7 @@ export const useApp = create<AppState>((set, get) => ({
   snippets: [],
   drafts: [],
   aiStatus: null,
+  claudeSignIn: { state: "idle", url: null, error: null },
 
   compose: null,
   autosavedDraftId: null,
@@ -628,6 +635,37 @@ export const useApp = create<AppState>((set, get) => ({
     on("drafts:changed", () => void get().loadDrafts());
     on("notify:open", (p) => void get().openThreadById(p.accountId, p.threadId));
     on("compose:mailto", (p) => get().openCompose("new", { to: p.to, subject: p.subject, bodyHtml: p.bodyHtml, placement: "panel" }));
+    on("ai:signIn", (st) => {
+      set({ claudeSignIn: st });
+      if (st.state === "done") void get().refreshAiStatus();
+    });
+  },
+
+  async refreshAiStatus() {
+    try {
+      set({ aiStatus: await invoke("ai:status") });
+    } catch {
+      set({ aiStatus: null });
+    }
+  },
+
+  async startClaudeSignIn() {
+    set({ claudeSignIn: { state: "waiting", url: null, error: null } });
+    try {
+      const { url } = await invoke("ai:signIn");
+      set((cur) => (cur.claudeSignIn.state === "waiting" ? { claudeSignIn: { ...cur.claudeSignIn, url } } : {}));
+    } catch (err) {
+      set({ claudeSignIn: { state: "failed", url: null, error: (err as Error).message } });
+    }
+  },
+
+  async submitClaudeCode(code) {
+    await invoke("ai:signInCode", code);
+  },
+
+  async cancelClaudeSignIn() {
+    await invoke("ai:signInCancel");
+    set({ claudeSignIn: { state: "idle", url: null, error: null } });
   },
 
   async refreshStatus() {

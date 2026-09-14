@@ -453,6 +453,12 @@ export interface AiFailure {
   error: string;
 }
 
+export interface ClaudeSignInState {
+  state: "idle" | "waiting" | "done" | "failed";
+  url: string | null;
+  error: string | null;
+}
+
 export interface AiStatus {
   ok: boolean;
   loggedIn: boolean;
@@ -669,6 +675,8 @@ export interface ArcmailEvents {
   "notify:open": { accountId: string; threadId: string };
   /** A mailto: link was followed in a message: open a compose with these filled in. */
   "compose:mailto": { to: Address[]; subject: string; bodyHtml: string };
+  /** Where the Claude Code sign-in stands. */
+  "ai:signIn": ClaudeSignInState;
   /** The model download or the text tool install said something while onboarding is open. */
   "onboarding:progress": OnboardingProgress;
 }
@@ -751,6 +759,12 @@ export interface ArcmailInvoke {
   "categories:delete": (id: string) => CategoryInfo[];
   "classify:refile": (accountId: string, threadId: string, to: RefileTarget) => void;
   "ai:status": () => AiStatus;
+  /** Starts a Claude Code sign-in: the browser opens, the link comes back in case it did not. */
+  "ai:signIn": () => { url: string | null };
+  /** The code the sign-in page shows at the end. */
+  "ai:signInCode": (code: string) => void;
+  "ai:signInCancel": () => void;
+  "ai:signInOpenLink": () => void;
   "ai:summary": (accountId: string, threadId: string) => SummaryResult;
   "ai:instantReplies": (accountId: string, messageId: string) => InstantRepliesResult;
   "ai:draftReply": (accountId: string, threadId: string) => DraftReplyResult;
@@ -791,4 +805,4 @@ export interface ArcmailInvoke {
 export type InvokeChannel = keyof ArcmailInvoke;
 export type EventChannel = keyof ArcmailEvents;
 
-export const EVENT_CHANNELS: EventChannel[] = ["accounts:changed", "threads:changed", "sync:progress", "toast", "categories:changed", "calendar:changed", "drafts:changed", "onboarding:progress", "notify:open", "compose:mailto"];
+export const EVENT_CHANNELS: EventChannel[] = ["accounts:changed", "threads:changed", "sync:progress", "toast", "categories:changed", "calendar:changed", "drafts:changed", "onboarding:progress", "notify:open", "compose:mailto", "ai:signIn"];

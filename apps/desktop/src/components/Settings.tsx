@@ -577,6 +577,7 @@ export function Settings() {
         <div className="ai-line" data-tip="The AI daemon runs on this Mac: a local model sorts mail in the background, and Claude through the Claude Code login handles summaries, replies, and Ask.">
           <span className="af-mono">{aiStatus ? (aiStatus.ok ? (aiStatus.loggedIn ? "Claude signed in" : "Sign in to Claude Code") : "AI daemon off") : "AI status unknown"}</span>
           <span className="settings-help">{aiStatus?.ok ? `Local model ${aiStatus.local}; Claude ${aiStatus.claude}${aiStatus.cliVersion ? ` (${aiStatus.cliVersion})` : ""}.` : "Background sorting and Claude features wait until the daemon runs."}</span>
+          <ClaudeSignInControl signedIn={Boolean(aiStatus?.loggedIn)} />
         </div>
         <AccountsSection />
         <SetupSection />
@@ -588,6 +589,40 @@ export function Settings() {
         <DiagnosticsSection />
         <CategoriesSection />
       </section>
+    </div>
+  );
+}
+
+/**
+ * Signs Claude Code in from here. The button starts the CLI's sign-in: the browser opens, and the
+ * page shows a code at the end that goes in the field below. Nothing is typed anywhere but here.
+ */
+function ClaudeSignInControl({ signedIn }: { signedIn: boolean }) {
+  const st = useApp((s) => s.claudeSignIn);
+  const start = useApp((s) => s.startClaudeSignIn);
+  const submit = useApp((s) => s.submitClaudeCode);
+  const cancel = useApp((s) => s.cancelClaudeSignIn);
+  const [code, setCode] = useState("");
+  if (st.state === "waiting") {
+    return (
+      <div className="claude-signin" aria-live="polite">
+        <span className="settings-help">Finish in the browser. It ends with a code: paste it here.</span>
+        <div className="claude-signin-row">
+          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Code from the sign-in page" spellCheck={false} autoFocus onKeyDown={(e) => { if (e.key === "Enter" && code.trim()) { void submit(code); setCode(""); } e.stopPropagation(); }} />
+          <button className="btn btn-sweep btn-compact" disabled={!code.trim()} onClick={() => { void submit(code); setCode(""); }}>Done</button>
+          <button className="btn btn-ghost btn-compact" onClick={() => void cancel()}>Cancel</button>
+        </div>
+        {st.url ? <button className="link-btn" onClick={() => void invoke("ai:signInOpenLink")} data-tip="Opens the sign-in page again, if the browser did not open on its own.">Browser didn't open? Open the link</button> : null}
+      </div>
+    );
+  }
+  if (signedIn && st.state !== "failed") return null;
+  return (
+    <div className="claude-signin">
+      {st.state === "failed" ? <span className="settings-help">Sign-in did not finish{st.error ? `: ${st.error}` : ""}. Try again.</span> : null}
+      <button className="btn btn-nav btn-compact" onClick={() => void start()} data-tip="Opens the Claude sign-in in your browser. Summaries, replies, Ask, and Cmd+J's fallback use this login.">
+        Sign in to Claude Code
+      </button>
     </div>
   );
 }
