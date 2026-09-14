@@ -1335,3 +1335,16 @@ test("archiving a just-clicked message cancels its pending open instead of bring
   useApp.getState().closeThread();
   useApp.getState().showToast(null);
 });
+
+test("the read receipt default arms a fresh reply and survives moving the box to Reply All or another message", async () => {
+  const useApp = await freshKickoff();
+  useApp.setState({ settings: { ...useApp.getState().settings, readReceipts: true, readReceiptsDefault: true, readReceiptsUrl: "https://pixel.example", readReceiptsTokenSet: true } });
+  useApp.getState().setEditorApi(fakeEditor().api);
+  useApp.getState().openCompose("reply", { messageId: "m3" });
+  assert.equal(useApp.getState().compose?.readReceipt, true, "a fresh reply takes the default");
+  useApp.getState().openCompose("replyAll", { messageId: "m3" });
+  assert.equal(useApp.getState().compose?.readReceipt, true, "switching to Reply All keeps it; on 2026-09-14 this is where two sends lost theirs");
+  useApp.getState().updateCompose({ readReceipt: false });
+  useApp.getState().openCompose("reply", { messageId: "m1" });
+  assert.equal(useApp.getState().compose?.readReceipt, false, "and a choice to remove it moves with the box too");
+});

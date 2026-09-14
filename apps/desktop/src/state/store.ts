@@ -1376,7 +1376,8 @@ export const useApp = create<AppState>((set, get) => ({
         get().showToast({ eyebrow: "NOT SUPPORTED YET", text: (err as Error).message });
         return;
       }
-      set({ compose: { ...moved, draftId: existing.draftId ?? null }, inlineAnchor: { ...docked, messageId: targetId }, inlineCollapsed: false, sendLaterOpen: false, snippetPickerOpen: false });
+      // The receipt choice moves with the text. Rebuilding the draft dropped it, and on 2026-09-14 two replies that had been switched to Reply All went out untracked.
+      set({ compose: { ...moved, draftId: existing.draftId ?? null, readReceipt: existing.readReceipt }, inlineAnchor: { ...docked, messageId: targetId }, inlineCollapsed: false, sendLaterOpen: false, snippetPickerOpen: false });
       get().syncScope();
       return;
     }
