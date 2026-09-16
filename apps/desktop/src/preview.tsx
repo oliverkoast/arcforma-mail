@@ -66,6 +66,9 @@ function Header({ detail, note, onDownload, onSaveAs, busy }: { detail: Attachme
         >
           Save as
         </button>
+        <button type="button" className="btn btn-ghost btn-compact" data-tip="Closes this window. Esc or Cmd+W does the same." onClick={() => window.close()}>
+          Close
+        </button>
       </div>
     </header>
   );

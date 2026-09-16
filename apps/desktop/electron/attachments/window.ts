@@ -133,6 +133,7 @@ export function openPreviewWindow(opts: PreviewWindowOptions): BrowserWindow {
   });
   win.on("closed", () => openWindows.delete(url));
   openWindows.set(url, win);
+  closeOnEscape(win, win.webContents);
   void win.loadURL(url);
   if (opts.kind === "pdf") attachPdfView(win, attachmentSrc(opts.accountId, opts.messageId, opts.key));
   return win;
@@ -166,6 +167,7 @@ function attachPdfView(win: BrowserWindow, src: string): void {
   }
   win.contentView.addChildView(view);
   pdfViews.set(win, view);
+  closeOnEscape(win, view.webContents);
   const fit = () => {
     const [width, height] = win.getContentSize();
     view.setBounds({ x: 0, y: PREVIEW_HEADER_HEIGHT, width: width ?? 0, height: Math.max(0, (height ?? 0) - PREVIEW_HEADER_HEIGHT) });
@@ -191,6 +193,22 @@ const pdfViews = new WeakMap<BrowserWindow, WebContentsView>();
 export function previewPdfContents(win: BrowserWindow): Electron.WebContents | null {
   const view = pdfViews.get(win);
   return view && !view.webContents.isDestroyed() ? view.webContents : null;
+}
+
+/**
+ * Escape or Cmd+W closes the preview, whichever part of it has the keys. The page has its own
+ * Escape handler, but a PDF renders in a view of its own that takes the focus, and a keystroke
+ * there never reached the page: on 2026-09-16 a signed SOW opened in a window nothing could
+ * close but the mouse on a corner it did not have. This sits below both, in the main process.
+ */
+function closeOnEscape(win: BrowserWindow, contents: Electron.WebContents): void {
+  contents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+    const close = input.key === "Escape" || ((input.meta || input.control) && input.key.toLowerCase() === "w");
+    if (!close) return;
+    event.preventDefault();
+    if (!win.isDestroyed()) win.close();
+  });
 }
 
 /** Closes every open preview window. Used on quit so none outlives the store it reads from. */

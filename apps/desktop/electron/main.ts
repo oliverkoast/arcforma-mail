@@ -476,6 +476,8 @@ interface SmokeStep {
   previewPdf?: boolean;
   /** Close every preview window after the shot, so the next step opens a fresh one. */
   closePreviews?: boolean;
+  /** Sends Escape to the preview (the PDF view when there is one) and requires the window to close. */
+  escapePreview?: boolean;
 }
 
 const OVERLAP_AUDIT =
@@ -764,6 +766,7 @@ const SMOKE_STEPS: SmokeStep[] = [
     script: "await window.__arcmail.previewAttachment('arcforma', 'm-k4', '2');",
     waitMs: 2000,
     previewTitle: "Room 2 north light.png",
+    escapePreview: true,
     closePreviews: true,
   },
   // The PDF in the same shell, rendered by Chromium's own viewer from the cached file.
@@ -776,6 +779,7 @@ const SMOKE_STEPS: SmokeStep[] = [
     // that is the one to photograph; the header shell is the same one the image
     // shot above shows.
     previewPdf: true,
+    escapePreview: true,
     closePreviews: true,
   },
   // A newsletter whose unsubscribe line, postal address, and copyright sit behind one SHOW FOOTER toggle, its tracking pixel gone.
@@ -949,6 +953,12 @@ function runSmoke(win: BrowserWindow, dir: string, ctx: SmokeContext): void {
           fs.writeFileSync(file, image.toPNG());
           const size = image.getSize();
           console.log(`SMOKE screenshot ${file} ${size.width}x${size.height}`);
+          if (step.escapePreview && target !== win) {
+            (contents ?? target.webContents).sendInputEvent({ type: "keyDown", keyCode: "Escape" });
+            await sleep(600);
+            if (!target.isDestroyed()) throw new Error("Escape did not close the preview window");
+            console.log(`SMOKE [info] PREVIEW CLOSE: Escape closed ${step.previewTitle}${contents ? " from the PDF view" : ""}`);
+          }
           if (step.closePreviews) {
             closePreviewWindows();
             await sleep(300);
