@@ -11,7 +11,7 @@ export type Db = DatabaseSync;
 
 /** The schema every opened store is migrated up to. Exported so tests assert against this rather
  *  than a copy of the number, which went stale on every bump and failed four suites at once. */
-export const SCHEMA_VERSION = 21;
+export const SCHEMA_VERSION = 22;
 
 // Version 2: local drafts (Esc keeps the compose), app settings, and the
 // instant-reply cache keyed by message id.
@@ -334,6 +334,7 @@ export function migrate(db: Db): void {
     // Whether a Gmail draft's files have been fetched and recorded. Drafts imported before the files
     // travelled with the import have never been looked at; the reconcile fetches each of those once.
     { version: 21, sql: () => "SELECT 1", after: (d) => addAttachmentsChecked(d) },
+    { version: 22, sql: () => "SELECT 1", after: (d) => dropMojibakeBodies(d) },
   ];
   for (const step of steps) {
     if (step.version <= current) continue;
@@ -497,4 +498,18 @@ export function repairRecipientNames(db: Db): number {
     n++;
   }
   return n;
+}
+
+/**
+ * Bodies decoded through a wrong charset label before 2026-09-16 hold "â€™" where an apostrophe
+ * was. The bytes are gone, so the rows go: a message without a body is fetched again when its
+ * thread is opened, through the decoder that now reads the bytes first. The search index for
+ * those messages is rebuilt from the message row alone until then.
+ */
+function dropMojibakeBodies(db: Db): void {
+  const rows = db
+    .prepare("SELECT account_id, message_id FROM message_bodies WHERE html LIKE '%â€%' OR text LIKE '%â€%' OR html LIKE '%Ã©%' OR text LIKE '%Ã©%'")
+    .all() as Array<{ account_id: string; message_id: string }>;
+  const del = db.prepare("DELETE FROM message_bodies WHERE account_id = ? AND message_id = ?");
+  for (const r of rows) del.run(r.account_id, r.message_id);
 }

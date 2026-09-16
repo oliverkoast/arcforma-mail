@@ -61,9 +61,21 @@ export function decodeBodyBytes(data: string): Buffer {
   return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64");
 }
 
-/** Decodes base64url body data using the part's charset when it is not UTF-8. */
+/**
+ * Decodes base64url body data. The bytes decide before the label does: Gmail often hands the
+ * API UTF-8 bytes under a part that still says Windows-1252 (Outlook on a phone does this), and
+ * reading those through the label turns an apostrophe into "â€™". So bytes that are valid UTF-8
+ * are UTF-8, whatever the part says; only bytes that are not go through the declared charset,
+ * which is how a real ISO-8859-1 "Café" still reads. Seen on 2026-09-16 in a reply that arrived
+ * as "Itâ€™s not of interest", with a dozen more like it in the store.
+ */
 export function decodeBody(data: string, charset = "utf-8"): string {
   const bytes = decodeBodyBytes(data);
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    /* not UTF-8: the label gets its say */
+  }
   try {
     return new TextDecoder(charset).decode(bytes);
   } catch {

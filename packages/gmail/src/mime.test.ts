@@ -124,3 +124,11 @@ test("single quotes around a name are the header's, not the person's", () => {
   assert.equal(cleanName("'Maya Glenn'", "maya@arcforma.ai"), "Maya Glenn");
   assert.deepEqual(parseAddressList("'Maya Glenn' <maya@arcforma.ai>")[0], { email: "maya@arcforma.ai", name: "Maya Glenn" });
 });
+
+test("decodeBody trusts UTF-8 bytes over a Windows-1252 label, and still reads real Latin-1 through its label", () => {
+  const utf8 = Buffer.from("It’s not of interest.\n\n—Billy", "utf8").toString("base64url");
+  assert.equal(decodeBody(utf8, "windows-1252"), "It’s not of interest.\n\n—Billy", "the bytes are UTF-8 whatever the part says");
+  const latin1 = Buffer.from([0x43, 0x61, 0x66, 0xe9]).toString("base64url");
+  assert.equal(decodeBody(latin1, "iso-8859-1"), "Café", "bytes that are not UTF-8 go through the declared charset");
+  assert.equal(decodeBody(latin1, "windows-1252"), "Café");
+});
