@@ -108,22 +108,30 @@ final class SelectionWatcher {
         case .text(let text):
             let count = text.unicodeScalars.count
             guard count >= SelectionWatcher.minCodePoints, count <= Session.maxCodePoints else { return }
+            // Only text the person is writing. A selection in a rendered page, a message someone
+            // else wrote, a terminal, is not something to fix or bold; on 2026-09-17 the toolbar was
+            // covering selected text in an assistant's reply. The hotkeys still work anywhere.
+            if let element, !AXSelection.isEditable(element) {
+                Log.write("toolbar: selection in \(role ?? "an element with no role") is not editable, staying away")
+                return
+            }
             let profile = HostPolicy.profile(for: host, axRole: role)
             let bounds = element.flatMap { AXSelection.selectionBounds(element: $0) }
             let session = Session(original: text, host: host, profile: profile, route: .ax,
                                   axRole: role, bounds: bounds)
             show(session: session, host: host, profile: profile, rect: bounds ?? fallbackRect)
         case .empty:
-            if HostPolicy.isChromium(host.bundleId) {
+            // An element that answers but holds no selected text: only when it is something the
+            // person writes in does the drag heuristic stand in for a read.
+            if HostPolicy.isChromium(host.bundleId), let element, AXSelection.isEditable(element) {
                 let profile = HostPolicy.profile(for: host, axRole: role, axReturnedNoValue: false)
                 show(session: nil, host: host, profile: profile, rect: fallbackRect)
             }
         case .noValue, .unavailable:
-            // Dormant AX tree. Allowlisted Chromium apps show on the drag
-            // heuristic; anything else we cannot read stays quiet.
-            guard HostPolicy.isChromium(host.bundleId) else { return }
-            let profile = HostPolicy.profile(for: host, axRole: role, axReturnedNoValue: true)
-            show(session: nil, host: host, profile: profile, rect: fallbackRect)
+            // A dormant AX tree says nothing about whether the text is being written, and the
+            // toolbar is for text being written. It stays away; the hotkeys are not affected.
+            // Asking for the focused element wakes Chromium's tree, so the next selection can answer.
+            return
         }
     }
 

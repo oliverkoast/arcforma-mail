@@ -59,6 +59,26 @@ enum AXSelection {
         attribute(element, kAXSubroleAttribute) as? String
     }
 
+    /// Roles that are text a person is writing, wherever they appear.
+    private static let editableRoles: Set<String> = [
+        kAXTextFieldRole as String, kAXTextAreaRole as String, kAXComboBoxRole as String, "AXSearchField",
+    ]
+
+    /// True when the selection sits in something the person is writing: a text field or area
+    /// by role, or an element whose value or selected text the app lets us set, which is how
+    /// a contenteditable in a web page and a rich editor answer. Static text, a rendered page,
+    /// a terminal line: none of these are settable, so the toolbar stays away from them.
+    static func isEditable(_ element: AXUIElement) -> Bool {
+        if let role = role(of: element), editableRoles.contains(role) { return true }
+        for name in [kAXValueAttribute, kAXSelectedTextAttribute] {
+            var settable = DarwinBoolean(false)
+            if AXUIElementIsAttributeSettable(element, name as CFString, &settable) == .success, settable.boolValue { return true }
+        }
+        // WebKit marks text inside an editable region this way even when the focused node is a group.
+        if attribute(element, "AXEditableAncestor") != nil { return true }
+        return false
+    }
+
     static func isSecure(_ element: AXUIElement) -> Bool {
         if subrole(of: element) == kAXSecureTextFieldSubrole { return true }
         if role(of: element) == "AXSecureTextField" { return true }
