@@ -40,6 +40,8 @@ export interface SyncAccounts {
   ownerAddresses(accountId: string): string[];
   status(): AccountsStatus;
   onAuthExpired: ((accountId: string) => void) | null;
+  /** Re-reads send-as aliases and the signature from Gmail; false when it could not run. */
+  refreshOwners(accountId: string): Promise<boolean>;
 }
 
 export interface SyncOptions {
@@ -183,6 +185,8 @@ export class SyncManager {
           if (!this.reconciledSinceBoot.has(accountId)) {
             this.reconciledSinceBoot.add(accountId);
             await this.reconcileDrafts(accountId, client);
+            // And the signature Gmail holds, in case it changed since the last launch.
+            if (await this.accounts.refreshOwners(accountId)) emit("accounts:changed", this.accounts.status());
           }
         }
       } catch (err) {

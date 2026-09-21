@@ -686,6 +686,8 @@ export interface ArcmailInvoke {
   "accounts:status": () => AccountsStatus;
   "accounts:signIn": (accountId: string) => AccountsStatus;
   "accounts:signOut": (accountId: string) => AccountsStatus;
+  /** Re-reads the signature and send-as aliases Gmail holds. False when the account has no client. */
+  "accounts:refreshSignature": (accountId: string) => boolean;
   "threads:list": (req: ListRequest) => ListResponse;
   "threads:get": (accountId: string, threadId: string) => ThreadView;
   "threads:markRead": (accountId: string, threadId: string, read: boolean) => void;

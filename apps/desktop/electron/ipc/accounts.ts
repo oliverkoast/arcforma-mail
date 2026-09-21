@@ -1,6 +1,7 @@
 import { app, ipcMain } from "electron";
 import type { Db } from "@arcforma/store";
 import type { AccountRegistry } from "../accounts.js";
+import { emit } from "../events.js";
 import { log } from "../log.js";
 import { loginItemAllowed } from "../login-item.js";
 import type { SyncManager } from "../sync.js";
@@ -50,6 +51,12 @@ export function registerAccountIpc(accounts: AccountRegistry, sync: SyncManager,
     const status = await accounts.signIn(accountId);
     sync.poke(accountId, 0);
     return status;
+  });
+  ipcMain.handle("accounts:refreshSignature", async (_e, accountId: string) => {
+    requireAccount(db, accountId);
+    const ok = await accounts.refreshOwners(accountId);
+    if (ok) emit("accounts:changed", accounts.status());
+    return ok;
   });
   ipcMain.handle("accounts:signOut", (_e, accountId: string) => {
     requireAccount(db, accountId);

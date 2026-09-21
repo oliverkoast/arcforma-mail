@@ -355,6 +355,12 @@ body.is-resizing { cursor: col-resize; user-select: none; }
    evidence about software, not news about a person, and the three states are not a scale to rank.
    "Opened" gets body ink because it is the one that says something happened; the other two stay
    soft, because "no signal" is the absence of evidence and must never read as a verdict. */
+.signature-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
 .claude-signin {
   display: flex;
   flex-direction: column;

@@ -72,6 +72,8 @@ const previewBridge: RawBridge = {
         return { ok: false, loggedIn: false, claude: "daemon_down", local: "unknown", model: null, cliVersion: null };
       case "ai:signIn":
         return { url: null };
+      case "accounts:refreshSignature":
+        return false;
       case "ai:signInCode":
       case "ai:signInCancel":
       case "ai:signInOpenLink":

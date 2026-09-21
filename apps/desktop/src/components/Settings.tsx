@@ -26,6 +26,11 @@ function accountLine(a: AccountInfo): string {
 
 function SignaturePreview({ accountId }: { accountId: string }) {
   const [html, setHtml] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const load = () =>
+    invoke("compose:signature", accountId)
+      .then((sig) => setHtml(sig))
+      .catch(() => setHtml(""));
   useEffect(() => {
     let live = true;
     void invoke("compose:signature", accountId)
@@ -39,9 +44,34 @@ function SignaturePreview({ accountId }: { accountId: string }) {
       live = false;
     };
   }, [accountId]);
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await invoke("accounts:refreshSignature", accountId);
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  const button = (
+    <button className="btn btn-ghost btn-compact" disabled={refreshing} data-tip="Reads the signature Gmail holds for this account right now. It is also read at every launch. To change the words, edit the signature in Gmail settings, then press this." onClick={() => void refresh()}>
+      {refreshing ? "Reading Gmail" : "Refresh from Gmail"}
+    </button>
+  );
   if (html === null) return <span className="settings-help">Reading the signature.</span>;
-  if (!html.trim()) return <span className="settings-help">No signature stored. Set one in Gmail and sign in again to pick it up.</span>;
-  return <div className="signature-preview" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html, { USE_PROFILES: { html: true }, FORBID_TAGS: ["style", "script", "iframe", "img"] }) }} />;
+  if (!html.trim())
+    return (
+      <div className="signature-block">
+        <span className="settings-help">No signature stored. Set one in Gmail, then refresh.</span>
+        {button}
+      </div>
+    );
+  return (
+    <div className="signature-block">
+      <div className="signature-preview" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html, { USE_PROFILES: { html: true }, FORBID_TAGS: ["style", "script", "iframe", "img"] }) }} />
+      {button}
+    </div>
+  );
 }
 
 function AccountsSection() {

@@ -75,7 +75,7 @@ function accountsOf(clients: Record<string, GmailClient>): SyncAccounts {
     client: (id) => clients[id] ?? null,
     ownerAddresses: () => ["you@example.com"],
     status: () => ({ accounts: [], configPath: "", configError: null }),
-    onAuthExpired: null,
+    onAuthExpired: null, refreshOwners: async () => false
   };
 }
 

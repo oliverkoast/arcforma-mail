@@ -13,6 +13,7 @@ const INVOKE_CHANNELS = new Set([
   "accounts:status",
   "accounts:signIn",
   "accounts:signOut",
+  "accounts:refreshSignature",
   "threads:list",
   "threads:get",
   "threads:markRead",

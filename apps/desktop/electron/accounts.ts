@@ -158,22 +158,35 @@ export class AccountRegistry {
       sync_state: row?.history_id ? "live" : "new",
       error: null,
     });
-    const client = this.client(accountId);
-    if (client) {
-      try {
-        const owners = await getOwners(client);
-        updateAccount(this.db, accountId, {
-          signature_html: owners.signatureHtml,
-          send_as_json: JSON.stringify(owners.sendAs),
-          display_name: owners.sendAs.find((s) => s.isPrimary)?.name || null,
-        });
-      } catch (err) {
-        logError("auth", `owners lookup failed for ${accountId}`, err);
-      }
-    }
+    await this.refreshOwners(accountId);
     const status = this.status();
     emit("accounts:changed", status);
     return status;
+  }
+
+  /**
+   * Re-reads the send-as aliases and the signature Gmail holds for the account. Sign-in did this
+   * once and nothing did it again, so a signature changed in Gmail stayed the old one here until
+   * the next sign-in: on 2026-09-21 mail went out under a title that had changed. The sync calls
+   * this once per launch, and Settings has a button for it. Returns false when it could not run.
+   */
+  async refreshOwners(accountId: string): Promise<boolean> {
+    const client = this.client(accountId);
+    if (!client) return false;
+    try {
+      const owners = await getOwners(client);
+      const before = getAccount(this.db, accountId)?.signature_html ?? null;
+      updateAccount(this.db, accountId, {
+        signature_html: owners.signatureHtml,
+        send_as_json: JSON.stringify(owners.sendAs),
+        display_name: owners.sendAs.find((s) => s.isPrimary)?.name || null,
+      });
+      if (before !== owners.signatureHtml) log("auth", `${accountId}: signature updated from Gmail`);
+      return true;
+    } catch (err) {
+      logError("auth", `owners lookup failed for ${accountId}`, err);
+      return false;
+    }
   }
 
   signOut(accountId: string): AccountsStatus {
