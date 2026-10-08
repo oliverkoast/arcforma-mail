@@ -13,14 +13,14 @@ Every run writes a dated summary to `~/Library/Application Support/Arcforma/eval
 | Suite | Runner | Data | Scored by |
 |---|---|---|---|
 | Cmd+J | `packages/ai-core/eval/text-fix/run.mjs` | 36 selections in `cases.json` | plain checks: words that must and must not appear, line breaks, no dashes, length |
-| Mail AI | `apps/desktop/eval/mail/run.ts` (`node --import tsx`) | 30 synthetic threads and 12 Ask questions in `threads.json`; the 44 labelled messages in `electron/classify/golden.json` | plain checks, plus Opus 5 grading drafts (faithful, in the owner's voice, answers what was asked) and summaries (accurate, current, says what to do) |
+| Mail AI | `apps/desktop/eval/mail/run.ts` (`node --import tsx`) | 30 synthetic threads and 12 Ask questions in `threads.json`; the 44 labelled messages in `electron/classify/golden.json` | plain checks, plus Opus 5.5 grading drafts (faithful, in the owner's voice, answers what was asked) and summaries (accurate, current, says what to do) |
 | Dictation | `packages/ai-core/eval/dictation/run.mjs` | the person's own OpenWhispr recordings; references kept private in `~/Library/Application Support/Arcforma/evals/dictation/references.json` | word error rate, named terms spelled right, filler words left, speed |
 
 The Mail suite runs the app's own code: `electron/ai/features.ts`, the real AI client, the classify pipeline, and a daemon started in the process, against a store seeded with the smoke run's seeder. Each engine gets a fresh store, because summaries and instant replies are cached. Sorting is scored through the whole pipeline (rules, local model, attention), not the model's raw answer, because the attention score decides the split.
 
 Dictation needs references first: `run.mjs --draft` transcribes every clip with Parakeet and Whisper and writes `references.draft.json`; a person corrects it into `references.json`.
 
-A Claude result is only meaningful because calls are isolated (`claudeArgs` and `ISOLATION_ENV` in `packages/ai-core/src/claude.mjs`). Pass full model ids: on Claude Code 2.1.257 `sonnet` means Sonnet 5 and `haiku` means Haiku 4.5, and Opus 5.5 needs 2.1.280 or newer.
+A Claude result is only meaningful because calls are isolated (`claudeArgs` and `ISOLATION_ENV` in `packages/ai-core/src/claude.mjs`). Pass full model ids: what an alias means depends on the CLI version. On Claude Code 2.1.257 `sonnet` meant Sonnet 5 and `haiku` Haiku 4.5; on 2.1.294 they mean Sonnet 5.5 and Haiku 5.5. The grader is Opus 5.5, which needs 2.1.280 or newer; the 2026-10-08 numbers below were graded by Opus 5.
 
 ## Results, 2026-10-08
 

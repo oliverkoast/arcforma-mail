@@ -130,8 +130,9 @@ function check(text: string, c: Checks | undefined): string[] {
 // Literal checks catch invented numbers and superseded plans, but they fail a good draft for not
 // repeating a first name. A stronger model grades what a literal check cannot: whether a draft is
 // faithful, in the owner's voice, and answers what was asked; whether a summary is right and current.
-// Opus 5: stronger than every model under test and not one of them. Opus 5.5 needs Claude Code 2.1.280 or newer.
-const JUDGE_MODEL = arg("judge-model", "claude-opus-5");
+// Opus 5.5: stronger than every model under test and not one of them. It needs Claude Code 2.1.280
+// or newer; on an older CLI pass --judge-model claude-opus-5 (the grader of the 2026-10-08 numbers).
+const JUDGE_MODEL = arg("judge-model", "claude-opus-5-5");
 const JUDGE = {
   draft: `You grade an AI-written email reply. The owner of the inbox is ${data.owner.name}; in the thread, messages marked (you) are theirs. You get the thread, notes from the person who wrote the test, and the draft.
 Answer three questions strictly:
