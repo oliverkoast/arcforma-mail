@@ -75,11 +75,15 @@ export class LocalModel {
     child.stderr.on("data", (d) => { stderr = (stderr + d).slice(-4000); });
     child.on("exit", (code, sig) => {
       this.log(`llama-server exited code=${code} sig=${sig} ${stderr.slice(-300).replace(/\n/g, " ")}`);
-      this.child = null; this.ready = false;
+      // Only this child's own exit clears the slot. An idle stop's old process can take seconds to
+      // exit, and a request in between starts a new one: clearing unconditionally dropped the new
+      // process, which kept running unowned while the next request started yet another. Four were
+      // found still listening on 2026-10-08, the oldest 24 days old.
+      if (this.child === child) { this.child = null; this.ready = false; }
     });
     const deadline = Date.now() + START_TIMEOUT_MS;
     while (Date.now() < deadline) {
-      if (!this.child) throw new Error(`llama-server died during startup: ${stderr.slice(-300)}`);
+      if (this.child !== child) throw new Error(`llama-server died during startup: ${stderr.slice(-300)}`);
       try {
         const r = await fetch(`${this._url()}/health`);
         if (r.ok) { this.ready = true; this._touch(); this.log("llama-server ready"); return; }

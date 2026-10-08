@@ -19,7 +19,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-export const DEFAULT_MODEL_CHAIN = ["sonnet"];
+export const DEFAULT_MODEL_CHAIN = ["claude-sonnet-5-5"];
 
 /**
  * The CLI loads the machine's Claude Code setup into every `-p` call unless told not to: the

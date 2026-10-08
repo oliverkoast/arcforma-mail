@@ -15,6 +15,7 @@ import {
   parseSearchDate,
   parseSearchQuery,
   parseSearchWindow,
+  questionTerms,
   saveBody,
   savedSearchCount,
   search,
@@ -218,4 +219,20 @@ test("saved searches validate and count with the same parser", () => {
   assert.equal(savedSearchCount(db, "kickoff", ["personal"]), 0);
   assert.equal(searchCount(db, "in:inbox"), 3);
   assert.equal(searchCount(db, "in:inbox", { accountIds: ["arcforma"] }), 2);
+});
+
+test("questionTerms keeps what a question is about and drops how it is asked", () => {
+  assert.deepEqual(questionTerms("When is the Lindqvist workshop happening now, and is it in person?"), ["lindqvist", "workshop", "happening", "person"]);
+  assert.deepEqual(questionTerms("How many seats did Fenwick & Rowe end up buying, and what is the deposit?"), ["seats", "fenwick", "rowe", "buying", "deposit"]);
+  assert.deepEqual(questionTerms("What time is the Kittredge call on 10/22?"), ["time", "kittredge", "call", "10", "22"], "short numbers stay");
+  assert.deepEqual(questionTerms("who is it"), []);
+  assert.deepEqual(questionTerms("Who owes me money?"), ["owes", "money", "invoice", "overdue", "outstanding", "balance", "payment", "paid"], "money questions also search the words invoices use");
+});
+
+test("anyWords joins the free words with OR and asks for relevance order", () => {
+  const p = parseSearchQuery("lindqvist workshop");
+  assert.equal(toFtsMatch(p, true), '"lindqvist"* OR "workshop"*');
+  assert.equal(toFtsMatch(p), '"lindqvist"* "workshop"*', "the search box still needs every word");
+  assert.equal(compileSearch(p, { anyWords: true }).ranked, true);
+  assert.equal(compileSearch(p).ranked, false);
 });

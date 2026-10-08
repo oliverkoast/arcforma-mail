@@ -33,7 +33,7 @@ test("reads the daemon config and sends the bearer token except on health", asyn
   const c = await ai.complete({ task: "summarize", user: "hi" });
   assert.equal(c.text, "Summary.");
   assert.equal(calls[1]!.headers["authorization"], "Bearer secret");
-  assert.deepEqual(JSON.parse(calls[1]!.body!), { task: "summarize", user: "hi", model: "sonnet" });
+  assert.deepEqual(JSON.parse(calls[1]!.body!), { task: "summarize", user: "hi", model: "claude-sonnet-5-5" });
 });
 
 test("503 not_logged_in and other daemon failures become typed AiErrors", async () => {
@@ -74,7 +74,7 @@ test("every mail request asks for sonnet, and never the daemon's smaller default
   const ai = new AiClient({ configFile: configFile(), fetch });
   for (const task of ["summarize", "instant_replies", "draft_reply", "ask_inbox"]) {
     await ai.complete({ task, user: "text" });
-    assert.equal(JSON.parse(calls.at(-1)!.body!).model, "sonnet", task);
+    assert.equal(JSON.parse(calls.at(-1)!.body!).model, "claude-sonnet-5-5", task);
   }
 });
 

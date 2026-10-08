@@ -72,6 +72,11 @@ export function localMessages(meta, body, selected, envelope) {
   return { system, turns, user: tagText(selected) };
 }
 
+/** A library prompt written for Claude may ask for an end marker; a local answer has no use for one. */
+function stripMarkerLine(text) {
+  return String(text).replace(/<<ARCFORMA_END>>\s*$/, "").trim();
+}
+
 /** Outside these, a local answer is not an edit of the selection at all (a written poem, a lost paragraph), even as a last resort. */
 const HARD_RATIO = [0.3, 2.5];
 
@@ -223,6 +228,9 @@ export class AiService {
   }
 
   async _complete(req) {
+    // A library task on the local model, asked for by name: how mail's AI runs on a Mac with no
+    // Claude, and how the eval compares the two engines on the same prompt.
+    if (req.engine === "local" && req.task && !req.system) return this._localTask(req);
     const route = req.task ? this.routes[req.task] : null;
     if (route?.engine === "local" && !req.model) {
       const local = await this._routeLocal(req, route);
@@ -278,6 +286,22 @@ export class AiService {
       try { json = JSON.parse(text.replace(/^```(?:json)?\n?|\n?```$/g, "")); } catch { return { ok: false, code: "bad_json", error: `not JSON: ${text.slice(0, 200)}`, engine: "claude", model: r.model }; }
     }
     return { ok: true, text, json, model: r.model, latencyMs: r.latencyMs, engine: "claude" };
+  }
+
+  async _localTask(req) {
+    try {
+      const { meta, body } = loadPrompt(req.task);
+      const system = render(body, { voice: voiceRules(), voiceProfile: this.voice(), marker: "", ...(req.vars ?? {}) });
+      const r = await this.local.complete({ system, user: req.user, maxTokens: req.maxTokens ?? meta.maxTokens ?? 800, schema: req.schema, temperature: 0.2, timeoutMs: req.timeoutMs });
+      let text = stripMarkerLine(r.text);
+      let json = r.json;
+      if (req.json && json === undefined) {
+        try { json = JSON.parse(text.replace(/^```(?:json)?\n?|\n?```$/g, "")); } catch { return { ok: false, code: "bad_json", error: `not JSON: ${text.slice(0, 200)}`, engine: "local", model: r.model }; }
+      }
+      return { ok: true, text, json, model: r.model, latencyMs: r.latencyMs, engine: "local" };
+    } catch (e) {
+      return { ok: false, code: e.code ?? "local_error", error: String(e.message ?? e).slice(0, 500), engine: "local" };
+    }
   }
 
   /** Background classification on the local model. Never touches Claude. */

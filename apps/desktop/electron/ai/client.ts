@@ -51,6 +51,8 @@ export interface CompleteRequest {
   json?: boolean;
   /** Claude tools to allow for this call (for example WebSearch). Omitted means none. */
   allowedTools?: string[];
+  /** "local" runs the library task on the local model instead of Claude. */
+  engine?: "local";
 }
 
 export interface CompleteResponse {
@@ -96,7 +98,9 @@ const CODE_MAP: Record<string, AiErrorCode> = {
 export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal }) => Promise<{ status: number; text: () => Promise<string> }>;
 
 /** What every mail feature asks Claude for. The daemon's chain starts smaller; mail does not use it. */
-export const MAIL_MODEL = "sonnet";
+// The full id, not the alias: on Claude Code 2.1.257 "sonnet" resolves to Sonnet 5, a generation
+// behind. On the 2026-10-08 mail eval Sonnet 5.5 drafts passed 28 of 30 against Sonnet 5's 22.
+export const MAIL_MODEL = "claude-sonnet-5-5";
 
 export class AiClient {
   private config: DaemonConfig | null = null;

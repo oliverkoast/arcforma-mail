@@ -35,7 +35,7 @@ const DEFAULTS = () => ({
   // Sonnet, and nothing above or below it. Fable is quick and it is the wrong trade for anything
   // that goes out under someone's name; opus is not asked for. Cmd+J does not depend on this chain
   // any more, because text.fix answers on the local model and falls back to it when Claude cannot.
-  modelChain: ["sonnet"],
+  modelChain: ["claude-sonnet-5-5"],
   concurrency: 2,
   local: {
     ...defaultLlama(),
@@ -63,7 +63,17 @@ export function loadConfig() {
   if (fs.existsSync(CONFIG_FILE)) {
     try { cfg = deepMerge(cfg, JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"))); } catch (e) { throw new Error(`bad ${CONFIG_FILE}: ${e.message}`); }
   }
-  return withReachableLlama(cfg);
+  return withReachableLlama(withCurrentSonnet(cfg));
+}
+
+/**
+ * The old default chain was the alias "sonnet", saved into every config the daemon wrote. On Claude
+ * Code 2.1.257 that alias means Sonnet 5, a generation behind, so a chain that is exactly the old
+ * default becomes the full Sonnet 5.5 id. A chain someone chose by hand is left as it is.
+ */
+export function withCurrentSonnet(cfg) {
+  const chain = cfg.modelChain;
+  return Array.isArray(chain) && chain.length === 1 && chain[0] === "sonnet" ? { ...cfg, modelChain: ["claude-sonnet-5-5"] } : cfg;
 }
 
 /**

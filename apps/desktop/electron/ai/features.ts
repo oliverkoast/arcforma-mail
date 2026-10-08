@@ -2,7 +2,7 @@
 // Ask AI. All cached where the plan says so and all failing softly: a 503 from
 // the daemon becomes {ok:false, code:"not_logged_in"} and the UI keeps going.
 
-import { getBody, getReplyOptions, getSummary, listThreadMessages, search, setReplyOptions, setSummary, stripHtml, type Db, type MessageRow } from "@arcforma/store";
+import { getAccount, getBody, getReplyOptions, getSummary, listAccounts, listThreadMessages, questionTerms, search, setReplyOptions, setSummary, stripHtml, type Db, type MessageRow } from "@arcforma/store";
 import { toFailure, type AiClient } from "./client.js";
 import type { AskResult, AskSource, DraftReplyResult, InstantRepliesResult, SummaryResult } from "../../shared/types.js";
 
@@ -37,13 +37,25 @@ function bodyText(db: Db, m: MessageRow): string {
   return text.length > BODY_CHARS ? `${text.slice(0, BODY_CHARS)} [cut]` : text;
 }
 
-/** The thread rendered as plain text, oldest first, one block per message. */
+/**
+ * Who the model writes for, and when. No prompt used to say either: a draft could not tell the
+ * owner's own messages from anyone else's, and "Monday" or "this week" had no date to hang on.
+ */
+export function ownerVars(db: Db, accountId: string | undefined, now = Date.now()): { owner: string; today: string } {
+  const account = (accountId ? getAccount(db, accountId) : null) ?? listAccounts(db)[0] ?? null;
+  const owner = account ? (account.display_name ? `${account.display_name} <${account.email}>` : account.email) : "the inbox owner";
+  const today = new Date(now).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  return { owner, today };
+}
+
+/** The thread rendered as plain text, oldest first, one block per message; the owner's own messages are marked (you). */
 export function threadText(db: Db, accountId: string, threadId: string): { text: string; messages: MessageRow[]; words: number } {
   const messages = listThreadMessages(db, accountId, threadId);
   const blocks = messages.map((m) => {
     const when = new Date(m.internal_date).toISOString().slice(0, 16).replace("T", " ");
     const to = (JSON.parse(m.to_json) as Array<{ email: string }>).map((a) => a.email).join(", ");
-    return `From: ${m.from_name ? `${m.from_name} <${m.from_email}>` : m.from_email}\nTo: ${to}\nDate: ${when}\nSubject: ${m.subject}\n\n${bodyText(db, m)}`;
+    const from = `${m.from_name ? `${m.from_name} <${m.from_email}>` : m.from_email}${m.direction === "out" ? " (you)" : ""}`;
+    return `From: ${from}\nTo: ${to}\nDate: ${when}\nSubject: ${m.subject}\n\n${bodyText(db, m)}`;
   });
   const text = blocks.join("\n\n----\n\n");
   return { text, messages, words: text.split(/\s+/).filter(Boolean).length };
@@ -60,13 +72,41 @@ export async function summarize(db: Db, ai: AiClient, accountId: string, threadI
   const cached = getSummary(db, accountId, threadId, last.id);
   if (cached) return { ok: true, summary: cached, cached: true };
   try {
-    const r = await ai.complete({ task: "summarize", user: text, timeoutMs: 60_000, requestId: `summary:${accountId}:${threadId}` });
+    const r = await ai.complete({ task: "summarize", user: text, vars: ownerVars(db, accountId), timeoutMs: 60_000, requestId: `summary:${accountId}:${threadId}` });
     const summary = cleanOutput(r.text);
     setSummary(db, accountId, threadId, last.id, summary);
     return { ok: true, summary, cached: false };
   } catch (err) {
     return toFailure(err);
   }
+}
+
+/**
+ * Three replies, one per line. They used to come back as JSON, and one unescaped quote mark inside
+ * a reply made the whole answer unreadable (Sonnet, on 2026-10-08). JSON is still read when a
+ * model sends it anyway.
+ */
+export function replyLines(text: string): string[] {
+  const t = text.trim();
+  if (t.startsWith("{") || t.startsWith("```")) {
+    try {
+      const parsed = JSON.parse(t.replace(/^```(?:json)?\n?|\n?```$/g, "")) as { replies?: unknown };
+      if (Array.isArray(parsed.replies)) return parsed.replies.filter((x): x is string => typeof x === "string");
+    } catch {
+      /* not JSON after all: read it as lines */
+    }
+  }
+  return t
+    .split("\n")
+    .map((l) => l.replace(/^\s*(?:[-*\u2022]|\d+[.)])\s*/, "").replace(/^["\u201c]|["\u201d]$/g, "").trim())
+    .filter(Boolean);
+}
+
+/** The app appends the Gmail signature, so a draft that signs off with the owner's name would carry it twice. */
+export function withoutSignOff(text: string, owner: string): string {
+  const first = owner.replace(/\s*<.*$/, "").split(/\s+/)[0];
+  if (!first || first.includes("@")) return text;
+  return text.replace(new RegExp(`\\n+\\s*(?:(?:best|thanks|cheers|regards|best regards|thank you)[,!.]?\\s*\\n+\\s*)?${first}\\.?\\s*$`, "i"), "").trimEnd();
 }
 
 /** Instant replies apply to an inbound, non-automated message that is still the last one in its thread. */
@@ -85,9 +125,10 @@ export async function instantReplies(db: Db, ai: AiClient, accountId: string, me
     return { ok: false, code: "unknown", error: "Instant replies apply to the last inbound message in a thread." };
   }
   try {
-    const r = await ai.complete({ task: "instant_replies", user: text, json: true, timeoutMs: 45_000, requestId: `replies:${accountId}:${messageId}` });
-    const parsed = (r.json ?? JSON.parse(r.text)) as { replies?: unknown };
-    const replies = Array.isArray(parsed.replies) ? parsed.replies.filter((x): x is string => typeof x === "string").map(cleanOutput).slice(0, 3) : [];
+    const r = await ai.complete({ task: "instant_replies", user: text, vars: ownerVars(db, accountId), timeoutMs: 45_000, requestId: `replies:${accountId}:${messageId}` });
+    const fromJson = (r.json as { replies?: unknown } | undefined)?.replies;
+    const raw = Array.isArray(fromJson) ? fromJson.filter((x): x is string => typeof x === "string") : replyLines(r.text);
+    const replies = raw.map(cleanOutput).filter(Boolean).slice(0, 3);
     if (replies.length === 0) return { ok: false, code: "bad_response", error: "No replies came back." };
     setReplyOptions(db, accountId, messageId, replies);
     return { ok: true, replies, cached: false };
@@ -100,28 +141,47 @@ export async function draftReply(db: Db, ai: AiClient, accountId: string, thread
   const { text, messages } = threadText(db, accountId, threadId);
   if (messages.length === 0) return { ok: false, code: "unknown", error: "Nothing to reply to." };
   try {
-    const r = await ai.complete({ task: "draft_reply", user: text, timeoutMs: 60_000, requestId: `draft:${accountId}:${threadId}` });
-    return { ok: true, text: cleanOutput(r.text) };
+    const vars = ownerVars(db, accountId);
+    const r = await ai.complete({ task: "draft_reply", user: text, vars, timeoutMs: 60_000, requestId: `draft:${accountId}:${threadId}` });
+    return { ok: true, text: withoutSignOff(cleanOutput(r.text), vars.owner) };
   } catch (err) {
     return toFailure(err);
   }
 }
 
-/** FTS top 40 as numbered excerpts, then ask_inbox. The hits come back even when Claude cannot answer. */
+/** How many of the best matches Ask reads in full, and how much of each. */
+export const ASK_FULL_THREADS = 6;
+export const ASK_THREAD_CHARS = 2500;
+
+/** The end of a long thread, where its current state is: a plan that changed is answered by the last message, not the first. */
+export function newestEnd(text: string, max: number): string {
+  return text.length <= max ? text : `[earlier messages cut]\n${text.slice(text.length - max)}`;
+}
+
+/**
+ * The best 40 matches for the question's own words as numbered excerpts, then ask_inbox. The hits
+ * come back even when Claude cannot answer. A question is not a search query: its words are
+ * matched any-of and ranked by relevance (questionTerms in the store says why).
+ */
 export async function askInbox(db: Db, ai: AiClient, question: string, accountIds?: string[]): Promise<AskResult> {
-  const hits = search(db, question, { accountIds, limit: 40 });
+  const terms = questionTerms(question);
+  const hits = terms.length ? search(db, terms.join(" "), { accountIds, limit: 40, anyWords: true }) : [];
   const sources: AskSource[] = hits.map((h, i) => ({ n: i + 1, accountId: h.row.account_id, threadId: h.row.id, subject: h.row.subject, excerpt: h.excerpt }));
   if (sources.length === 0) return { ok: false, code: "unknown", error: "No mail matched that question. Try different words.", sources };
   const context = sources
     .map((s) => {
       const row = hits[s.n - 1]!.row;
       const from = (JSON.parse(row.participants_json) as Array<{ email: string }>).map((p) => p.email).join(", ");
-      return `[${s.n}] Subject: ${s.subject}\nParticipants: ${from}\nDate: ${new Date(row.last_message_at).toISOString().slice(0, 10)}\nExcerpt: ${s.excerpt}`;
+      const head = `[${s.n}] Subject: ${s.subject}\nParticipants: ${from}\nDate: ${new Date(row.last_message_at).toISOString().slice(0, 10)}`;
+      // The best matches go in whole. A fourteen-word search snippet rarely holds the answer: in the
+      // mail eval the model said "the excerpt cuts off before the date" on most questions.
+      if (s.n <= ASK_FULL_THREADS) return `${head}\nThread:\n${newestEnd(threadText(db, s.accountId, s.threadId).text, ASK_THREAD_CHARS)}`;
+      return `${head}\nExcerpt: ${s.excerpt}`;
     })
     .join("\n\n");
   const user = `Question: ${question}\n\nExcerpts:\n\n${context}`;
   try {
-    const r = await ai.complete({ task: "ask_inbox", user, timeoutMs: 90_000, requestId: `ask:${Date.now()}` });
+    const r = await ai.complete({ task: "ask_inbox", user, vars: ownerVars(db, accountIds?.[0]), timeoutMs: 90_000, requestId: `ask:${Date.now()}` });
     return { ok: true, answer: cleanOutput(r.text), sources };
   } catch (err) {
     return { ...toFailure(err), sources };

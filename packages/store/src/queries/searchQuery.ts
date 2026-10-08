@@ -215,8 +215,51 @@ function ftsTerm(value: string, prefix: boolean): string {
   return `"${clean}"${prefix ? "*" : ""}`;
 }
 
+/**
+ * Words a question is made of that say nothing about which mail answers it. Ask AI used to hand
+ * the whole question to the search box, where every word has to match: "When is the Lindqvist
+ * workshop happening now, and is it in person?" found nothing, in a mailbox with that thread in
+ * it, and so did every other question in the mail eval (12 of 12 on 2026-10-08).
+ */
+const QUESTION_WORDS = new Set(
+  ("a an and any are as at be been but by can could did do does done for from get got had has have how i if in is it its " +
+    "just know me my need needs now of on or our right should so some still tell than that the their them then there " +
+    "they this to up us was we were what when where which who whom whose why will with would yet you your much many " +
+    "end ever please about also all").split(" ")
+);
+
+/**
+ * A question's word and the words mail uses for the same thing. "Who owes me money?" is answered by
+ * threads that say invoice, payment and balance, and never owe or money; a word search finds none
+ * of them without this. Kept short and about money and meetings, where the gap showed.
+ */
+const QUESTION_SYNONYMS: Record<string, string[]> = {
+  owe: ["invoice", "overdue", "outstanding", "balance", "payment"],
+  owes: ["invoice", "overdue", "outstanding", "balance", "payment"],
+  owed: ["invoice", "overdue", "outstanding", "balance", "payment"],
+  money: ["invoice", "payment", "paid"],
+  pay: ["payment", "invoice", "paid"],
+  paid: ["payment", "invoice", "received"],
+  meeting: ["call", "session", "invite"],
+  meet: ["call", "session", "invite"],
+};
+
+/** The words of a question worth searching for: the question's own grammar removed, names and numbers kept. */
+export function questionTerms(question: string): string[] {
+  const words = (question.match(/[\p{L}\p{N}][\p{L}\p{N}'&.-]*/gu) ?? []).map((w) => w.replace(/[.'-]+$/, ""));
+  const out: string[] = [];
+  for (const w of words) {
+    const lower = w.toLowerCase();
+    if (QUESTION_WORDS.has(lower) || (lower.length < 3 && !/\d/.test(lower))) continue;
+    if (!out.includes(lower)) out.push(lower);
+  }
+  const terms = out.slice(0, 12);
+  for (const w of out) for (const alt of QUESTION_SYNONYMS[w] ?? []) if (!terms.includes(alt)) terms.push(alt);
+  return terms;
+}
+
 /** The FTS5 MATCH expression for the words in the query, or null when only SQL predicates are asked for. */
-export function toFtsMatch(p: ParsedSearch): string | null {
+export function toFtsMatch(p: ParsedSearch, anyWords = false): string | null {
   const parts: string[] = [];
   for (const t of p.text) {
     const term = ftsTerm(t, true);
@@ -234,12 +277,15 @@ export function toFtsMatch(p: ParsedSearch): string | null {
     const term = ftsTerm(s, true);
     if (term) parts.push(`subject : ${term}`);
   }
-  return parts.length ? parts.join(" ") : null;
+  // Any word, ranked by how well each message matches, for a question; every word for the search box.
+  return parts.length ? parts.join(anyWords ? " OR " : " ") : null;
 }
 
 export interface CompiledSearch {
   /** The MATCH expression, or null when the query is filters only. */
   fts: string | null;
+  /** Best match first rather than newest first: a question, where one shared word is not an answer. */
+  ranked?: boolean;
   /** Predicates against aliases m (messages), t (threads), c (classifications), q (queue_items), joined with AND. */
   where: string[];
   args: Array<string | number>;
@@ -250,6 +296,8 @@ export interface CompileOptions {
   /** Day start for in:daily; the caller reads it from settings. */
   dayStartAt?: number;
   accountIds?: string[];
+  /** Match messages holding any of the free words, best match first, instead of all of them. */
+  anyWords?: boolean;
 }
 
 /** An address list column holds a match when any entry's email or name contains the value. */
@@ -328,7 +376,7 @@ export function compileSearch(p: ParsedSearch, opts: CompileOptions = {}): Compi
     );
     args.push(label, label, label, label, label);
   }
-  return { fts: toFtsMatch(p), where, args };
+  return { fts: toFtsMatch(p, opts.anyWords === true), ranked: opts.anyWords === true, where, args };
 }
 
 /** Markers snippet() wraps a matched term in; the renderer turns them into <mark>. shared/types.ts carries the same pair. */

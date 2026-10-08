@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { getReplyOptions, getSummary, saveBody, setReplyOptions, setSummary, openStore, upsertAccount, upsertThreadFromGmail, type Db } from "@arcforma/store";
 import { AiClient, type FetchLike } from "./client.js";
-import { cleanOutput, instantReplies, wantsInstantReplies, threadText } from "./features.js";
+import { cleanOutput, instantReplies, ownerVars, replyLines, wantsInstantReplies, threadText, withoutSignOff } from "./features.js";
 
 function tempDb(): Db {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "arcmail-features-"));
@@ -112,4 +112,30 @@ test("reading an attached calendar reply replaces stale AI context and invalidat
   saveBody(db, "arcforma", "m1", { text: "Confidentiality footer", calendar });
   assert.deepEqual(getReplyOptions(db, "arcforma", "m1"), ["Thanks for accepting"], "unchanged calendar preserves a current cache");
   db.close();
+});
+
+test("replies come back as three plain lines, and JSON is still read when a model sends it", () => {
+  assert.deepEqual(replyLines("Yes, Tuesday works.\nNot this week.\nWhat time were you thinking?"), ["Yes, Tuesday works.", "Not this week.", "What time were you thinking?"]);
+  assert.deepEqual(replyLines('1. "Yes"\n2) Not now\n- Tell me more'), ["Yes", "Not now", "Tell me more"], "numbering, bullets and quotes go");
+  assert.deepEqual(replyLines('{"replies": ["a", "b", "c"]}'), ["a", "b", "c"]);
+  assert.deepEqual(replyLines('{"replies": ["he said "now" ok", "b"]}'), ['{"replies": ["he said "now" ok", "b"]}'], "broken JSON is read as text, not thrown");
+});
+
+test("a draft never ends with the owner's name, which the signature already carries", () => {
+  assert.equal(withoutSignOff("Works for me.\n\nOliver", "Oliver Korzen <you@example.com>"), "Works for me.");
+  assert.equal(withoutSignOff("Works for me.\n\nBest,\nOliver", "Oliver Korzen <you@example.com>"), "Works for me.");
+  assert.equal(withoutSignOff("Ask Oliver about it.", "Oliver Korzen <you@example.com>"), "Ask Oliver about it.", "the name inside a sentence stays");
+  assert.equal(withoutSignOff("Fine.\n\nOliver", "you@example.com"), "Fine.\n\nOliver", "no display name, nothing to strip");
+});
+
+test("the model is told who owns the inbox and which messages are theirs", () => {
+  const db = tempDb();
+  upsertAccount(db, { id: "arcforma", email: "you@example.com", displayName: "Oliver Korzen" });
+  const v = ownerVars(db, "arcforma", Date.UTC(2026, 9, 8, 15));
+  assert.equal(v.owner, "Oliver Korzen <you@example.com>");
+  assert.match(v.today, /October 8, 2026/);
+  seed(db, [message("m1", "Dana <dana@northwind.example>", T0), message("m2", "Oliver Korzen <you@example.com>", T0 + 1000)]);
+  const { text } = threadText(db, "arcforma", "t1");
+  assert.match(text, /From: Oliver Korzen <you@example.com> \(you\)/);
+  assert.doesNotMatch(text, /dana@northwind.example> \(you\)/);
 });

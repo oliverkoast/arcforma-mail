@@ -148,3 +148,25 @@ test("an explicit model still wins over the route's Claude model", async () => {
   const r = await svcWithLocal("x").complete({ ...fixReq("a sentence of ordinary length here"), model: "sonnet" });
   assert.equal(r.model, "sonnet");
 });
+
+test("engine local runs a library task on the local model, never Claude", async () => {
+  const s = svcWithLocal("Dana wants the plan and invoice before Tuesday.");
+  const r = await s.complete({ task: "summarize", user: "From: Dana\n\nSend the plan and invoice before Tuesday.", engine: "local" });
+  assert.equal(r.ok, true);
+  assert.equal(r.engine, "local");
+  assert.equal(r.text, "Dana wants the plan and invoice before Tuesday.");
+});
+
+test("engine local parses JSON for a JSON task and says so when it cannot", async () => {
+  const good = await svcWithLocal('```json\n{"replies":["Yes","Not now","Tell me more"]}\n```').complete({ task: "instant_replies", user: "x", json: true, engine: "local" });
+  assert.deepEqual(good.json, { replies: ["Yes", "Not now", "Tell me more"] });
+  const bad = await svcWithLocal("Sure, here are three replies").complete({ task: "instant_replies", user: "x", json: true, engine: "local" });
+  assert.equal(bad.ok, false);
+  assert.equal(bad.code, "bad_json");
+});
+
+test("engine local reports a local failure instead of falling through to Claude", async () => {
+  const r = await svcWithLocal(new Error("no server")).complete({ task: "summarize", user: "x", engine: "local" });
+  assert.equal(r.ok, false);
+  assert.equal(r.engine, "local");
+});

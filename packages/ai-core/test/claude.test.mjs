@@ -23,7 +23,7 @@ test("completes with the fake CLI and reports the model", async () => {
   const r = await runner("ok").complete({ system: "s", user: "hello" });
   assert.equal(r.ok, true);
   assert.match(r.text, /^fixed:hello/);
-  assert.equal(r.model, "sonnet", "the default chain asks for sonnet and nothing smaller");
+  assert.equal(r.model, "claude-sonnet-5-5", "the default chain asks for Sonnet 5.5 by its full id, and nothing smaller");
   assert.ok(r.latencyMs >= 0);
 });
 

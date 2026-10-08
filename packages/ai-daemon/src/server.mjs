@@ -48,6 +48,7 @@ export function createDaemon(cfg, deps = {}) {
         const r = await service.complete({
           task: body.task, system: body.system, user: body.user, vars: body.vars, model: body.model,
           maxTokens: body.maxTokens, timeoutMs: body.timeoutMs, requestId: body.requestId, allowedTools: body.allowedTools, json: body.json, schema: body.schema,
+          engine: body.engine === "local" ? "local" : undefined,
         });
         return send(r.ok ? 200 : statusFor(r.code), r);
       }

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { bundledLlama, withReachableLlama } from "../src/config.mjs";
+import { bundledLlama, withCurrentSonnet, withReachableLlama } from "../src/config.mjs";
 
 function llamaDir() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "arcforma-llama-"));
@@ -35,4 +35,10 @@ test("an Ollama base URL is left alone, and nothing bundled means nothing change
   assert.equal(withReachableLlama(ollama, { ARCFORMA_LLAMA_DIR: dir }), ollama);
   const none = { local: { binary: null } };
   assert.equal(withReachableLlama(none, {}), none);
+});
+
+test("the old default chain becomes Sonnet 5.5, and a chain chosen by hand is kept", () => {
+  assert.deepEqual(withCurrentSonnet({ modelChain: ["sonnet"] }).modelChain, ["claude-sonnet-5-5"]);
+  assert.deepEqual(withCurrentSonnet({ modelChain: ["opus", "sonnet"] }).modelChain, ["opus", "sonnet"]);
+  assert.deepEqual(withCurrentSonnet({ modelChain: ["claude-haiku-5-5"] }).modelChain, ["claude-haiku-5-5"]);
 });

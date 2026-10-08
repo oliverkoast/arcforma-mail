@@ -73,7 +73,7 @@ function fromClause(compiled: CompiledSearch, withHighlights: boolean): { sql: s
       // an August thread above one from July above one from yesterday, with no visible reason for
       // the order. In mail, recency is the relevance, and a list you cannot scan by date is a list
       // you have to read all of. rank stays only to settle threads from the same instant.
-      order: "m.internal_date DESC, f.rank",
+      order: compiled.ranked ? "f.rank, m.internal_date DESC" : "m.internal_date DESC, f.rank",
     };
   }
   return { sql: `FROM messages m ${JOINS}`, args: [], order: "m.internal_date DESC" };
@@ -89,11 +89,11 @@ function pickHighlight(h: RawHit): SearchHighlight {
 }
 
 /** Full-text search with operators. One hit per thread, best rank first. */
-export function search(db: Db, query: string, opts: { accountIds?: string[]; limit?: number; now?: number } = {}): SearchHit[] {
+export function search(db: Db, query: string, opts: { accountIds?: string[]; limit?: number; now?: number; anyWords?: boolean } = {}): SearchHit[] {
   const parsed = parseSearchQuery(query);
   if (isEmptySearch(parsed)) return [];
   const limit = Math.min(Math.max(opts.limit ?? 40, 1), 200);
-  const compiled = compileSearch(parsed, { now: opts.now, dayStartAt: getSetting(db, "dayStartAt"), accountIds: opts.accountIds });
+  const compiled = compileSearch(parsed, { now: opts.now, dayStartAt: getSetting(db, "dayStartAt"), accountIds: opts.accountIds, anyWords: opts.anyWords });
   const from = fromClause(compiled, true);
   const select = compiled.fts
     ? "m.account_id, m.thread_id, m.id AS message_id, f.rank, f.excerpt, f.h_subject, f.h_from, f.h_to, f.h_body"
