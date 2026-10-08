@@ -67,6 +67,7 @@ export function TextStep({ onNext, onBack }: { onNext: () => void; onBack: () =>
   };
 
   const granted = info?.accessibility === "granted";
+  const fromRepo = info?.installFrom === "repo";
 
   return (
     <StepCard
@@ -74,8 +75,13 @@ export function TextStep({ onNext, onBack }: { onNext: () => void; onBack: () =>
       title="Fix text anywhere with Cmd+J."
       actions={
         <>
-          <button className="btn btn-sweep" disabled={busy !== null || info?.scriptPresent === false} data-tip="Builds Arcforma Text, copies it to /Applications, and starts it through launchd. Takes a minute or two." onClick={() => void install()}>
-            {busy === "install" ? "Building and installing" : info?.installed ? "Build and install again" : "Install Arcforma Text"}
+          <button
+            className="btn btn-sweep"
+            disabled={busy !== null || info?.installFrom === null}
+            data-tip={fromRepo ? "Builds Arcforma Text from the repository, copies it to /Applications, and starts it through launchd. Takes a minute or two." : "Copies Arcforma Text, which comes inside this app, to /Applications and starts it through launchd."}
+            onClick={() => void install()}
+          >
+            {busy === "install" ? (fromRepo ? "Building and installing" : "Installing") : info?.installed ? "Install again" : "Install Arcforma Text"}
           </button>
           <button className="btn btn-nav btn-compact" disabled={busy !== null} data-tip="Restarts Arcforma Text and reads its own answer about the Accessibility grant." onClick={() => void check()}>
             {busy === "check" ? "Checking" : "Check the grant"}
@@ -97,7 +103,7 @@ export function TextStep({ onNext, onBack }: { onNext: () => void; onBack: () =>
         It needs Accessibility, and only Accessibility: that covers reading the selected text and posting the paste back. It refuses terminals, password fields, and secure inputs, and it re-reads the selection before pasting so a
         selection that moved is never overwritten.
       </p>
-      {info?.scriptPresent === false ? <p className="setup-note">This build does not carry the installer, so Arcforma Text has to be built from the repository with packages/text-tools/install.sh.</p> : null}
+      {info?.installFrom === null ? <p className="setup-note">This build does not carry Arcforma Text, so it has to be built from the repository with packages/text-tools/install.sh.</p> : null}
 
       <div className="setup-facts">
         <div className="setup-fact">

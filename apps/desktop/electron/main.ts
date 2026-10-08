@@ -5,6 +5,8 @@ import { BrowserWindow, app, net, powerMonitor, protocol, shell, type WebContent
 import { getSetting, openStore, updateAccount, type Db } from "@arcforma/store";
 import { AccountRegistry } from "./accounts.js";
 import { AiClient } from "./ai/client.js";
+import { ensureHelpers } from "./helpers/install.js";
+import { loginItemAllowed } from "./login-item.js";
 import { CalendarSync } from "./calendar.js";
 import { Classifier } from "./classify/pipeline.js";
 import { Contacts } from "./contacts.js";
@@ -342,7 +344,11 @@ async function boot(): Promise<void> {
   scheduler = new Scheduler(db, accounts, sync, { receipts });
   mirror = new DraftMirror(db, sync);
   const ai = new AiClient();
-  if (!ai.reload()) log("ai", "daemon config missing; AI features report daemon_down until packages/ai-daemon/install.sh runs");
+  // A packed app brings its own AI daemon and Arcforma Text. Dev and smoke runs never register anything.
+  if (loginItemAllowed({ isPackaged: app.isPackaged, platform: process.platform, smoke: SMOKE_DIR })) {
+    void ensureHelpers().then(() => ai.reload()).catch((err: unknown) => logError("helpers", "ensure", err));
+  }
+  if (!ai.reload()) log("ai", "daemon config missing; AI features report daemon_down until the AI daemon starts");
   const registry = accounts;
   const store = db;
   classifier = new Classifier(

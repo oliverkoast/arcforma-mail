@@ -13,12 +13,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit && tsc -p electron/tsconfig.json --noEmit",
     "brand-check": "node ../../scripts/brand-check.mjs",
     "icon": "node scripts/make-icon.mjs",
-    "pack": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --config electron-builder.json",
+    "helpers": "node scripts/build-helpers.mjs",
+    "pack": "node scripts/build-helpers.mjs && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --config electron-builder.json",
     "smoke": "node scripts/smoke.mjs",
     "pretypecheck": "pnpm --filter \"desktop^...\" build",
     "test": "node --disable-warning=ExperimentalWarning --import tsx --test \"electron/**/*.test.ts\" \"src/**/*.test.ts\"",
     "pretest": "pnpm --filter \"desktop^...\" build",
-    "dist": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --config electron-builder.json"
+    "dist": "node scripts/build-helpers.mjs && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --config electron-builder.json"
   },
   "dependencies": {
     "@arcforma/gmail": "workspace:*",

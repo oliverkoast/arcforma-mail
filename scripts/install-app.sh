@@ -18,22 +18,30 @@ if pgrep -x SecurityAgent >/dev/null && pgrep -f "$APP/Contents/MacOS" >/dev/nul
   exit 2
 fi
 
+# The app's processes, not the AI daemon it may run from inside its own bundle (ELECTRON_RUN_AS_NODE,
+# helpers/ai-daemon). That one keeps running from the old files and the new app restarts it.
+app_pids() {
+  pgrep -f "$APP/Contents/MacOS" | while read -r pid; do
+    ps -o command= -p "$pid" | grep -q "helpers/ai-daemon" || echo "$pid"
+  done
+}
+
 ( cd apps/desktop && pnpm --silent build && pnpm --silent run pack )
 codesign --verify --deep --strict "$BUILT"
 
 osascript -e 'tell application "Arcforma Mail" to quit' 2>/dev/null || true
 for _ in $(seq 1 40); do
-  pgrep -f "$APP/Contents/MacOS" >/dev/null || break
+  [ -n "$(app_pids)" ] || break
   sleep 0.5
 done
-if pgrep -f "$APP/Contents/MacOS" >/dev/null; then
-  pkill -f "$APP/Contents/MacOS" || true
+if [ -n "$(app_pids)" ]; then
+  app_pids | xargs kill 2>/dev/null || true
   for _ in $(seq 1 20); do
-    pgrep -f "$APP/Contents/MacOS" >/dev/null || break
+    [ -n "$(app_pids)" ] || break
     sleep 0.5
   done
 fi
-if pgrep -f "$APP/Contents/MacOS" >/dev/null; then
+if [ -n "$(app_pids)" ]; then
   echo "Arcforma Mail is still running and will not exit. Not replacing it." >&2
   exit 1
 fi

@@ -10,6 +10,7 @@ packages/ai-daemon/bin/
 *.gguf
 apps/desktop/dist-electron/
 apps/desktop/release/
+apps/desktop/helpers/
 apps/desktop/build/icon-1024.png
 packages/*/dist/
 *.tsbuildinfo

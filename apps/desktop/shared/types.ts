@@ -639,8 +639,11 @@ export interface OnboardingTextInfo {
   accessibility: OnboardingAccessibility;
   /** When the log line the state came from was written, or null when there is no log. */
   checkedAt: number | null;
-  /** False when this build carries no install script, so the button says so instead of failing. */
-  scriptPresent: boolean;
+  /**
+   * Where Install takes Arcforma Text from: the copy a packed app carries, a build from the
+   * repository in a dev run, or nowhere, so the button says so instead of failing.
+   */
+  installFrom: "bundled" | "repo" | null;
 }
 
 /** Long-running onboarding work, pushed as it happens: the model download and the text tool install. */

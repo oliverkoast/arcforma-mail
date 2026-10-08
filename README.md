@@ -26,9 +26,13 @@ node apps/desktop/scripts/classify-report.mjs [mail.db]   # what the header rule
 node apps/desktop/scripts/attention-report.mjs [mail.db]  # what the attention model says about a real mailbox: the band split, the senders behind Needs you, how stale it is, a sample with reasons. Read-only, prints no message bodies
 node apps/desktop/scripts/reading-report.mjs [mail.db] [howMany]  # what the reading pass folds away on a real mailbox: messages per region kind, median lines hidden, ten examples by subject. Read-only, prints no message bodies
 pnpm --filter desktop dev          # mail app, dev mode
-packages/ai-daemon/install.sh      # AI daemon as a LaunchAgent
+packages/ai-daemon/install.sh      # AI daemon as a LaunchAgent, from this checkout (dev)
 packages/text-tools/build.sh       # Arcforma Text .app bundle
+pnpm --filter desktop run pack     # the DMG, carrying Arcforma Text, the AI daemon and llama-server (scripts/build-helpers.mjs)
+node apps/desktop/scripts/check-packed.mjs   # proves the packed app runs Cmd+J with no repository and no Node: self-test, signatures, a real fix on the bundled local model
 ```
+
+A packed app needs nothing else on the Mac for Cmd+J. It carries its helpers in `Contents/Resources/helpers`, registers the AI daemon as a LaunchAgent on its own Electron binary at launch, and installs Arcforma Text from the setup flow. An AI daemon LaunchAgent written by `packages/ai-daemon/install.sh` is left alone, so a developer's checkout keeps running its own. Packing copies llama-server from `ARCFORMA_LLAMA_DIR` (or an openwhispr checkout) and fails without one; `ARCFORMA_SKIP_LLAMA=1` packs without it on purpose.
 
 ## Before first use
 

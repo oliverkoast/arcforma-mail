@@ -62,11 +62,22 @@ function fallbackBinary(): string {
   return path.join(os.homedir(), "Projects", "openwhispr", "resources", "bin", "llama-server-darwin-arm64");
 }
 
+/** The llama-server a packed app carries. The daemon falls back to it the same way (ai-daemon config.mjs). */
+function bundledBinary(): string | null {
+  const resources = process.resourcesPath as string | undefined;
+  if (!resources) return null;
+  const file = path.join(resources, "helpers", "llama", "llama-server");
+  return fs.existsSync(file) ? file : null;
+}
+
 export function daemonConfigView(file = defaultConfigPath()): DaemonConfigView {
   const present = fs.existsSync(file);
   const cfg = present ? readConfig(file) : {};
   const local = (cfg["local"] ?? {}) as Record<string, unknown>;
-  const binary = typeof local["binary"] === "string" && local["binary"] ? local["binary"] : fs.existsSync(fallbackBinary()) ? fallbackBinary() : null;
+  const stored = typeof local["binary"] === "string" && local["binary"] ? local["binary"] : null;
+  // The daemon's order: a stored binary that is there, else the bundled one, else what is stored (reported missing), else openwhispr's.
+  const usable = stored && fs.existsSync(stored) ? stored : bundledBinary();
+  const binary = usable ?? stored ?? (fs.existsSync(fallbackBinary()) ? fallbackBinary() : null);
   const model = typeof local["model"] === "string" && local["model"] ? local["model"] : fs.existsSync(modelPath()) ? modelPath() : null;
   return {
     path: file,
@@ -131,7 +142,8 @@ export interface TextToolState {
 }
 
 export const TEXT_APP_PATH = "/Applications/Arcforma Text.app";
-export const TEXT_LABEL = "ai.arcforma.text";
+import { TEXT_LABEL } from "../helpers/plan.js";
+export { TEXT_LABEL };
 
 export function textLogPath(): string {
   return process.env["ARCMAIL_TEXT_LOG"] || path.join(os.homedir(), "Library", "Logs", "arcforma-text.log");

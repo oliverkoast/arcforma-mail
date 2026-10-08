@@ -13,6 +13,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { AiService } from "@arcforma/ai-core";
 import { loadConfig, saveConfig, CONFIG_FILE } from "./config.mjs";
 
@@ -106,6 +107,7 @@ export async function main() {
   process.on("SIGTERM", shutdown); process.on("SIGINT", shutdown);
 }
 
-if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(new URL(import.meta.url).pathname)) {
+// fileURLToPath, not URL.pathname: inside "Arcforma Mail.app" the pathname carries %20 and realpath fails.
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) {
   main().catch((e) => { console.error(e); process.exit(1); });
 }

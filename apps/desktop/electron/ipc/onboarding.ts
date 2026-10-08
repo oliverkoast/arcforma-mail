@@ -1,6 +1,6 @@
 // Everything the first-run flow needs to do outside the renderer: open the
 // Google Cloud pages, write oauth-clients.json, store the AI credential,
-// download the local model, run the text tool installer, and read the
+// download the local model, install the text tool, and read the
 // Accessibility grant. The renderer spawns nothing and writes no files; it
 // calls these channels with narrow inputs and renders what comes back.
 
@@ -19,6 +19,7 @@ import { oauthClientsPath } from "../paths.js";
 import type { SyncManager } from "../sync.js";
 import { addAccount, takenIds } from "../onboarding/clients.js";
 import { ModelDownload, type DownloadResponse } from "../onboarding/download.js";
+import { bundledHelpers, installText } from "../helpers/install.js";
 import { MODEL_CATALOG, applyAiChoice, daemonConfigView, modelPath, modelsDir, pointDaemonAtModel, textToolState, TEXT_LABEL } from "../onboarding/environment.js";
 import {
   accountIdForEmail,
@@ -60,7 +61,7 @@ function onboardingInfo(db: Db): OnboardingInfo {
 }
 
 function textInfo(): OnboardingTextInfo {
-  return { ...textToolState(), scriptPresent: textInstallScript() !== null };
+  return { ...textToolState(), installFrom: bundledHelpers() ? "bundled" : textInstallScript() !== null ? "repo" : null };
 }
 
 async function aiInfo(ai: AiClient): Promise<OnboardingAiInfo> {
@@ -209,13 +210,19 @@ export function registerOnboardingIpc(db: Db, accounts: AccountRegistry, sync: S
   ipcMain.handle("onboarding:textState", (): OnboardingTextInfo => textInfo());
 
   ipcMain.handle("onboarding:installText", async (): Promise<OnboardingTextInfo> => {
-    const script = textInstallScript();
-    if (!script) throw new Error("This build has no packages/text-tools/install.sh next to it, so the text tool cannot be built from here.");
+    // A packed app copies the build it carries; a dev run builds from the repository.
+    const layout = bundledHelpers();
+    const script = layout ? null : textInstallScript();
+    if (!layout && !script) throw new Error("This build carries no Arcforma Text and has no packages/text-tools/install.sh next to it.");
     if (installing) throw new Error("The install is already running.");
     installing = true;
-    emit("onboarding:progress", { kind: "text", line: `Running ${script}`, phase: "running" });
     try {
-      await runScript(script);
+      if (layout) {
+        await installText(layout, (line) => emit("onboarding:progress", { kind: "text", line, phase: "running" }));
+      } else if (script) {
+        emit("onboarding:progress", { kind: "text", line: `Running ${script}`, phase: "running" });
+        await runScript(script);
+      }
       emit("onboarding:progress", { kind: "text", line: "Installed. Grant Accessibility, then press Check the grant.", phase: "done" });
     } catch (err) {
       emit("onboarding:progress", { kind: "text", line: (err as Error).message, phase: "failed" });

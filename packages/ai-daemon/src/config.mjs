@@ -8,6 +8,24 @@ export const CONFIG_FILE = path.join(SUPPORT_DIR, "ai-daemon.json");
 export const LOG_FILE = path.join(os.homedir(), "Library", "Logs", "arcforma-ai-daemon.log");
 
 const OPENWHISPR_BIN = path.join(os.homedir(), "Projects", "openwhispr", "resources", "bin");
+
+/**
+ * The llama.cpp build Arcforma Mail carries in Contents/Resources/helpers/llama. The LaunchAgent the
+ * app writes sets ARCFORMA_LLAMA_DIR to it; a daemon started from the repository has none.
+ */
+export function bundledLlama(env = process.env) {
+  const dir = env.ARCFORMA_LLAMA_DIR;
+  if (!dir) return null;
+  const binary = path.join(dir, "llama-server");
+  return fs.existsSync(binary) ? { binary, libDir: dir } : null;
+}
+
+function defaultLlama() {
+  const openwhispr = path.join(OPENWHISPR_BIN, "llama-server-darwin-arm64");
+  if (fs.existsSync(openwhispr)) return { binary: openwhispr, libDir: OPENWHISPR_BIN };
+  return bundledLlama() ?? { binary: null, libDir: OPENWHISPR_BIN };
+}
+
 const DEFAULTS = () => ({
   port: 0,
   token: crypto.randomBytes(24).toString("hex"),
@@ -20,8 +38,7 @@ const DEFAULTS = () => ({
   modelChain: ["sonnet"],
   concurrency: 2,
   local: {
-    binary: fs.existsSync(path.join(OPENWHISPR_BIN, "llama-server-darwin-arm64")) ? path.join(OPENWHISPR_BIN, "llama-server-darwin-arm64") : null,
-    libDir: OPENWHISPR_BIN,
+    ...defaultLlama(),
     model: firstExisting([
       path.join(SUPPORT_DIR, "models", "qwen3-4b-instruct-q4_k_m.gguf"),
       path.join(os.homedir(), ".cache", "openwhispr", "models", "qwen2.5-1.5b-instruct-q5_k_m.gguf"),
@@ -45,7 +62,18 @@ export function loadConfig() {
   if (fs.existsSync(CONFIG_FILE)) {
     try { cfg = deepMerge(cfg, JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"))); } catch (e) { throw new Error(`bad ${CONFIG_FILE}: ${e.message}`); }
   }
-  return cfg;
+  return withReachableLlama(cfg);
+}
+
+/**
+ * A stored binary that is gone (the app was moved, or the openwhispr checkout deleted) gives way to
+ * the bundled one, so the local model keeps answering without anyone editing the file.
+ */
+export function withReachableLlama(cfg, env = process.env) {
+  if (cfg.local?.baseUrl) return cfg;
+  if (cfg.local?.binary && fs.existsSync(cfg.local.binary)) return cfg;
+  const bundled = bundledLlama(env);
+  return bundled ? { ...cfg, local: { ...cfg.local, ...bundled } } : cfg;
 }
 
 export function saveConfig(cfg) {

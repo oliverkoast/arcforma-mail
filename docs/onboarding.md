@@ -14,7 +14,7 @@ Before this, a new person had to create Google Cloud projects, hand-write `oauth
 | 2 | `accounts` | Address, Workspace or personal, an optional project id, four buttons that open the Google Cloud console pages in order, then the client id and secret by paste. Save writes `oauth-clients.json` and runs the loopback sign-in at once. Repeatable for more accounts. |
 | 3 | `ai` | Local only, Claude Code login, or an Anthropic API key, each with its trade-off written out. The daemon is asked what is already on the Mac first, so an existing login is reported rather than asked for again. |
 | 4 | `model` | Whether the llama.cpp binary and a GGUF are present, and a resumable download with a real progress bar for the model. |
-| 5 | `text` | What Cmd+J does, an Install button that runs the real script with its output streamed into the step, and a live read of the Accessibility grant. |
+| 5 | `text` | What Cmd+J does, an Install button that copies the Arcforma Text a packed app carries into /Applications (a dev run builds it from the repository) with each line streamed into the step, and a live read of the Accessibility grant. |
 | 6 | `done` | J, K, E, C, Cmd+K, a paragraph on Daily 0, and Start reading. |
 
 Every step is skippable. Skipping never leaves the app in a state that pretends to work: skipping accounts lands on a screen saying no mailbox is connected, skipping the AI step lands on local only, and skipping the model says background sorting stays off.
@@ -63,7 +63,13 @@ The API key option needed a matching change in `packages/ai-core/src/claude.mjs`
 
 One catalog entry, in `environment.ts`: Qwen3 4B Instruct at 4-bit, 2,497,281,120 bytes, from Hugging Face into `~/Library/Application Support/Arcforma/models/qwen3-4b-instruct-q4_k_m.gguf`. That is the filename the daemon's own default already looks for, and a finished download also writes `local.model` into the daemon config.
 
-There is no download for the llama.cpp binary. The step reports whether one is present and says what its absence means, because fetching and running an unsigned native binary is not something first-run setup should do on anyone's behalf.
+There is no download for the llama.cpp binary. A packed app carries one in `Contents/Resources/helpers/llama`, signed with the app, and the daemon falls back to it whenever the binary its config names is gone. A dev run reports whether one is present and says what its absence means, because fetching and running an unsigned native binary is not something first-run setup should do on anyone's behalf.
+
+## The helpers a packed app carries
+
+`scripts/build-helpers.mjs` runs before every pack and fills `apps/desktop/helpers/`, which electron-builder copies to `Contents/Resources/helpers`: Arcforma Text.app, the AI daemon bundled into one file with its prompt library, llama-server with the dylibs it links, and a manifest with the daemon's content hash.
+
+At every launch of a packed app, `electron/helpers/install.ts` does two things. It writes the AI daemon's LaunchAgent to run `server.mjs` on the app's own executable with `ELECTRON_RUN_AS_NODE=1`, so no Node install is needed, and restarts the daemon when the code it carries changed. An agent anyone else wrote, such as the one `packages/ai-daemon/install.sh` writes for a checkout, is never touched. And when Arcforma Text is already in /Applications but is not byte for byte the build the app carries, it is replaced, with the same signing identity so the Accessibility grant holds. The Text step's Install button copies the bundled build; a dev run still builds from the repository. `electron/helpers/plan.ts` holds every decision and `plan.test.ts` checks them; `scripts/check-packed.mjs` proves the packed result.
 
 ## Testing it
 

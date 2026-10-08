@@ -19,7 +19,8 @@ function walkBundles(dir, out) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, entry.name);
     if (!entry.isDirectory()) {
-      if (entry.isFile() && /\.(dylib|node)$/.test(entry.name)) out.push(p);
+      // The bundled llama-server is a bare executable, so it is named here; dylibs and .node match by extension.
+      if (entry.isFile() && (/\.(dylib|node)$/.test(entry.name) || (entry.name === "llama-server" && path.basename(dir) === "llama"))) out.push(p);
       continue;
     }
     if (/\.(app|framework|xpc|bundle)$/.test(entry.name)) {
