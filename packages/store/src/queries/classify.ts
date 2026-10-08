@@ -15,6 +15,11 @@ export function getClassification(db: Db, accountId: string, threadId: string): 
 /**
  * Threads that have no classification, or whose last message changed since
  * they were classified. Newest first so the visible inbox settles first.
+ *
+ * Drafts do not count as the last message: the classifier records the last message that is not a
+ * draft (listThreadMessages leaves drafts out), so counting one here made every thread ending in
+ * the owner's unsent draft look out of date forever. On 2026-10-08, 31 such threads were re-sorted
+ * every minute, eight of them on the local model each time.
  */
 export function threadsNeedingClassification(db: Db, opts: { limit?: number; sinceDays?: number; accountIds?: string[] } = {}): ThreadRow[] {
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 2000);
@@ -26,7 +31,9 @@ export function threadsNeedingClassification(db: Db, opts: { limit?: number; sin
        LEFT JOIN classifications c ON c.account_id = t.account_id AND c.thread_id = t.id
        WHERE t.last_message_at >= ? ${scope}
          AND (c.thread_id IS NULL OR c.source != 'manual' AND c.last_message_id IS NOT
-           (SELECT m.id FROM messages m WHERE m.account_id = t.account_id AND m.thread_id = t.id ORDER BY m.internal_date DESC, m.id DESC LIMIT 1))
+           (SELECT m.id FROM messages m WHERE m.account_id = t.account_id AND m.thread_id = t.id
+              AND m.label_ids_json NOT LIKE '%"DRAFT"%'
+            ORDER BY m.internal_date DESC, m.id DESC LIMIT 1))
        ORDER BY t.sort_at DESC LIMIT ?`
     )
     .all(since, ...(opts.accountIds ?? []), limit) as unknown as ThreadRow[];
