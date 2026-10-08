@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ClaudeRunner, parseResult } from "../src/claude.mjs";
+import { ClaudeRunner, ISOLATION_ENV, childEnv, claudeArgs, parseResult } from "../src/claude.mjs";
 
 const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "fake-claude.sh");
 const runner = (mode, opts = {}) => new ClaudeRunner({ bin: FAKE, env: { FAKE_CLAUDE_MODE: mode }, ...opts });
@@ -136,4 +136,24 @@ test("a configured login token still wins over an API key, and neither leaks int
   const plain = runner("ok");
   assert.equal(plain.env.ANTHROPIC_API_KEY, undefined);
   assert.equal(plain.env.CLAUDE_CODE_OAUTH_TOKEN, undefined);
+});
+
+test("every call runs isolated from the machine's Claude Code setup", () => {
+  const args = claudeArgs({ system: "S", user: "U" }, "sonnet");
+  const at = (flag) => args[args.indexOf(flag) + 1];
+  assert.equal(at("--setting-sources"), "", "no user, project or local settings");
+  assert.ok(args.includes("--strict-mcp-config"), "no MCP servers");
+  assert.ok(args.includes("--exclude-dynamic-system-prompt-sections"));
+  assert.equal(at("--tools"), "", "no tools");
+  assert.equal(at("--disallowedTools"), "*");
+  assert.equal(at("--system-prompt"), "S");
+  const env = childEnv();
+  for (const [k, v] of Object.entries(ISOLATION_ENV)) assert.equal(env[k], v, `${k} keeps CLAUDE.md and memory out`);
+});
+
+test("a request that names tools gets exactly those", () => {
+  const args = claudeArgs({ system: "S", user: "U", allowedTools: ["WebSearch"] }, "sonnet");
+  assert.equal(args[args.indexOf("--tools") + 1], "WebSearch");
+  assert.equal(args[args.indexOf("--allowedTools") + 1], "WebSearch");
+  assert.equal(args.includes("--disallowedTools"), false);
 });

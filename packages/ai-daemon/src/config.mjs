@@ -49,7 +49,8 @@ const DEFAULTS = () => ({
     idleMinutes: 120,
   },
   routes: {
-    "text.fix": { engine: "local", prompt: "grammar_fix_local", maxChars: 1500, marker: "<<ARCFORMA_END>>", fallback: "claude" },
+    // The same route ai-core ships (fixRoute): local first, then Claude on Haiku 5.5 with the library prompt.
+    "text.fix": { engine: "local", prompt: "grammar_fix_local", maxChars: 1500, marker: "<<ARCFORMA_END>>", fallback: "claude", claudeModel: "claude-haiku-5-5", claudePrompt: "grammar_fix" },
   },
 });
 

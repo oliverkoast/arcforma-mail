@@ -107,7 +107,7 @@ enum SelfTest {
         \(touch)
         if [ "$1" = "--version" ]; then echo "stub 0.0.1"; exit 0; fi
         if read -t 1 _line; then stdin="stdin data"; elif [ $? -gt 128 ]; then stdin="stdin open"; else stdin="stdin eof"; fi
-        others=$(env | grep -v -E '^(HOME|PATH|PWD|OLDPWD|SHLVL|_)=' | wc -l | tr -d ' ')
+        others=$(env | grep -v -E '^(HOME|PATH|PWD|OLDPWD|SHLVL|_|CLAUDE_CODE_DISABLE_[A-Z_]+)=' | wc -l | tr -d ' ')
         printf '{"type":"result","is_error":false,"result":"%s<<ARCFORMA_END>>","stdin":"%s","otherEnv":%s}\\n' "\(text)" "$stdin" "$others"
         """)
     }
@@ -240,27 +240,32 @@ enum SelfTest {
         check("model fallback trigger", ClaudeCLI.isModelUnsupported("The selected model does not support this model"))
         check("model fallback not on other errors", !ClaudeCLI.isModelUnsupported("rate limited"))
         check("not-logged-in detection", ClaudeCLI.isNotLoggedIn("Not logged in. Please run /login"))
-        check("model chain is fable, opus, sonnet", ClaudeCLI.models == ["claude-fable-5-1", "opus", "sonnet"])
-        let inv = ClaudeCLI.invocation(user: "u", system: "s", model: "opus")
-        check("cli args", inv.arguments == ["-p", "u", "--model", "opus", "--system-prompt", "s", "--output-format", "json",
-                                            "--max-turns", "1", "--disallowedTools", "*", "--no-session-persistence"],
+        check("model chain is haiku 5.5, sonnet", ClaudeCLI.models == ["claude-haiku-5-5", "sonnet"])
+        check("default claude binary is in the person's home", ClaudeCLI.defaultBinary == NSHomeDirectory() + "/.local/bin/claude")
+        let inv = ClaudeCLI.invocation(user: "u", system: "s", model: "sonnet")
+        check("cli args", inv.arguments == ["-p", "u", "--model", "sonnet", "--system-prompt", "s", "--output-format", "json",
+                                            "--max-turns", "1", "--disallowedTools", "*", "--no-session-persistence",
+                                            "--setting-sources", "", "--strict-mcp-config", "--exclude-dynamic-system-prompt-sections",
+                                            "--tools", ""],
               inv.arguments.joined(separator: " "))
-        check("cli env limited to HOME, PATH, and the optional headless token",
-              Set(inv.environment.keys).isSubset(of: ["HOME", "PATH", "CLAUDE_CODE_OAUTH_TOKEN"])
-              && inv.environment["HOME"] != nil && inv.environment["PATH"] != nil)
+        let isolation = Set(ClaudeCLI.isolationEnvironment.keys)
+        check("cli env limited to HOME, PATH, the optional headless token, and the isolation switches",
+              Set(inv.environment.keys).isSubset(of: isolation.union(["HOME", "PATH", "CLAUDE_CODE_OAUTH_TOKEN"]))
+              && inv.environment["HOME"] != nil && inv.environment["PATH"] != nil
+              && isolation.allSatisfy { inv.environment[$0] == "1" })
         check("cli headless token only when a source exists",
               (inv.environment["CLAUDE_CODE_OAUTH_TOKEN"] != nil) == (ClaudeCLI.headlessToken() != nil))
     }
 
-    /// Runs the model chain against a stub script: fable fails with
-    /// "does not support this model", opus answers.
+    /// Runs the model chain against a stub script: Haiku 5.5 fails with
+    /// "does not support this model", Sonnet answers.
     private static func cliChain() {
         let stub = writeScript("claude-chain.sh", """
         #!/bin/sh
         if [ "$1" = "--version" ]; then echo "stub 0.0.1"; exit 0; fi
         model=""; prev=""
         for a in "$@"; do if [ "$prev" = "--model" ]; then model="$a"; fi; prev="$a"; done
-        if [ "$model" = "claude-fable-5-1" ]; then
+        if [ "$model" = "claude-haiku-5-5" ]; then
           echo '{"type":"result","is_error":true,"result":"API Error: 400 The selected model does not support this model"}'
           exit 1
         fi
@@ -274,9 +279,9 @@ enum SelfTest {
         cli.complete(system: "s", user: "u", timeout: 5) { onMain = Thread.isMainThread; outcome = $0 }
         wait(until: { outcome != nil }, timeout: 8)
         if case .success(let c)? = outcome {
-            check("cli chain falls back to opus", c.model == "opus" && c.text == "Fixed by opus.<<ARCFORMA_END>>", "\(c)")
+            check("cli chain falls back to sonnet", c.model == "sonnet" && c.text == "Fixed by sonnet.<<ARCFORMA_END>>", "\(c)")
         } else {
-            check("cli chain falls back to opus", false, "\(String(describing: outcome))")
+            check("cli chain falls back to sonnet", false, "\(String(describing: outcome))")
         }
         check("cli completion lands on the main thread", onMain)
 
@@ -351,11 +356,11 @@ enum SelfTest {
                 otherEnv = json["otherEnv"] as? Int ?? -1
             }
         }
-        check("cli stub answers", outcome == .success(Completion(text: "hygiene<<ARCFORMA_END>>", model: "claude-fable-5-1",
+        check("cli stub answers", outcome == .success(Completion(text: "hygiene<<ARCFORMA_END>>", model: "claude-haiku-5-5",
                                                                     latencyMs: outcome.flatMap { try? $0.get().latencyMs } ?? -1)),
               "\(String(describing: outcome))")
         check("cli stdin is closed (/dev/null)", stdinState == "stdin eof", stdinState)
-        check("cli environment carries nothing beyond HOME and PATH", otherEnv == 0, "\(otherEnv) extra vars")
+        check("cli environment carries nothing beyond HOME, PATH and the isolation switches", otherEnv == 0, "\(otherEnv) extra vars")
 
         let flood = writeScript("claude-flood.sh", """
         #!/bin/sh

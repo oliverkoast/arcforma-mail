@@ -107,13 +107,14 @@ export class LocalModel {
 
   /**
    * Chat completion. When `schema` is given, output is constrained to that JSON schema and parsed.
-   * @param {{system: string, user: string, schema?: object, maxTokens?: number, temperature?: number, model?: string, timeoutMs?: number}} req
+   * `turns` are earlier user and assistant messages, sent between the system prompt and `user`.
+   * @param {{system: string, user: string, turns?: Array<{role: "user"|"assistant", content: string}>, schema?: object, maxTokens?: number, temperature?: number, model?: string, timeoutMs?: number}} req
    */
   async complete(req) {
     const base = await this.ensure();
     const body = {
       model: req.model ?? "local",
-      messages: [{ role: "system", content: req.system }, { role: "user", content: req.user }],
+      messages: [{ role: "system", content: req.system }, ...(req.turns ?? []), { role: "user", content: req.user }],
       temperature: req.temperature ?? 0.2,
       max_tokens: req.maxTokens ?? 512,
       stream: false,

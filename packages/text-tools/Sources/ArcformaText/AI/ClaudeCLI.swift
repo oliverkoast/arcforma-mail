@@ -1,11 +1,24 @@
 import Foundation
 
 /// Direct fallback: `claude -p` as a subprocess, one turn, JSON output, so
-/// Cmd+J works even when the daemon is down. Model chain fable -> opus ->
-/// sonnet on "does not support this model".
+/// Cmd+J works even when the daemon is down. Model chain Haiku 5.5 -> Sonnet
+/// on "does not support this model": Haiku 5.5 matched Sonnet on the Cmd+J
+/// eval (packages/ai-core/eval/text-fix, 2026-10-08) at less than half the wait.
 final class ClaudeCLI {
-    static let defaultBinary = "/Users/oliverkorzen/.local/bin/claude"
-    static let models = ["claude-fable-5-1", "opus", "sonnet"]
+    /// The installer's location in the person's own home, not the machine this was built on.
+    static var defaultBinary: String { NSHomeDirectory() + "/.local/bin/claude" }
+    static let models = ["claude-haiku-5-5", "sonnet"]
+
+    /// Keeps the person's Claude Code setup out of the call: CLAUDE.md files, auto-memory, settings,
+    /// MCP servers and per-machine prompt sections. Without these a one-word reply cost 37,563 input
+    /// tokens and 15 s on 2026-10-08, and answered the person's CLAUDE.md instead of the task. Same
+    /// switches as packages/ai-core/src/claude.mjs.
+    static let isolationArguments = ["--setting-sources", "", "--strict-mcp-config", "--exclude-dynamic-system-prompt-sections", "--tools", ""]
+    static let isolationEnvironment = [
+        "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+        "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    ]
     private let queue = DispatchQueue(label: "ai.arcforma.text.cli", qos: .userInitiated)
 
     /// Set by the self-test to point at a stub script.
@@ -85,10 +98,11 @@ final class ClaudeCLI {
         limited["HOME"] = env["HOME"] ?? NSHomeDirectory()
         limited["PATH"] = env["PATH"] ?? "/usr/bin:/bin:/usr/local/bin"
         if let token = headlessToken() { limited["CLAUDE_CODE_OAUTH_TOKEN"] = token }
+        limited.merge(isolationEnvironment) { _, new in new }
         return Invocation(
             arguments: ["-p", user, "--model", model, "--system-prompt", system,
                         "--output-format", "json", "--max-turns", "1",
-                        "--disallowedTools", "*", "--no-session-persistence"],
+                        "--disallowedTools", "*", "--no-session-persistence"] + isolationArguments,
             environment: limited)
     }
 
@@ -144,6 +158,8 @@ final class ClaudeCLI {
         process.executableURL = URL(fileURLWithPath: binary)
         process.arguments = inv.arguments
         process.environment = inv.environment
+        // A neutral working directory, so no project CLAUDE.md sits above it.
+        process.currentDirectoryURL = FileManager.default.temporaryDirectory
         // Without stdin redirected to /dev/null the CLI waits 3 s for stdin.
         process.standardInput = FileHandle.nullDevice
         let out = Pipe()

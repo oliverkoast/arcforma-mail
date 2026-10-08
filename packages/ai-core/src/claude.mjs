@@ -21,14 +21,54 @@ import path from "node:path";
 
 export const DEFAULT_MODEL_CHAIN = ["sonnet"];
 
+/**
+ * The CLI loads the machine's Claude Code setup into every `-p` call unless told not to: the
+ * person's CLAUDE.md files, auto-memory, MCP servers, settings, and the harness's per-machine
+ * prompt sections. Measured on 2026-10-08, a one-word reply cost 37,563 input tokens and 15 s,
+ * and answered "Hi Oliver! How can I help you today?" to a system prompt that said reply "ok":
+ * the person's own instructions had outranked the task. With these switches the same call is
+ * 240 tokens and 1.3 s, and answers the task. Kept separate so a test can pin them.
+ */
+export const ISOLATION_ENV = {
+  CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1",
+  CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+};
+
 export function childEnv(extra = {}) {
   const home = process.env.HOME ?? os.homedir();
   return {
     HOME: home,
     PATH: [`${home}/.local/bin`, "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"].join(":"),
     LANG: "en_US.UTF-8",
+    ...ISOLATION_ENV,
     ...extra,
   };
+}
+
+/**
+ * Arguments for one isolated turn: the caller's system prompt alone, no settings files, no MCP
+ * servers, and no tools beyond the ones a request names (contact lookup names WebSearch).
+ * @param {{system: string, user: string, allowedTools?: string[], maxTurns?: number}} req
+ * @param {string} model
+ */
+export function claudeArgs(req, model) {
+  const tools = req.allowedTools?.length ? req.allowedTools.join(",") : "";
+  const args = [
+    "-p", req.user,
+    "--model", model,
+    "--system-prompt", req.system,
+    "--output-format", "json",
+    "--max-turns", String(req.maxTurns ?? 1),
+    "--no-session-persistence",
+    "--setting-sources", "",
+    "--strict-mcp-config",
+    "--exclude-dynamic-system-prompt-sections",
+    "--tools", tools,
+  ];
+  if (tools) args.push("--allowedTools", tools);
+  else args.push("--disallowedTools", "*");
+  return args;
 }
 
 /**
@@ -174,18 +214,10 @@ export class ClaudeRunner {
   }
 
   _once(req, model) {
-    const args = [
-      "-p", req.user,
-      "--model", model,
-      "--system-prompt", req.system,
-      "--output-format", "json",
-      "--max-turns", String(req.maxTurns ?? 1),
-      "--no-session-persistence",
-    ];
-    if (req.allowedTools?.length) args.push("--allowedTools", req.allowedTools.join(","));
-    else args.push("--disallowedTools", "*");
+    const args = claudeArgs(req, model);
     return new Promise((resolve) => {
-      const child = spawn(this.bin, args, { stdio: ["ignore", "pipe", "pipe"], env: this.env, detached: true });
+      // A neutral working directory, so no project CLAUDE.md or settings sit above it.
+      const child = spawn(this.bin, args, { stdio: ["ignore", "pipe", "pipe"], env: this.env, detached: true, cwd: os.tmpdir() });
       if (req.requestId) this.children.set(req.requestId, child);
       let out = "", err = "";
       const timer = setTimeout(() => { child.timedOut = true; killTree(child); }, req.timeoutMs ?? this.timeoutMs);

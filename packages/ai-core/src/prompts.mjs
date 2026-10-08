@@ -43,6 +43,28 @@ export function listTasks() {
   return fs.readdirSync(DIR).filter((f) => f.endsWith(".md") && !f.startsWith("_")).map((f) => f.replace(/\.md$/, ""));
 }
 
+/**
+ * Examples written in a prompt as <example><input>...</input><output>...</output></example>, lifted
+ * out of the system text. A 4B model copies the behaviour of past turns far more faithfully than
+ * it follows a rule about that behaviour, so a `format: tagged` prompt sends them as turns.
+ */
+export function splitExamples(body) {
+  const examples = [];
+  const system = body
+    .replace(/<example>\s*<input>\n?([\s\S]*?)\n?<\/input>\s*<output>\n?([\s\S]*?)\n?<\/output>\s*<\/example>/g, (_, input, output) => {
+      examples.push({ input, output });
+      return "";
+    })
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return { system, examples };
+}
+
+/** The selection as data: inside tags, so a question or command in it reads as text to edit. */
+export function tagText(text) {
+  return `<text>\n${text}\n</text>`;
+}
+
 /** Strip the completion marker; throw when it is missing or the result is empty. */
 export function extractMarked(text, marker) {
   if (!marker) return text;
