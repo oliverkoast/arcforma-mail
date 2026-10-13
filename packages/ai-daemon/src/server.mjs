@@ -61,6 +61,15 @@ export function createDaemon(cfg, deps = {}) {
         const r = await service.classifyLocal({ text: body.text, schema: body.schema, system: body.system, task: body.task, vars: body.vars, maxTokens: body.maxTokens, timeoutMs: body.timeoutMs });
         return send(r.ok ? 200 : statusFor(r.code), r);
       }
+      // OpenAI-compatible, on the local model this daemon already keeps loaded, so a dictation app
+      // can clean up transcripts without loading a second copy of the same model.
+      if (url.pathname === "/v1/chat/completions" && req.method === "POST") {
+        const body = await readJson(req);
+        if (!body || !Array.isArray(body.messages)) return send(400, { error: { message: "messages (array) required" } });
+        if (!service.local?.configured) return send(503, { error: { message: "local model not configured" } });
+        const r = await service.local.chat(body);
+        return send(r.status, r.body);
+      }
       if (url.pathname === "/v1/tasks" && req.method === "GET") {
         const { listTasks } = await import("@arcforma/ai-core");
         return send(200, { tasks: listTasks() });
