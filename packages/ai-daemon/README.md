@@ -21,5 +21,6 @@ Endpoints (127.0.0.1 only, `Authorization: Bearer <token>` except health):
 - `DELETE /v1/complete/<requestId>` cancels an in-flight call
 - `POST /v1/classify` `{text, schema?, vars?}` -> local model JSON
 - `GET /v1/tasks` lists prompt library tasks
+- `POST /v1/chat/completions` OpenAI chat completions on the local model (thinking off, no streaming); OpenWhispr's dictation cleanup points here as a self-hosted endpoint
 
 Install: `./install.sh` (LaunchAgent, KeepAlive on crash, clean exit stays down). Logs: `~/Library/Logs/arcforma-ai-daemon.log`.

@@ -51,3 +51,39 @@ test("cancel returns 404 for unknown ids and classify without a local model is 5
   assert.equal(c.status, 503);
   await d.close();
 });
+
+test("chat completions pass through to the local model with thinking off, behind the token", async () => {
+  let seen = null;
+  const llama = (await import("node:http")).createServer((req, res) => {
+    let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => {
+      seen = { path: req.url, body: JSON.parse(b) };
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ choices: [{ message: { role: "assistant", content: "Clean text." } }] }));
+    });
+  });
+  await new Promise((r) => llama.listen(0, "127.0.0.1", r));
+  const service = new AiService({ claude: { bin: FAKE }, local: { baseUrl: `http://127.0.0.1:${llama.address().port}` } });
+  const { server } = createDaemon({ token: "t0k", local: {} }, { service });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${server.address().port}/v1/chat/completions`;
+  const post = (body, token = "t0k") => fetch(url, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+
+  assert.equal((await post({ messages: [] }, "wrong")).status, 401);
+  assert.equal((await post({ model: "local" })).status, 400);
+  const r = await post({ model: "local", messages: [{ role: "user", content: "um so hi" }], stream: true });
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).choices[0].message.content, "Clean text.");
+  assert.equal(seen.path, "/v1/chat/completions");
+  assert.equal(seen.body.stream, false);
+  assert.deepEqual(seen.body.chat_template_kwargs, { enable_thinking: false });
+  assert.equal(seen.body.messages[0].content, "um so hi");
+  await new Promise((r) => server.close(r));
+  await new Promise((r) => llama.close(r));
+});
+
+test("chat completions without a local model are 503", async () => {
+  const d = await up();
+  const r = await d.call("POST", "/v1/chat/completions", { messages: [{ role: "user", content: "x" }] });
+  assert.equal(r.status, 503);
+  await d.close();
+});

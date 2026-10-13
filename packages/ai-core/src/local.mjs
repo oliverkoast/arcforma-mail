@@ -110,6 +110,27 @@ export class LocalModel {
   }
 
   /**
+   * An OpenAI chat completions body passed through as it came, for tools that speak that protocol
+   * (OpenWhispr's dictation cleanup). Thinking is off unless the body says otherwise, and the call
+   * counts as use, so the model is not unloaded under someone dictating. Returns llama-server's
+   * status and parsed body.
+   */
+  async chat(body, { timeoutMs = 60_000 } = {}) {
+    const base = await this.ensure();
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), timeoutMs);
+    try {
+      const res = await fetch(`${base}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chat_template_kwargs: { enable_thinking: false }, ...body, stream: false }),
+        signal: ctl.signal,
+      });
+      return { status: res.status, body: await res.json().catch(() => ({ error: { message: `llama-server HTTP ${res.status}` } })) };
+    } finally { clearTimeout(t); this._touch(); }
+  }
+
+  /**
    * Chat completion. When `schema` is given, output is constrained to that JSON schema and parsed.
    * `turns` are earlier user and assistant messages, sent between the system prompt and `user`.
    * @param {{system: string, user: string, turns?: Array<{role: "user"|"assistant", content: string}>, schema?: object, maxTokens?: number, temperature?: number, model?: string, timeoutMs?: number}} req
